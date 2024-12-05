@@ -4,11 +4,14 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 project(copengl)
 
 set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 23)
 add_compile_options(-Wall -Wextra -Wpedantic -Fsanitize=address)
 
 file(GLOB_RECURSE SOURCE_FILES
-    ${CMAKE_SOURCE_DIR}/src/main.c
+    ${CMAKE_SOURCE_DIR}/src/main.cpp
     ${CMAKE_SOURCE_DIR}/src/gl.c
+    ${CMAKE_SOURCE_DIR}/src/shaders.cpp
+    ${CMAKE_SOURCE_DIR}/src/camera.cpp
 )
 
 add_executable(
