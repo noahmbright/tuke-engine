@@ -2,24 +2,27 @@
 #include "GLFW/glfw3.h"
 #include <glm/ext/matrix_common.hpp>
 
-void move_camera_2d(GLFWwindow *window, Camera2d *camera) {
-  const double dt = 1e-3;
+void move_camera_2d(GLFWwindow *window, Camera2d *camera, float delta_t) {
+  const float speed = 1e-3;
+
+  double sprint_boost =
+      1.0 + double(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
 
   if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS ||
       glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-    camera->position.y += dt;
+    camera->position.y += sprint_boost * speed * delta_t;
   }
   if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ||
       glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-    camera->position.x -= dt;
+    camera->position.x -= sprint_boost * speed * delta_t;
   }
   if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ||
       glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-    camera->position.y -= dt;
+    camera->position.y -= sprint_boost * speed * delta_t;
   }
   if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS ||
       glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-    camera->position.x += dt;
+    camera->position.x += sprint_boost * speed * delta_t;
   }
 }
 

@@ -17,7 +17,7 @@ struct Camera2d {
   GLFWwindow *window;
 };
 
-void move_camera_2d(GLFWwindow *window, Camera2d *camera);
+void move_camera_2d(GLFWwindow *window, Camera2d *camera, float delta_t);
 void scroll_callback_2d_camera(GLFWwindow *window, double xoffset,
                                double yoffset);
 Camera2d new_camera2d(const glm::vec3 &pos0,

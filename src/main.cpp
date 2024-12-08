@@ -11,6 +11,7 @@
 #include "camera.h"
 #include "renderer.h"
 #include "shaders.h"
+#include "tilemap.h"
 
 Camera2d camera = new_camera2d({});
 void *GlobalCamera = &camera;
@@ -77,6 +78,23 @@ int main(void) {
 
   int mvp_location = glGetUniformLocation(shader_program, "mvp");
 
+  const int level_width = 16;
+  const int level_height = 9;
+  // clang-format off
+  const int level_map[level_width * level_height] = {
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+      1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+      1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
+      1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+      1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+      1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+      1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
+      1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  };
+  // clang-format on
+  Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
+
   double t_prev = glfwGetTime(), t_current;
   while (!glfwWindowShouldClose(window)) {
     t_current = glfwGetTime();
@@ -88,7 +106,7 @@ int main(void) {
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glfwSwapBuffers(window);
     glfwPollEvents();
-    move_camera_2d(window, &camera);
+    move_camera_2d(window, &camera, delta_t);
     glm::mat4 view = glm::lookAt(
         camera.position, camera.position + camera.direction, {0.0, 1.0, 0.0});
     glUniformMatrix4fv(mvp_location, 1, GL_FALSE, &view[0][0]);
