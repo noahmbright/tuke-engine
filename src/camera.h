@@ -3,23 +3,23 @@
 #include "GLFW/glfw3.h"
 #include <glm/vec3.hpp>
 
-extern void *GlobalCamera;
+enum class CameraType { Camera2D, Camera3D, CameraFPS };
 
-struct Camera3d {
+struct Camera {
+  CameraType type;
   glm::vec3 position;
   glm::vec3 direction;
+  glm::vec3 up;
+  glm::vec3 right;
   GLFWwindow *window;
+  void (*move_camera)(Camera *, float);
 };
 
-struct Camera2d {
-  glm::vec3 position;
-  glm::vec3 direction;
-  GLFWwindow *window;
-};
+Camera new_camera(GLFWwindow *window, CameraType type,
+                  const glm::vec3 &pos = {0.0, 0.0, 0.0},
+                  const glm::vec3 &direction = {0.0, 0.0, -1.0},
+                  const glm::vec3 &up = {0.0, 1.0, 0.0},
+                  const glm::vec3 &right = {1.0, 0.0, 0.0});
 
-void move_camera_2d(GLFWwindow *window, Camera2d *camera, float delta_t);
-void scroll_callback_2d_camera(GLFWwindow *window, double xoffset,
-                               double yoffset);
-Camera2d new_camera2d(const glm::vec3 &pos0,
-                      const glm::vec3 dir0 = {0.0, 0.0, -1.0});
-void set_camera2d_window_and_scroll_callback(Camera2d *cam, GLFWwindow *window);
+void move_camera_2d(Camera *camera, float delta_t);
+void move_camera_3d(Camera *camera, float delta_t);
