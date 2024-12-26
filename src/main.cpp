@@ -1,10 +1,9 @@
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 #include <OpenGL/OpenGL.h>
-#define GLFW_INCLUDE_NONE
-// https://www.glfw.org/docs/3.3/quick_guide.html
-#include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
+#include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -12,71 +11,50 @@
 #include "renderer.h"
 #include "shaders.h"
 #include "tilemap.h"
+#include "window.h"
 
-Camera2d camera = new_camera2d({});
-void *GlobalCamera = &camera;
-
-void error_callback(int error, const char *description) {
-  (void)error;
-  fprintf(stderr, "%s", description);
-}
-
-void key_callback(GLFWwindow *window, int key, int scancode, int action,
-                  int mods) {
-  (void)action;
-  (void)mods;
-  (void)scancode;
-
-  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-    glfwSetWindowShouldClose(window, GLFW_TRUE);
-  }
-}
+float pitch, yaw;
+// mouse_sensitivity global to allow for changing in game settings and then have
+// that change visible in the global mouse callback function
+float mouse_sensitivity = 1e-3;
+Camera *global_camera;
 
 int main(void) {
-  const int WIDTH = 800;
-  const int HEIGHT = 600;
+  GLFWwindow *window = new_window();
+  Camera camera = new_camera(window, CameraType::Camera3D, {0.0, 0.0, 2.0});
+  global_camera = &camera;
 
-  glfwSetErrorCallback(error_callback);
-  if (!glfwInit()) {
-    fprintf(stderr, "Failed to initialize glfw");
-    exit(1);
+  float xy_magnitude =
+      glm::length(glm::vec2{camera.direction.x, camera.direction.y});
+  float xz_magnitude =
+      glm::length(glm::vec2{camera.direction.x, camera.direction.z});
+  const float tolerance = 1e-5;
+  if (xy_magnitude < tolerance) {
+    yaw = -1.57;
+  } else {
+    yaw = glm::atan(camera.direction.z / xy_magnitude);
   }
 
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-  GLFWwindow *window = glfwCreateWindow(WIDTH, HEIGHT, "Tuke", NULL, NULL);
-  if (!window) {
-    fprintf(stderr, "Failed to initialize window");
-    glfwTerminate();
-    exit(1);
+  if (xz_magnitude <= tolerance) {
+    pitch = -3.14;
+  } else {
+    pitch = glm::atan(camera.direction.y / xz_magnitude);
   }
 
-  glfwSetKeyCallback(window, key_callback);
-  glfwMakeContextCurrent(window);
-  gladLoadGL(glfwGetProcAddress);
-
-  unsigned shader_program =
+  unsigned square_program =
       link_shader_program("shaders/vertex.glsl", "shaders/fragment.glsl");
-  glUseProgram(shader_program);
+  glUseProgram(square_program);
+  int square_mvp_location = glGetUniformLocation(square_program, "mvp");
 
-  unsigned square_VAO;
-  glGenVertexArrays(1, &square_VAO);
-  glBindVertexArray(square_VAO);
+  unsigned cube_program = link_shader_program(
+      "shaders/simple_cube_vertex.glsl", "shaders/simple_cube_fragment.glsl");
+  glUseProgram(cube_program);
+  int cube_mvp_location = glGetUniformLocation(cube_program, "mvp");
+  (void)cube_mvp_location;
 
-  unsigned square_VBO;
-  glGenBuffers(1, &square_VBO);
-  glBindBuffer(GL_ARRAY_BUFFER, square_VBO);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(square_vertices), square_vertices,
-               GL_STATIC_DRAW);
-
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float),
-                        (void *)NULL);
-  glEnableVertexAttribArray(0);
-  glClearColor(0.0f, 0.1f, 0.4, 1.0f);
-
-  set_camera2d_window_and_scroll_callback(&camera, window);
-
-  int mvp_location = glGetUniformLocation(shader_program, "mvp");
+  unsigned tilemap_program = link_shader_program(
+      "shaders/tilemap_vertex.glsl", "shaders/tilemap_fragment.glsl");
+  (void)tilemap_program;
 
   const int level_width = 16;
   const int level_height = 9;
@@ -94,22 +72,57 @@ int main(void) {
   };
   // clang-format on
   Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
+  (void)tilemap;
 
-  double t_prev = glfwGetTime(), t_current;
+  const int trial_level_width = 1;
+  const int trial_level_height = 1;
+  const int trial_map[1] = {1};
+  Tilemap trial_tilemap =
+      new_tilemap(trial_level_width, trial_level_height, trial_map);
+
+  for (int i = 0; i < 6; i++) {
+    printf("%d ", trial_tilemap.element_indices[i]);
+  }
+  printf("\n ");
+  for (int j = 0; j < 4; j++) {
+    for (int i = 0; i < 10; i++) {
+      printf("%f ", trial_tilemap.vertices[10 * j + i]);
+    }
+    printf("\n ");
+  }
+
+  RenderData square_data = init_square(square_program);
+  RenderData cube_data = init_cube(cube_program);
+  (void)cube_data;
+
+  glClearColor(0.0f, 0.1f, 0.4, 1.0f);
+  glEnable(GL_DEPTH_TEST);
+  double t_prev = glfwGetTime();
+
   while (!glfwWindowShouldClose(window)) {
-    t_current = glfwGetTime();
+    double t_current = glfwGetTime();
     double delta_t = t_current - t_prev;
+
     int height, width;
     glfwGetFramebufferSize(window, &width, &height);
     glViewport(0, 0, width, height);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glm::mat4 view = glm::lookAt(camera.position,
+                                 camera.position + camera.direction, camera.up);
+    camera.move_camera(&camera, delta_t);
+    glm::mat4 perspective_projection = glm::perspective(
+        glm::radians(45.0f), float(width) / float(height), 0.1f, 100.0f);
+    view = perspective_projection * view;
+    // glUniformMatrix4fv(square_mvp_location, 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(cube_mvp_location, 1, GL_FALSE, &view[0][0]);
+    // glUseProgram(tilemap_shader);
+    // draw_tilemap(&trial_tilemap);
+
+    // draw_square(&square_data);
+    draw_cube(&cube_data);
     glfwSwapBuffers(window);
     glfwPollEvents();
-    move_camera_2d(window, &camera, delta_t);
-    glm::mat4 view = glm::lookAt(
-        camera.position, camera.position + camera.direction, {0.0, 1.0, 0.0});
-    glUniformMatrix4fv(mvp_location, 1, GL_FALSE, &view[0][0]);
   }
 
   glfwDestroyWindow(window);
