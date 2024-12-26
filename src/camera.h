@@ -16,7 +16,7 @@ struct Camera {
 };
 
 Camera new_camera(GLFWwindow *window, CameraType type,
-                  const glm::vec3 &pos = {0.0, 0.0, 0.0},
+                  const glm::vec3 &pos = {0.0, 0.0, 1.0},
                   const glm::vec3 &direction = {0.0, 0.0, -1.0},
                   const glm::vec3 &up = {0.0, 1.0, 0.0},
                   const glm::vec3 &right = {1.0, 0.0, 0.0});

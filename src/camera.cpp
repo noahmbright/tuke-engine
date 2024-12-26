@@ -55,11 +55,28 @@ Camera new_camera(GLFWwindow *window, CameraType type, const glm::vec3 &pos,
 
   switch (camera.type) {
   case CameraType::Camera2D:
-    camera.move_camera = move_camera_3d;
+    camera.move_camera = move_camera_2d;
     break;
   case CameraType::Camera3D:
   case CameraType::CameraFPS:
     // FIXME FPS
+
+    float xy_magnitude =
+        glm::length(glm::vec2{camera.direction.x, camera.direction.y});
+    float xz_magnitude =
+        glm::length(glm::vec2{camera.direction.x, camera.direction.z});
+    const float tolerance = 1e-5;
+    if (xy_magnitude < tolerance) {
+      yaw = -1.57;
+    } else {
+      yaw = glm::atan(camera.direction.z / xy_magnitude);
+    }
+
+    if (xz_magnitude <= tolerance) {
+      pitch = -3.14;
+    } else {
+      pitch = glm::atan(camera.direction.y / xz_magnitude);
+    }
     camera.move_camera = move_camera_3d;
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSetCursorPosCallback(window, mouse_callback_3d);

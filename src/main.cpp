@@ -21,30 +21,15 @@ Camera *global_camera;
 
 int main(void) {
   GLFWwindow *window = new_window();
-  Camera camera = new_camera(window, CameraType::Camera3D, {0.0, 0.0, 2.0});
+  // Camera camera = new_camera(window, CameraType::Camera3D, {0.0, 0.0, 2.0});
+  Camera camera = new_camera(window, CameraType::Camera2D, {0, 0, 1});
   global_camera = &camera;
-
-  float xy_magnitude =
-      glm::length(glm::vec2{camera.direction.x, camera.direction.y});
-  float xz_magnitude =
-      glm::length(glm::vec2{camera.direction.x, camera.direction.z});
-  const float tolerance = 1e-5;
-  if (xy_magnitude < tolerance) {
-    yaw = -1.57;
-  } else {
-    yaw = glm::atan(camera.direction.z / xy_magnitude);
-  }
-
-  if (xz_magnitude <= tolerance) {
-    pitch = -3.14;
-  } else {
-    pitch = glm::atan(camera.direction.y / xz_magnitude);
-  }
 
   unsigned square_program =
       link_shader_program("shaders/vertex.glsl", "shaders/fragment.glsl");
   glUseProgram(square_program);
   int square_mvp_location = glGetUniformLocation(square_program, "mvp");
+  (void)square_mvp_location;
 
   unsigned cube_program = link_shader_program(
       "shaders/simple_cube_vertex.glsl", "shaders/simple_cube_fragment.glsl");
@@ -54,6 +39,7 @@ int main(void) {
 
   unsigned tilemap_program = link_shader_program(
       "shaders/tilemap_vertex.glsl", "shaders/tilemap_fragment.glsl");
+  int tilemap_mvp_location = glGetUniformLocation(tilemap_program, "mvp");
   (void)tilemap_program;
 
   const int level_width = 16;
@@ -80,6 +66,7 @@ int main(void) {
   Tilemap trial_tilemap =
       new_tilemap(trial_level_width, trial_level_height, trial_map);
 
+#if 1
   for (int i = 0; i < 6; i++) {
     printf("%d ", trial_tilemap.element_indices[i]);
   }
@@ -90,9 +77,11 @@ int main(void) {
     }
     printf("\n ");
   }
+#endif
 
   RenderData square_data = init_square(square_program);
   RenderData cube_data = init_cube(cube_program);
+  (void)square_data;
   (void)cube_data;
 
   glClearColor(0.0f, 0.1f, 0.4, 1.0f);
@@ -115,12 +104,14 @@ int main(void) {
         glm::radians(45.0f), float(width) / float(height), 0.1f, 100.0f);
     view = perspective_projection * view;
     // glUniformMatrix4fv(square_mvp_location, 1, GL_FALSE, &view[0][0]);
-    glUniformMatrix4fv(cube_mvp_location, 1, GL_FALSE, &view[0][0]);
-    // glUseProgram(tilemap_shader);
+    // glUniformMatrix4fv(cube_mvp_location, 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(tilemap_mvp_location, 1, GL_FALSE, &view[0][0]);
+    glUseProgram(tilemap_program);
     // draw_tilemap(&trial_tilemap);
+    draw_tilemap(&tilemap);
 
     // draw_square(&square_data);
-    draw_cube(&cube_data);
+    // draw_cube(&cube_data);
     glfwSwapBuffers(window);
     glfwPollEvents();
   }
