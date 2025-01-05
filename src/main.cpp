@@ -1,5 +1,8 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/gtc/matrix_transform.hpp"
+#include "player.h"
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/string_cast.hpp"
 #include <OpenGL/OpenGL.h>
 #include <glad/gl.h>
 
@@ -22,25 +25,15 @@ Camera *global_camera;
 int main(void) {
   GLFWwindow *window = new_window();
   // Camera camera = new_camera(window, CameraType::Camera3D, {0.0, 0.0, 2.0});
-  Camera camera = new_camera(window, CameraType::Camera2D, {0, 0, 1});
+  Camera camera = new_camera(window, CameraType::Camera2D, {0, 0, 5});
   global_camera = &camera;
-
-  unsigned square_program =
-      link_shader_program("shaders/vertex.glsl", "shaders/fragment.glsl");
-  glUseProgram(square_program);
-  int square_mvp_location = glGetUniformLocation(square_program, "mvp");
-  (void)square_mvp_location;
-
-  unsigned cube_program = link_shader_program(
-      "shaders/simple_cube_vertex.glsl", "shaders/simple_cube_fragment.glsl");
-  glUseProgram(cube_program);
-  int cube_mvp_location = glGetUniformLocation(cube_program, "mvp");
-  (void)cube_mvp_location;
 
   unsigned tilemap_program = link_shader_program(
       "shaders/tilemap_vertex.glsl", "shaders/tilemap_fragment.glsl");
   int tilemap_mvp_location = glGetUniformLocation(tilemap_program, "mvp");
-  (void)tilemap_program;
+
+  unsigned player_program = link_shader_program("shaders/player_vertex.glsl",
+                                                "shaders/player_fragment.glsl");
 
   const int level_width = 16;
   const int level_height = 9;
@@ -60,13 +53,7 @@ int main(void) {
   Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
   (void)tilemap;
 
-  const int trial_level_width = 1;
-  const int trial_level_height = 1;
-  const int trial_map[1] = {1};
-  Tilemap trial_tilemap =
-      new_tilemap(trial_level_width, trial_level_height, trial_map);
-
-#if 1
+#if 0
   for (int i = 0; i < 6; i++) {
     printf("%d ", trial_tilemap.element_indices[i]);
   }
@@ -79,10 +66,7 @@ int main(void) {
   }
 #endif
 
-  RenderData square_data = init_square(square_program);
-  RenderData cube_data = init_cube(cube_program);
-  (void)square_data;
-  (void)cube_data;
+  Player player = new_player(player_program, {0.0, 0.0, 0.0}, {1.0, 1.0, 1.0});
 
   glClearColor(0.0f, 0.1f, 0.4, 1.0f);
   glEnable(GL_DEPTH_TEST);
@@ -103,15 +87,17 @@ int main(void) {
     glm::mat4 perspective_projection = glm::perspective(
         glm::radians(45.0f), float(width) / float(height), 0.1f, 100.0f);
     view = perspective_projection * view;
-    // glUniformMatrix4fv(square_mvp_location, 1, GL_FALSE, &view[0][0]);
-    // glUniformMatrix4fv(cube_mvp_location, 1, GL_FALSE, &view[0][0]);
-    glUniformMatrix4fv(tilemap_mvp_location, 1, GL_FALSE, &view[0][0]);
+
+    glm::mat4 player_model = glm::scale(glm::mat4(1.0), player.size);
+    player_model = glm::translate(player_model, player.position);
+    player_model = view * player_model;
+
     glUseProgram(tilemap_program);
-    // draw_tilemap(&trial_tilemap);
+    glUniformMatrix4fv(tilemap_mvp_location, 1, GL_FALSE, &view[0][0]);
     draw_tilemap(&tilemap);
 
-    // draw_square(&square_data);
-    // draw_cube(&cube_data);
+    draw_player(player, player_model);
+
     glfwSwapBuffers(window);
     glfwPollEvents();
   }

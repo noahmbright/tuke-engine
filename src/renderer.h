@@ -63,8 +63,8 @@ struct RenderData {
   unsigned ebo;
 };
 
-void draw_cube(RenderData *render_data);
+void draw_cube(const RenderData *render_data);
 RenderData init_cube(unsigned program);
 
-void draw_square(RenderData *);
+void draw_square(const RenderData *);
 RenderData init_square(unsigned program);

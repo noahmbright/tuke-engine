@@ -87,7 +87,7 @@ Camera new_camera(GLFWwindow *window, CameraType type, const glm::vec3 &pos,
 }
 
 void move_camera_2d(Camera *camera, float delta_t) {
-  const float speed = 1e-3;
+  const float speed = 5e-3;
   GLFWwindow *window = camera->window;
 
   float sprint_boost =

@@ -39,7 +39,7 @@ RenderData init_cube(unsigned program) {
   return rd;
 }
 
-void draw_square(RenderData *render_data) {
+void draw_square(const RenderData *render_data) {
   glUseProgram(render_data->program);
   glBindVertexArray(render_data->vao);
   glDrawArrays(GL_TRIANGLES, 0, 6);
