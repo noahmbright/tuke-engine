@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-project(copengl)
+project(game_engine)
 
 find_package(Vulkan REQUIRED)
 
@@ -17,6 +17,9 @@ file(GLOB_RECURSE SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/renderer.cpp
     ${CMAKE_SOURCE_DIR}/src/window.cpp
     ${CMAKE_SOURCE_DIR}/src/player.cpp
+    ${CMAKE_SOURCE_DIR}/src/vulkan_base.cpp
+    ${CMAKE_SOURCE_DIR}/src/stb_image.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils.cpp
 )
 
 add_library(engine ${SOURCE_FILES})

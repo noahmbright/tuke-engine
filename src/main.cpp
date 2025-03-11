@@ -16,17 +16,10 @@
 #include "tilemap.h"
 #include "window.h"
 
-float pitch, yaw;
-// mouse_sensitivity global to allow for changing in game settings and then have
-// that change visible in the global mouse callback function
-float mouse_sensitivity = 1e-3;
-Camera *global_camera;
-
-int main(void) {
+int main() {
   GLFWwindow *window = new_window();
-  // Camera camera = new_camera(window, CameraType::Camera3D, {0.0, 0.0, 2.0});
-  Camera camera = new_camera(window, CameraType::Camera2D, {0, 0, 5});
-  global_camera = &camera;
+  Camera camera =
+      new_camera_from_window(CameraType::Camera2D, window, {0, 0, 5});
 
   unsigned tilemap_program = link_shader_program(
       "shaders/tilemap_vertex.glsl", "shaders/tilemap_fragment.glsl");
@@ -50,22 +43,8 @@ int main(void) {
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
   };
   // clang-format on
+
   Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
-  (void)tilemap;
-
-#if 0
-  for (int i = 0; i < 6; i++) {
-    printf("%d ", trial_tilemap.element_indices[i]);
-  }
-  printf("\n ");
-  for (int j = 0; j < 4; j++) {
-    for (int i = 0; i < 10; i++) {
-      printf("%f ", trial_tilemap.vertices[10 * j + i]);
-    }
-    printf("\n ");
-  }
-#endif
-
   Player player = new_player(player_program, {0.0, 0.0, 0.0}, {1.0, 1.0, 1.0});
 
   glClearColor(0.0f, 0.1f, 0.4, 1.0f);
@@ -83,7 +62,7 @@ int main(void) {
 
     glm::mat4 view = glm::lookAt(camera.position,
                                  camera.position + camera.direction, camera.up);
-    camera.move_camera(&camera, delta_t);
+    move_camera(window, &camera, delta_t);
     glm::mat4 perspective_projection = glm::perspective(
         glm::radians(45.0f), float(width) / float(height), 0.1f, 100.0f);
     view = perspective_projection * view;
