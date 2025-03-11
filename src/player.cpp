@@ -7,37 +7,53 @@
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
-Player new_player(unsigned program, const glm::vec3 &pos, const glm::vec3 &size,
-                  const glm::vec3 &color) {
-  Player p;
-  p.color = color;
-  p.size = size;
-  p.position = pos;
-  p.program = program;
-  p.u_mvp_location = glGetUniformLocation(program, "u_mvp");
+PlayerOpenGLRenderData new_player_opengl_render_data(unsigned program,
+                                                     unsigned texture) {
+  PlayerOpenGLRenderData data;
+  data.program = program;
+  data.texture = texture;
+  data.u_mvp_location = glGetUniformLocation(program, "u_mvp");
 
-  unsigned vao, vbo;
+  unsigned vao, vbo, ebo;
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(square_vertices), square_vertices,
+  glBufferData(GL_ARRAY_BUFFER, sizeof(player_vertices), player_vertices,
                GL_STATIC_DRAW);
 
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
   glEnableVertexAttribArray(0);
 
-  p.vao = vao;
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+                        (void *)(3 * sizeof(float)));
+  glEnableVertexAttribArray(1);
+
+  glGenBuffers(1, &ebo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(player_indices), player_indices,
+               GL_STATIC_DRAW);
+
+  data.vao = vao;
+  return data;
+}
+
+Player new_player(const glm::vec3 &pos, const glm::vec3 &size) {
+  Player p;
+  p.size = size;
+  p.position = pos;
 
   return p;
 }
 
-void draw_player(const Player &player, const glm::mat4 &mvp) {
-  glUseProgram(player.program);
-  glBindVertexArray(player.vao);
-  glUniformMatrix4fv(player.u_mvp_location, 1, GL_FALSE, &mvp[0][0]);
-  glDrawArrays(GL_TRIANGLES, 0, 6);
+void opengl_draw_player(const PlayerOpenGLRenderData &render_data,
+                        const glm::mat4 &mvp) {
+  glUseProgram(render_data.program);
+  glBindVertexArray(render_data.vao);
+  glBindTexture(GL_TEXTURE_2D, render_data.texture);
+  glUniformMatrix4fv(render_data.u_mvp_location, 1, GL_FALSE, &mvp[0][0]);
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 
 void update_player_position(Player *player, float delta_t,

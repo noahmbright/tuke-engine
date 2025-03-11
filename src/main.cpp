@@ -13,6 +13,7 @@
 #include "renderer.h"
 #include "shaders.h"
 #include "tilemap.h"
+#include "utils.h"
 #include "window.h"
 
 int main() {
@@ -20,6 +21,7 @@ int main() {
   Camera camera =
       new_camera_from_window(CameraType::Camera2D, window, {0, 0, 5});
 
+  unsigned player_texture = load_texture("textures/generic_girl.jpg");
   unsigned tilemap_program = link_shader_program(
       "shaders/tilemap_vertex.glsl", "shaders/tilemap_fragment.glsl");
   int tilemap_mvp_location = glGetUniformLocation(tilemap_program, "mvp");
@@ -44,7 +46,9 @@ int main() {
   // clang-format on
 
   Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
-  Player player = new_player(player_program, {0.0, 0.0, 0.0}, {1.0, 1.0, 1.0});
+  Player player = new_player({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0});
+  PlayerOpenGLRenderData player_render_data =
+      new_player_opengl_render_data(player_program, player_texture);
 
   glClearColor(0.0f, 0.1f, 0.4, 1.0f);
   glEnable(GL_DEPTH_TEST);
@@ -77,7 +81,7 @@ int main() {
     glUniformMatrix4fv(tilemap_mvp_location, 1, GL_FALSE, &view[0][0]);
     draw_tilemap(&tilemap);
 
-    draw_player(player, player_model);
+    opengl_draw_player(player_render_data, player_model);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
