@@ -1,4 +1,3 @@
-#include "glm/ext/matrix_transform.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include "player.h"
 #define GLM_ENABLE_EXPERIMENTAL
@@ -52,17 +51,20 @@ int main() {
   double t_prev = glfwGetTime();
 
   while (!glfwWindowShouldClose(window)) {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
     double t_current = glfwGetTime();
     double delta_t = t_current - t_prev;
+
+    glm::vec4 movement_direction = get_window_movement_vector(window);
+    move_camera(&camera, delta_t, movement_direction);
+    update_player_position(&player, delta_t, movement_direction);
 
     int height, width;
     glfwGetFramebufferSize(window, &width, &height);
     glViewport(0, 0, width, height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glm::mat4 view = glm::lookAt(camera.position,
-                                 camera.position + camera.direction, camera.up);
-    move_camera(window, &camera, delta_t);
+    glm::mat4 view = look_at_from_camera(&camera);
     glm::mat4 perspective_projection = glm::perspective(
         glm::radians(45.0f), float(width) / float(height), 0.1f, 100.0f);
     view = perspective_projection * view;

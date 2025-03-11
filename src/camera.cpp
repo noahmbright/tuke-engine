@@ -82,55 +82,32 @@ Camera new_camera(CameraType type, const glm::vec3 &pos,
   return camera;
 }
 
-void move_camera_2d(GLFWwindow *window, Camera *camera, float delta_t) {
-  const float speed = 5e-3;
+// expect movement direction contains the WASD/arrow key inputs in x and y,
+// and if the shift key is pressed, the w component will be 2, if not, 1
+void move_camera_2d(Camera *camera, float delta_t,
+                    const glm::vec4 &movement_direction) {
 
-  float sprint_boost =
-      1.0 + float(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
+  const glm::vec3 dir3{movement_direction.x, movement_direction.y,
+                       movement_direction.z};
 
-  if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-    camera->position.y += sprint_boost * speed * delta_t;
-  }
-  if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-    camera->position.x -= sprint_boost * speed * delta_t;
-  }
-  if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-    camera->position.y -= sprint_boost * speed * delta_t;
-  }
-  if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-    camera->position.x += sprint_boost * speed * delta_t;
-  }
+  camera->position += camera->speed * delta_t * (movement_direction.w) * dir3;
 }
 
-void move_camera_3d(GLFWwindow *window, Camera *camera, float delta_t) {
-  const float speed = 1e-2;
-  float sprint_boost =
-      1.0 + float(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
+// movement direction will have x and y components
+// y means move in camera->direction
+// x means move along camera->right
+void move_camera_3d(Camera *camera, float delta_t,
+                    const glm::vec4 &movement_direction) {
 
-  if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-    camera->position += (sprint_boost * speed * delta_t) * camera->direction;
-  }
-  if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-    camera->position -= (sprint_boost * speed * delta_t) * camera->right;
-  }
-  if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-    camera->position -= (sprint_boost * speed * delta_t) * camera->direction;
-  }
-  if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-    camera->position += (sprint_boost * speed * delta_t) * camera->right;
-  }
+  float distance = camera->speed * delta_t * movement_direction.w;
+
+  camera->position += distance * movement_direction.y * camera->direction;
+  camera->position += distance * movement_direction.x * camera->right;
 }
 
-void move_camera(GLFWwindow *window, Camera *camera, float delta_t) {
-  camera->move_camera_function(window, camera, delta_t);
+void move_camera(Camera *camera, float delta_t,
+                 const glm::vec4 &movement_direction) {
+  camera->move_camera_function(camera, delta_t, movement_direction);
 }
 
 Camera new_camera_from_window(CameraType type, GLFWwindow *window,
@@ -145,4 +122,9 @@ Camera new_camera_from_window(CameraType type, GLFWwindow *window,
   }
 
   return camera;
+}
+
+glm::mat4 look_at_from_camera(Camera *camera) {
+  return glm::lookAt(camera->position, camera->position + camera->direction,
+                     camera->up);
 }

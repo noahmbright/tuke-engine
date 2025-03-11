@@ -11,7 +11,6 @@ unsigned link_shader_program(const char *vertex_shader_path,
   const char *vertex_shader_source = read_file(vertex_shader_path);
   const char *fragment_shader_source = read_file(fragment_shader_path);
 
-  printf("new_window: initialized window, returning\n");
   int success;
   char info_log[BUFFER_SIZE];
   unsigned vertex_shader = glCreateShader(GL_VERTEX_SHADER);

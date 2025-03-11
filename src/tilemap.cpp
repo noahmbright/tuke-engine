@@ -47,7 +47,8 @@ static void
 gen_vertices_and_elements_from_map(const int height, const int width,
                                    const int map[], const float **vertices_out,
                                    const unsigned **element_indices_out) {
-  const float dx = 2.0 / width;
+  const float aspect = (float)width / (float)height;
+  const float dx = 2.0 / width * aspect;
   const float dy = 2.0 / height;
 
   const unsigned long long num_quads = width * height;

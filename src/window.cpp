@@ -1,6 +1,7 @@
+#include "glm/ext/quaternion_geometric.hpp"
 #define GLFW_INCLUDE_NONE
-#include "window.h"
 #include "GLFW/glfw3.h"
+#include "window.h"
 #include <glad/gl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,4 +55,38 @@ GLFWwindow *new_window(bool is_vulkan, const char *title, const int width,
   }
 
   return window;
+}
+
+glm::vec4 get_window_movement_vector(GLFWwindow *window) {
+
+  glm::vec4 res{};
+
+  if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS ||
+      glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+    res.y += 1.0f;
+  }
+
+  if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ||
+      glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+    res.x -= 1.0f;
+  }
+
+  if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ||
+      glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+    res.y -= 1.0f;
+  }
+
+  if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS ||
+      glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+    res.x += 1.0f;
+  }
+
+  if (glm::length(res))
+    res = glm::normalize(res);
+
+  float sprint_boost =
+      1.0f + float(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
+
+  res.w = sprint_boost;
+  return res;
 }

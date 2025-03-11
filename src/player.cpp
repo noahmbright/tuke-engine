@@ -7,8 +7,8 @@
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
-Player new_player(unsigned program, glm::vec3 pos, glm::vec3 size,
-                  glm::vec3 color) {
+Player new_player(unsigned program, const glm::vec3 &pos, const glm::vec3 &size,
+                  const glm::vec3 &color) {
   Player p;
   p.color = color;
   p.size = size;
@@ -38,4 +38,12 @@ void draw_player(const Player &player, const glm::mat4 &mvp) {
   glBindVertexArray(player.vao);
   glUniformMatrix4fv(player.u_mvp_location, 1, GL_FALSE, &mvp[0][0]);
   glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+
+void update_player_position(Player *player, float delta_t,
+                            const glm::vec4 &movement_direction) {
+  const glm::vec3 dir3{movement_direction.x, movement_direction.y,
+                       movement_direction.z};
+
+  player->position += player->speed * delta_t * (movement_direction.w) * dir3;
 }
