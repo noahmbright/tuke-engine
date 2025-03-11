@@ -1,44 +1,17 @@
 #include "shaders.h"
+#include "utils.h"
 
 #include <OpenGL/OpenGL.h>
 #include <glad/gl.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 #define BUFFER_SIZE 512
-
-const char *read_file(const char *path) {
-  FILE *fp = fopen(path, "r");
-  if (fp == NULL) {
-    fprintf(stderr, "Failed to open %s\n", path);
-    exit(1);
-  }
-
-  fseek(fp, 0L, SEEK_END);
-  long file_size = ftell(fp);
-  rewind(fp);
-  char *buffer = (char *)malloc(file_size + 1);
-  if (buffer == NULL) {
-    fprintf(stderr, "Failed to allocte buffer for %s\n", path);
-    exit(1);
-  }
-
-  long bytes_read = fread(buffer, sizeof(char), file_size, fp);
-  if (bytes_read < file_size) {
-    fprintf(stderr, "Failed to read correct number of bytes from %s\n", path);
-    exit(1);
-  }
-
-  buffer[bytes_read] = '\0';
-  fclose(fp);
-  return buffer;
-}
 
 unsigned link_shader_program(const char *vertex_shader_path,
                              const char *fragment_shader_path) {
   const char *vertex_shader_source = read_file(vertex_shader_path);
   const char *fragment_shader_source = read_file(fragment_shader_path);
 
+  printf("new_window: initialized window, returning\n");
   int success;
   char info_log[BUFFER_SIZE];
   unsigned vertex_shader = glCreateShader(GL_VERTEX_SHADER);
