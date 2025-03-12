@@ -1,7 +1,12 @@
+#include <glad/gl.h>
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+
+#include "camera.h"
 #include "tilemap.h"
 
-#include <OpenGL/OpenGL.h>
-#include <glad/gl.h>
+#include "glm/gtc/type_ptr.hpp"
+
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,10 +92,19 @@ static void gen_vertices_and_elements_from_map(Tilemap *tm,
   data->vertices = vertex_data;
 }
 
-TilemapOpenGLRenderData new_tilemap_opengl_render_data(Tilemap *tm) {
+TilemapOpenGLRenderData new_tilemap_opengl_render_data(unsigned program,
+                                                       Tilemap *tm) {
   TilemapOpenGLRenderData data;
+
   data.num_quads = tm->level_width * tm->level_height;
   gen_vertices_and_elements_from_map(tm, &data);
+
+  data.program = program;
+  data.u_model_location = glGetUniformLocation(program, "u_model");
+
+  data.matrices_buffer_index = glGetUniformBlockIndex(program, "u_Matrices");
+  glUniformBlockBinding(program, data.matrices_buffer_index,
+                        CAMERA_MATRICES_INDEX);
 
   glGenVertexArrays(1, &data.vao);
   glBindVertexArray(data.vao);
@@ -127,8 +141,11 @@ TilemapOpenGLRenderData new_tilemap_opengl_render_data(Tilemap *tm) {
   return data;
 }
 
-void opengl_draw_tilemap(TilemapOpenGLRenderData *tm) {
+void opengl_draw_tilemap(const TilemapOpenGLRenderData *tm,
+                         const glm::mat4 &model) {
+  glUseProgram(tm->program);
   glBindVertexArray(tm->vao);
+  glUniformMatrix4fv(tm->u_model_location, 1, GL_FALSE, glm::value_ptr(model));
   glDrawElements(GL_TRIANGLES, 6 * tm->num_quads, GL_UNSIGNED_INT, 0);
 }
 

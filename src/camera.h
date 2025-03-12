@@ -1,8 +1,9 @@
 #pragma once
 
+#define CAMERA_MATRICES_INDEX 0
+
 #include "GLFW/glfw3.h"
-#include "glm/ext/matrix_transform.hpp"
-#include <glm/vec3.hpp>
+#include <glm/glm.hpp>
 
 enum class CameraType { Camera2D, Camera3D, CameraFPS };
 
@@ -20,6 +21,12 @@ struct Camera {
   float fovy = 45.0f;
 
   void (*move_camera_function)(Camera *, float, const glm::vec4 &);
+
+  unsigned ubo;
+};
+
+struct CameraMatrices {
+  glm::mat4 view, projection;
 };
 
 Camera new_camera(CameraType type, const glm::vec3 &pos = {0.0, 0.0, 1.0},
@@ -40,6 +47,12 @@ void move_camera_3d(Camera *camera, float delta_t,
 void move_camera(Camera *camera, float delta_t,
                  const glm::vec4 &movement_direction);
 
-glm::mat4 look_at_from_camera(Camera *camera);
-glm::mat4 perspective_projection_from_camera(Camera *camera, int window_width,
+glm::mat4 look_at_from_camera(const Camera *camera);
+glm::mat4 perspective_projection_from_camera(const Camera *camera,
+                                             int window_width,
                                              int window_height);
+CameraMatrices new_camera_matrices(const Camera *camera, int window_width,
+                                   int window_height);
+
+void buffer_camera_matrices_to_gl_uniform_buffer(
+    const CameraMatrices *camera_matrices);

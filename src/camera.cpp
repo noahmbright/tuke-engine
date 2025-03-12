@@ -1,9 +1,12 @@
+#include <OpenGL/OpenGL.h>
+#include <glad/gl.h>
+
 #include "camera.h"
-#include "GLFW/glfw3.h"
+
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/trigonometric.hpp"
-#include <glm/ext/matrix_common.hpp>
-#include <iostream>
+
+#define CAMERA_MATRICES_INDEX 0
 
 static void scroll_callback(GLFWwindow *window, double xoffset,
                             double yoffset) {
@@ -96,6 +99,15 @@ Camera new_camera(CameraType type, const glm::vec3 &pos,
     break;
   }
 
+  unsigned ubo;
+  glGenBuffers(1, &ubo);
+  glBindBuffer(GL_UNIFORM_BUFFER, ubo);
+  glBufferData(GL_UNIFORM_BUFFER, sizeof(CameraMatrices), nullptr,
+               GL_DYNAMIC_DRAW);
+  glBindBuffer(GL_UNIFORM_BUFFER, 0);
+  glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
+  camera.ubo = ubo;
+
   return camera;
 }
 
@@ -144,14 +156,42 @@ Camera new_camera_from_window(CameraType type, GLFWwindow *window,
   return camera;
 }
 
-glm::mat4 look_at_from_camera(Camera *camera) {
+glm::mat4 look_at_from_camera(const Camera *camera) {
   return glm::lookAt(camera->position, camera->position + camera->direction,
                      camera->up);
 }
 
-glm::mat4 perspective_projection_from_camera(Camera *camera, int window_width,
+glm::mat4 perspective_projection_from_camera(const Camera *camera,
+                                             int window_width,
                                              int window_height) {
   return glm::perspective(glm::radians(camera->fovy),
                           float(window_width) / float(window_height), 0.1f,
                           100.0f);
+}
+
+CameraMatrices new_camera_matrices(const Camera *camera, int window_width,
+                                   int window_height) {
+  CameraMatrices camera_matrices;
+  camera_matrices.view = look_at_from_camera(camera);
+  camera_matrices.projection =
+      perspective_projection_from_camera(camera, window_width, window_height);
+  return camera_matrices;
+}
+void buffer_camera_matrices_to_gl_uniform_buffer(
+    const CameraMatrices *camera_matrices) {
+
+  CameraMatrices *uniform_buffer_range_ptr = (CameraMatrices *)glMapBufferRange(
+      GL_UNIFORM_BUFFER, 0, sizeof(CameraMatrices),
+      GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+
+  if (uniform_buffer_range_ptr) {
+    *uniform_buffer_range_ptr = *camera_matrices;
+    glUnmapBuffer(GL_UNIFORM_BUFFER);
+  }
+#if 1
+  else {
+    fprintf(stderr, "buffer_camera_matrices_to_gl_uniform_buffer: failed to "
+                    "get uniform_buffer_range_ptr\n");
+  }
+#endif
 }

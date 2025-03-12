@@ -8,10 +8,15 @@ layout (location = 3) in float a_tex_id;
 out vec4 color;
 out float tex_id;
 
-uniform mat4 mvp;
+uniform mat4 u_model;
+
+layout (std140) uniform u_Matrices{
+    mat4 view;
+    mat4 projection;
+};
 
 void main(){
-    gl_Position = mvp*vec4(a_pos, 1.0);
+    gl_Position = projection * view * u_model * vec4(a_pos, 1.0);
     color = a_color;
     tex_id = a_tex_id;
 }

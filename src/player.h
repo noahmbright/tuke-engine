@@ -2,7 +2,6 @@
 
 #include "glm/fwd.hpp"
 #include "glm/glm.hpp"
-#include "renderer.h"
 
 // draw the player as a textured quad
 // BL, TL, TR, BR
@@ -26,7 +25,8 @@ struct PlayerOpenGLRenderData {
   unsigned texture;
   unsigned vao, vbo, ebo;
 
-  int u_mvp_location;
+  int u_model_location;
+  unsigned matrices_buffer_index;
 };
 
 struct Player {
@@ -38,7 +38,7 @@ struct Player {
 Player new_player(const glm::vec3 &pos = {0.0f, 0.0f, 0.0f},
                   const glm::vec3 &size = {1.0f, 1.0f, 1.0f});
 
-void opengl_draw_player(const PlayerOpenGLRenderData &data,
+void opengl_draw_player(const PlayerOpenGLRenderData *data,
                         const glm::mat4 &mvp);
 void update_player_position(Player *player, float delta_t,
                             const glm::vec4 &movement_direction);

@@ -1,9 +1,9 @@
-#define GLM_ENABLE_EXPERIMENTAL
-#include "glm/gtx/string_cast.hpp"
 #include <OpenGL/OpenGL.h>
 #include <glad/gl.h>
 
-#include <iostream>
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/gtc/type_ptr.hpp"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -21,12 +21,11 @@ int main() {
       new_camera_from_window(CameraType::Camera2D, window, {0, 0, 5});
 
   unsigned player_texture = load_texture("textures/generic_girl.jpg");
-  unsigned tilemap_program = link_shader_program(
-      "shaders/tilemap_vertex.glsl", "shaders/tilemap_fragment.glsl");
-  int tilemap_mvp_location = glGetUniformLocation(tilemap_program, "mvp");
-
   unsigned player_program = link_shader_program("shaders/player_vertex.glsl",
                                                 "shaders/player_fragment.glsl");
+
+  unsigned tilemap_program = link_shader_program(
+      "shaders/tilemap_vertex.glsl", "shaders/tilemap_fragment.glsl");
 
   const int level_width = 16;
   const int level_height = 9;
@@ -46,9 +45,9 @@ int main() {
 
   Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
   TilemapOpenGLRenderData tilemap_render_data =
-      new_tilemap_opengl_render_data(&tilemap);
+      new_tilemap_opengl_render_data(tilemap_program, &tilemap);
 
-  Player player = new_player({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0});
+  Player player = new_player({0.0, 0.0, 1.0}, {1.0, 1.0, 1.0});
   PlayerOpenGLRenderData player_render_data =
       new_player_opengl_render_data(player_program, player_texture);
 
@@ -70,19 +69,15 @@ int main() {
     glfwGetFramebufferSize(window, &width, &height);
     glViewport(0, 0, width, height);
 
-    glm::mat4 view = look_at_from_camera(&camera);
-    glm::mat4 perspective_projection =
-        perspective_projection_from_camera(&camera, width, height);
-    glm::mat4 view_proj = perspective_projection * view;
+    const CameraMatrices camera_matrices =
+        new_camera_matrices(&camera, width, height);
+    buffer_camera_matrices_to_gl_uniform_buffer(&camera_matrices);
 
-    glm::mat4 player_model = model_from_player(&player);
-    glm::mat4 player_mvp = view_proj * player_model;
+    const glm::mat4 player_model = model_from_player(&player);
+    const glm::mat4 tilemap_model = glm::mat4(1.0);
 
-    glUseProgram(tilemap_program);
-    glUniformMatrix4fv(tilemap_mvp_location, 1, GL_FALSE, &view_proj[0][0]);
-    opengl_draw_tilemap(&tilemap_render_data);
-
-    opengl_draw_player(player_render_data, player_mvp);
+    opengl_draw_tilemap(&tilemap_render_data, tilemap_model);
+    opengl_draw_player(&player_render_data, player_model);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
