@@ -1,5 +1,6 @@
 #pragma once
 
+#include "glm/fwd.hpp"
 #include "glm/glm.hpp"
 #include "renderer.h"
 
@@ -44,3 +45,5 @@ void update_player_position(Player *player, float delta_t,
 
 PlayerOpenGLRenderData new_player_opengl_render_data(unsigned program,
                                                      unsigned texture);
+
+glm::mat4 model_from_player(const Player *player);

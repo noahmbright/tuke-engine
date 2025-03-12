@@ -1,11 +1,28 @@
 #include "camera.h"
 #include "GLFW/glfw3.h"
+#include "glm/gtc/matrix_transform.hpp"
 #include "glm/trigonometric.hpp"
 #include <glm/ext/matrix_common.hpp>
 #include <iostream>
 
+static void scroll_callback(GLFWwindow *window, double xoffset,
+                            double yoffset) {
+  Camera *camera = (Camera *)glfwGetWindowUserPointer(window);
+
+  (void)xoffset;
+  (void)yoffset;
+
+  camera->fovy -= (float)yoffset;
+  if (camera->fovy < 1.0f)
+    camera->fovy = 1.0f;
+
+  if (camera->fovy > 45.0f)
+    camera->fovy = 45.0f;
+}
+
 static void mouse_callback_3d(GLFWwindow *window, double xpos, double ypos) {
   Camera *camera = (Camera *)glfwGetWindowUserPointer(window);
+
   if (!camera) {
     fprintf(stderr, "mouse_callback_3d: camera is null\n");
   }
@@ -113,6 +130,7 @@ void move_camera(Camera *camera, float delta_t,
 Camera new_camera_from_window(CameraType type, GLFWwindow *window,
                               const glm::vec3 &pos, const glm::vec3 &direction,
                               const glm::vec3 &up, const glm::vec3 &right) {
+
   Camera camera = new_camera(type, pos, direction, up, right);
   glfwSetWindowUserPointer(window, &camera);
 
@@ -121,10 +139,19 @@ Camera new_camera_from_window(CameraType type, GLFWwindow *window,
     glfwSetCursorPosCallback(window, mouse_callback_3d);
   }
 
+  glfwSetScrollCallback(window, scroll_callback);
+
   return camera;
 }
 
 glm::mat4 look_at_from_camera(Camera *camera) {
   return glm::lookAt(camera->position, camera->position + camera->direction,
                      camera->up);
+}
+
+glm::mat4 perspective_projection_from_camera(Camera *camera, int window_width,
+                                             int window_height) {
+  return glm::perspective(glm::radians(camera->fovy),
+                          float(window_width) / float(window_height), 0.1f,
+                          100.0f);
 }

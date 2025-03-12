@@ -14,10 +14,10 @@ struct Camera {
   glm::vec3 up;
   glm::vec3 right;
 
-  float pitch;
-  float yaw;
+  float pitch, yaw;
   float mouse_sensitivity = 1e-3;
   float speed = 5e-3;
+  float fovy = 45.0f;
 
   void (*move_camera_function)(Camera *, float, const glm::vec4 &);
 };
@@ -39,4 +39,7 @@ void move_camera_3d(Camera *camera, float delta_t,
                     const glm::vec4 &movement_direction);
 void move_camera(Camera *camera, float delta_t,
                  const glm::vec4 &movement_direction);
+
 glm::mat4 look_at_from_camera(Camera *camera);
+glm::mat4 perspective_projection_from_camera(Camera *camera, int window_width,
+                                             int window_height);

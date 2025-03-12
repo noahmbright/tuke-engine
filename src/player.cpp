@@ -1,4 +1,5 @@
 #include "player.h"
+#include "glm/ext/matrix_transform.hpp"
 #include "renderer.h"
 
 #include <OpenGL/OpenGL.h>
@@ -62,4 +63,10 @@ void update_player_position(Player *player, float delta_t,
                        movement_direction.z};
 
   player->position += player->speed * delta_t * (movement_direction.w) * dir3;
+}
+
+glm::mat4 model_from_player(const Player *player) {
+  glm::mat4 player_model = glm::scale(glm::mat4(1.0), player->size);
+  player_model = glm::translate(player_model, player->position);
+  return player_model;
 }

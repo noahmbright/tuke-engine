@@ -1,5 +1,3 @@
-#include "glm/gtc/matrix_transform.hpp"
-#include "player.h"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/string_cast.hpp"
 #include <OpenGL/OpenGL.h>
@@ -10,6 +8,7 @@
 #include <stdlib.h>
 
 #include "camera.h"
+#include "player.h"
 #include "renderer.h"
 #include "shaders.h"
 #include "tilemap.h"
@@ -72,19 +71,18 @@ int main() {
     glViewport(0, 0, width, height);
 
     glm::mat4 view = look_at_from_camera(&camera);
-    glm::mat4 perspective_projection = glm::perspective(
-        glm::radians(45.0f), float(width) / float(height), 0.1f, 100.0f);
-    view = perspective_projection * view;
+    glm::mat4 perspective_projection =
+        perspective_projection_from_camera(&camera, width, height);
+    glm::mat4 view_proj = perspective_projection * view;
 
-    glm::mat4 player_model = glm::scale(glm::mat4(1.0), player.size);
-    player_model = glm::translate(player_model, player.position);
-    player_model = view * player_model;
+    glm::mat4 player_model = model_from_player(&player);
+    glm::mat4 player_mvp = view_proj * player_model;
 
     glUseProgram(tilemap_program);
-    glUniformMatrix4fv(tilemap_mvp_location, 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(tilemap_mvp_location, 1, GL_FALSE, &view_proj[0][0]);
     opengl_draw_tilemap(&tilemap_render_data);
 
-    opengl_draw_player(player_render_data, player_model);
+    opengl_draw_player(player_render_data, player_mvp);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
