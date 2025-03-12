@@ -1,11 +1,10 @@
 #include "tilemap.h"
 
 #include <OpenGL/OpenGL.h>
-#include <cstddef>
-#include <cstdio>
-#include <cstring>
 #include <glad/gl.h>
+#include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 static const TileQuad new_quad(const float x, const float y, const float z,
                                const float dx, const float dy, const float r,
@@ -43,10 +42,12 @@ static const TileQuad new_quad(const float x, const float y, const float z,
   return tq;
 }
 
-static void
-gen_vertices_and_elements_from_map(const int height, const int width,
-                                   const int map[], const float **vertices_out,
-                                   const unsigned **element_indices_out) {
+static void gen_vertices_and_elements_from_map(Tilemap *tm,
+                                               TilemapOpenGLRenderData *data) {
+  const int height = tm->level_height;
+  const int width = tm->level_width;
+  const int *map = tm->level_map;
+
   const float aspect = (float)width / (float)height;
   const float dx = 2.0 / width * aspect;
   const float dy = 2.0 / height;
@@ -59,10 +60,10 @@ gen_vertices_and_elements_from_map(const int height, const int width,
 
   for (unsigned long long i = 0; i < num_quads; i++) {
     // positions
-    unsigned long long height_index = i / height;
-    unsigned long long width_index = i % height;
+    unsigned long long height_index = i / width;
+    unsigned long long width_index = i % width;
     float x0 = -1.0 + width_index * dx;
-    float y0 = -1.0 + height_index * dy;
+    float y0 = 1.0 - height_index * dy;
 
     // vertices
     float r = 0.5 * map[i];
@@ -82,29 +83,31 @@ gen_vertices_and_elements_from_map(const int height, const int width,
     element_indices[i * 6 + 5] = unsigned(4 * i + 0);
   }
 
-  *element_indices_out = element_indices;
-  *vertices_out = vertex_data;
+  data->element_indices = element_indices;
+  data->vertices = vertex_data;
 }
 
-void init_tilemap_gl_buffers(Tilemap *tm) {
-  glGenVertexArrays(1, &tm->vao);
-  glBindVertexArray(tm->vao);
+TilemapOpenGLRenderData new_tilemap_opengl_render_data(Tilemap *tm) {
+  TilemapOpenGLRenderData data;
+  data.num_quads = tm->level_width * tm->level_height;
+  gen_vertices_and_elements_from_map(tm, &data);
+
+  glGenVertexArrays(1, &data.vao);
+  glBindVertexArray(data.vao);
 
   // element indices
-  glGenBuffers(1, &tm->ebo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, tm->ebo);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-               tm->level_width * tm->level_height * 6 * sizeof(unsigned),
-               tm->element_indices, GL_STATIC_DRAW);
+  glGenBuffers(1, &data.ebo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, data.ebo);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, data.num_quads * 6 * sizeof(unsigned),
+               data.element_indices, GL_STATIC_DRAW);
 
   // vertex data
-  glGenBuffers(1, &tm->vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, tm->vbo);
-  glBufferData(GL_ARRAY_BUFFER,
-               sizeof(TileQuad) * tm->level_width * tm->level_height,
-               tm->vertices, GL_STATIC_DRAW);
+  glGenBuffers(1, &data.vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, data.vbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(TileQuad) * data.num_quads,
+               data.vertices, GL_STATIC_DRAW);
 
-  glEnableVertexAttribArray(tm->vao);
+  glEnableVertexAttribArray(data.vao);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(TileVertex),
                         (void *)offsetof(TileVertex, texture_coords));
   glEnableVertexAttribArray(0);
@@ -120,22 +123,20 @@ void init_tilemap_gl_buffers(Tilemap *tm) {
   glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(TileVertex),
                         (void *)offsetof(TileVertex, texture_id));
   glEnableVertexAttribArray(3);
+
+  return data;
 }
 
-void draw_tilemap(Tilemap *tm) {
+void opengl_draw_tilemap(TilemapOpenGLRenderData *tm) {
   glBindVertexArray(tm->vao);
-  glDrawElements(GL_TRIANGLES, 6 * tm->level_height * tm->level_width,
-                 GL_UNSIGNED_INT, 0);
+  glDrawElements(GL_TRIANGLES, 6 * tm->num_quads, GL_UNSIGNED_INT, 0);
 }
 
-Tilemap new_tilemap(const int width, const int height, const int map[]) {
-  const float *vertices;
-  const unsigned *element_indices;
-  gen_vertices_and_elements_from_map(width, height, map, &vertices,
-                                     &element_indices);
-  Tilemap tm{width, height, map, vertices, element_indices, 0, 0, 0};
-
-  init_tilemap_gl_buffers(&tm);
+Tilemap new_tilemap(const int width, const int height, int *map) {
+  Tilemap tm;
+  tm.level_width = width;
+  tm.level_height = height;
+  tm.level_map = map;
 
   return tm;
 }

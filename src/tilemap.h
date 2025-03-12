@@ -1,34 +1,18 @@
 #pragma once
 
-struct TileVec2 {
-  float x, y;
-};
-
-struct TileVec3 {
-  float x, y, z;
-};
-
-struct TileVec4 {
-  float x, y, z, w;
-};
+#include "glm/glm.hpp"
 
 struct TileVertex {
-  TileVec2 texture_coords;
-  TileVec3 position;
-  TileVec4 color;
+  glm::vec2 texture_coords;
+  glm::vec3 position;
+  glm::vec4 color;
   float texture_id;
 };
 
 struct Tilemap {
-  const int level_width;
-  const int level_height;
-  const int *level_map;
-  const float *vertices;
-  const unsigned *element_indices;
-
-  unsigned vbo;
-  unsigned vao;
-  unsigned ebo;
+  int level_width;
+  int level_height;
+  int *level_map;
 };
 
 struct TileQuad {
@@ -38,5 +22,12 @@ struct TileQuad {
   TileVertex bottom_right;
 };
 
-Tilemap new_tilemap(const int width, const int height, const int map[]);
-void draw_tilemap(Tilemap *tilemap);
+struct TilemapOpenGLRenderData {
+  unsigned vbo, vao, ebo, num_quads;
+  const float *vertices;
+  const unsigned *element_indices;
+};
+
+Tilemap new_tilemap(const int width, const int height, int map[]);
+void opengl_draw_tilemap(TilemapOpenGLRenderData *tilemap);
+TilemapOpenGLRenderData new_tilemap_opengl_render_data(Tilemap *tm);

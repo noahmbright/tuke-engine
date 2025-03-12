@@ -32,20 +32,23 @@ int main() {
   const int level_width = 16;
   const int level_height = 9;
   // clang-format off
-  const int level_map[level_width * level_height] = {
+  int level_map[level_width * level_height] = {
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
       1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
       1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
       1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
       1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
       1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-      1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
+      1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1,
       1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
   };
   // clang-format on
 
   Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
+  TilemapOpenGLRenderData tilemap_render_data =
+      new_tilemap_opengl_render_data(&tilemap);
+
   Player player = new_player({0.0, 0.0, 0.0}, {1.0, 1.0, 1.0});
   PlayerOpenGLRenderData player_render_data =
       new_player_opengl_render_data(player_program, player_texture);
@@ -79,7 +82,7 @@ int main() {
 
     glUseProgram(tilemap_program);
     glUniformMatrix4fv(tilemap_mvp_location, 1, GL_FALSE, &view[0][0]);
-    draw_tilemap(&tilemap);
+    opengl_draw_tilemap(&tilemap_render_data);
 
     opengl_draw_player(player_render_data, player_model);
 
