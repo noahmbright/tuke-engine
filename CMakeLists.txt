@@ -27,6 +27,7 @@ add_library(engine ${SOURCE_FILES})
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glfw)
 include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/third_party/glfw/include)
 include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/third_party/include)
+include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/gen)
 
 if(Vulkan_FOUND)
     include_directories(engine PRIVATE ${Vulkan_INCLUDE_DIRS})
