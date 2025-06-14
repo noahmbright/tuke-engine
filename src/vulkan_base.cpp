@@ -18,6 +18,40 @@
 
 #define MAX_PHYSICAL_DEVICES (16)
 
+void destroy_swapchain(VulkanContext *context) {
+  // framebuffers
+  for (uint32_t i = 0; i < context->swapchain_storage.image_count; ++i) {
+    vkDestroyFramebuffer(context->device, context->framebuffers[i], NULL);
+    context->framebuffers[i] = VK_NULL_HANDLE;
+  }
+
+  // swapchain image views
+  for (uint32_t i = 0; i < context->swapchain_storage.image_count; i++) {
+    if (context->swapchain_storage.use_static) {
+      vkDestroyImageView(
+          context->device,
+          context->swapchain_storage.as.static_storage.image_views[i], NULL);
+    } else {
+      vkDestroyImageView(
+          context->device,
+          context->swapchain_storage.as.dynamic_storage.image_views[i], NULL);
+    }
+  }
+
+  if (!context->swapchain_storage.use_static) {
+    free(context->swapchain_storage.as.dynamic_storage.image_views);
+    free(context->swapchain_storage.as.dynamic_storage.images);
+  }
+
+  if (context->swapchain) {
+    vkDestroySwapchainKHR(context->device, context->swapchain, NULL);
+  } else {
+    printf("Tried to destroy null swapchain\n");
+  }
+
+  memset(&context->swapchain_storage, 0, sizeof(context->swapchain_storage));
+}
+
 void destroy_vulkan_context(VulkanContext *context) {
   vkDeviceWaitIdle(context->device);
   vkDestroyPipelineCache(context->device, context->pipeline_cache, NULL);
@@ -42,25 +76,9 @@ void destroy_vulkan_context(VulkanContext *context) {
                    context->frame_sync_objects[i].in_flight_fence, NULL);
   }
 
-  // framebuffers
-  for (uint32_t i = 0; i < context->swapchain_storage.image_count; ++i) {
-    vkDestroyFramebuffer(context->device, context->framebuffers[i], NULL);
-  }
+  destroy_swapchain(context);
 
-  // swapchain image views
-  for (uint32_t i = 0; i < context->swapchain_storage.image_count; i++) {
-    if (context->swapchain_storage.use_static) {
-      vkDestroyImageView(
-          context->device,
-          context->swapchain_storage.as.static_storage.image_views[i], NULL);
-    } else {
-      vkDestroyImageView(
-          context->device,
-          context->swapchain_storage.as.dynamic_storage.image_views[i], NULL);
-    }
-  }
   vkDestroyRenderPass(context->device, context->render_pass, NULL);
-  vkDestroySwapchainKHR(context->device, context->swapchain, NULL);
   vkDestroyDevice(context->device, NULL);
   vkDestroySurfaceKHR(context->instance, context->surface, NULL);
 
@@ -462,6 +480,17 @@ VkExtent2D get_swapchain_extent(GLFWwindow *window,
   return extent;
 }
 
+VkSurfaceCapabilitiesKHR
+get_surface_capabilities(VkPhysicalDevice physical_device,
+                         VkSurfaceKHR surface) {
+  VkSurfaceCapabilitiesKHR surface_capabilities;
+  VK_CHECK(
+      vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface,
+                                                &surface_capabilities),
+      "create_swapchain: Failed to vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+  return surface_capabilities;
+}
+
 VkSwapchainKHR create_swapchain(VkDevice device,
                                 VkPhysicalDevice physical_device,
                                 VkSurfaceKHR surface,
@@ -707,6 +736,31 @@ VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass render_pass,
   return framebuffer;
 }
 
+void init_framebuffers(VulkanContext *context) {
+  for (uint32_t i = 0; i < context->swapchain_storage.image_count; i++) {
+    VkImageView view =
+        context->swapchain_storage.use_static
+            ? context->swapchain_storage.as.static_storage.image_views[i]
+            : context->swapchain_storage.as.dynamic_storage.image_views[i];
+    context->framebuffers[i] =
+        create_framebuffer(context->device, context->render_pass, &view,
+                           context->swapchain_extent);
+  }
+}
+
+void recreate_swapchain(VulkanContext *context) {
+  vkDeviceWaitIdle(context->device);
+  destroy_swapchain(context);
+
+  context->swapchain = create_swapchain(
+      context->device, context->physical_device, context->surface,
+      context->queue_family_indices, context->surface_format,
+      context->surface_capabilities, context->swapchain_extent);
+  create_swapchain_storage(context->device, context->surface_format,
+                           context->swapchain);
+  init_framebuffers(context);
+}
+
 void create_frame_sync_objects(VkDevice device,
                                FrameSyncObjects *frame_sync_objects) {
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkSemaphoreCreateInfo.html
@@ -814,18 +868,14 @@ VulkanContext create_vulkan_context() {
   context.surface_format =
       get_surface_format(context.physical_device, context.surface);
 
-  VkSurfaceCapabilitiesKHR surface_capabilities;
-  VK_CHECK(
-      vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-          context.physical_device, context.surface, &surface_capabilities),
-      "create_swapchain: Failed to vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
-
+  context.surface_capabilities =
+      get_surface_capabilities(context.physical_device, context.surface);
   context.swapchain_extent =
-      get_swapchain_extent(context.window, surface_capabilities);
+      get_swapchain_extent(context.window, context.surface_capabilities);
   context.swapchain =
       create_swapchain(context.device, context.physical_device, context.surface,
                        context.queue_family_indices, context.surface_format,
-                       surface_capabilities, context.swapchain_extent);
+                       context.surface_capabilities, context.swapchain_extent);
 
   vkGetDeviceQueue(context.device, context.queue_family_indices.graphics_family,
                    0, &context.graphics_queue);
@@ -835,17 +885,11 @@ VulkanContext create_vulkan_context() {
                    0, &context.compute_queue);
   context.swapchain_storage = create_swapchain_storage(
       context.device, context.surface_format, context.swapchain);
+
   context.render_pass =
       create_render_pass(context.device, context.surface_format);
 
-  for (uint32_t i = 0; i < context.swapchain_storage.image_count; i++) {
-    VkImageView view =
-        context.swapchain_storage.use_static
-            ? context.swapchain_storage.as.static_storage.image_views[i]
-            : context.swapchain_storage.as.dynamic_storage.image_views[i];
-    context.framebuffers[i] = create_framebuffer(
-        context.device, context.render_pass, &view, context.swapchain_extent);
-  }
+  init_framebuffers(&context);
 
   create_frame_sync_objects(context.device, context.frame_sync_objects);
   context.current_frame = 0;
@@ -1060,6 +1104,24 @@ VkShaderModule create_shader_module(VkDevice device, const uint32_t *code,
   return module;
 }
 
+ViewportState create_viewport_state(VkExtent2D swapchain_extent,
+                                    VkOffset2D offset) {
+  ViewportState viewport_state;
+
+  viewport_state.viewport.x = offset.x;
+  viewport_state.viewport.y = offset.y;
+  viewport_state.viewport.width = (float)swapchain_extent.width;
+  viewport_state.viewport.height = (float)swapchain_extent.height;
+  viewport_state.viewport.minDepth = 0.0f;
+  viewport_state.viewport.maxDepth = 1.0f;
+
+  viewport_state.scissor.extent = swapchain_extent;
+  viewport_state.scissor.offset.x = offset.x;
+  viewport_state.scissor.offset.y = offset.y;
+
+  return viewport_state;
+}
+
 // TODO Validate shader stages if you want strict pipeline guarantees
 // TODO Print/log pipeline cache usage for debugging
 VkPipeline create_graphics_pipeline(
@@ -1095,18 +1157,11 @@ VkPipeline create_graphics_pipeline(
 
   graphics_pipeline_create_info.pTessellationState = NULL;
 
-  VkViewport viewport;
-  viewport.x = 0.0f;
-  viewport.y = 0.0f;
-  viewport.width = (float)swapchain_extent.width;
-  viewport.height = (float)swapchain_extent.height;
-  viewport.minDepth = 0.0f;
-  viewport.maxDepth = 1.0f;
-
-  VkRect2D scissor;
-  scissor.extent = swapchain_extent;
-  scissor.offset.x = 0;
-  scissor.offset.y = 0;
+  VkOffset2D offset;
+  offset.x = 0.0f;
+  offset.y = 0.0f;
+  ViewportState viewport_state =
+      create_viewport_state(swapchain_extent, offset);
 
   VkPipelineViewportStateCreateInfo viewport_state_create_info;
   viewport_state_create_info.sType =
@@ -1114,9 +1169,9 @@ VkPipeline create_graphics_pipeline(
   viewport_state_create_info.pNext = NULL;
   viewport_state_create_info.flags = 0;
   viewport_state_create_info.viewportCount = 1;
-  viewport_state_create_info.pViewports = &viewport;
+  viewport_state_create_info.pViewports = &viewport_state.viewport;
   viewport_state_create_info.scissorCount = 1;
-  viewport_state_create_info.pScissors = &scissor;
+  viewport_state_create_info.pScissors = &viewport_state.scissor;
   graphics_pipeline_create_info.pViewportState = &viewport_state_create_info;
 
   VkPipelineRasterizationStateCreateInfo rasterization_state_create_info;
@@ -1229,4 +1284,110 @@ VkPipeline create_graphics_pipeline(
                                      &graphics_pipeline),
            "create_graphics_pipeline: Failed to vkCreateGraphicsPipelines");
   return graphics_pipeline;
+}
+
+bool begin_frame(VulkanContext *context) {
+  vkWaitForFences(
+      context->device, 1,
+      &context->frame_sync_objects[context->current_frame].in_flight_fence,
+      VK_TRUE, UINT64_MAX);
+
+  vkResetFences(
+      context->device, 1,
+      &context->frame_sync_objects[context->current_frame].in_flight_fence);
+
+  VkResult result =
+      vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX,
+                            context->frame_sync_objects[context->current_frame]
+                                .image_available_semaphore,
+                            VK_NULL_HANDLE, &context->image_index);
+
+  if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+    recreate_swapchain(context);
+    return false;
+  }
+
+  if (result == VK_ERROR_DEVICE_LOST) {
+    fprintf(stderr, "begin_frame: result = VK_ERROR_DEVICE_LOST");
+    exit(1);
+  }
+
+  return true;
+}
+
+VkCommandBuffer begin_command_buffer(VulkanContext *context) {
+  VkCommandBuffer command_buffer =
+      context->graphics_command_buffers[context->image_index];
+
+  VkCommandBufferBeginInfo command_buffer_begin_info;
+  command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  command_buffer_begin_info.pNext = NULL;
+  command_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+  command_buffer_begin_info.pInheritanceInfo = NULL;
+
+  VK_CHECK(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info),
+           "begin_command_buffer: failed to vkBeginCommandBuffer");
+
+  return command_buffer;
+}
+
+// potentially rename to begin_default_render_pass
+// leaves open possibility of rendering to other framebuffers
+void begin_render_pass(VulkanContext *context, VkCommandBuffer command_buffer,
+                       VkClearValue clear_value, VkOffset2D offset) {
+  VkRenderPassBeginInfo render_pass_begin_info;
+  render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  render_pass_begin_info.pNext = NULL;
+  render_pass_begin_info.renderPass = context->render_pass;
+  render_pass_begin_info.framebuffer =
+      context->framebuffers[context->image_index];
+  render_pass_begin_info.renderArea.offset = offset;
+  render_pass_begin_info.renderArea.extent = context->swapchain_extent;
+  render_pass_begin_info.clearValueCount = 1;
+  render_pass_begin_info.pClearValues = &clear_value;
+  vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info,
+                       VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void submit_and_present(VulkanContext *context,
+                        VkCommandBuffer command_buffer) {
+
+  VkSubmitInfo submit_info;
+  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submit_info.pNext = NULL;
+  submit_info.waitSemaphoreCount = 1;
+  submit_info.pWaitSemaphores =
+      &context->frame_sync_objects[context->current_frame]
+           .image_available_semaphore;
+  VkPipelineStageFlags wait_stage =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  submit_info.pWaitDstStageMask = &wait_stage;
+  submit_info.commandBufferCount = 1;
+  submit_info.pCommandBuffers = &command_buffer;
+  submit_info.signalSemaphoreCount = 1;
+  submit_info.pSignalSemaphores =
+      &context->frame_sync_objects[context->current_frame]
+           .render_finished_semaphore;
+
+  VK_CHECK(
+      vkQueueSubmit(
+          context->graphics_queue, 1, &submit_info,
+          context->frame_sync_objects[context->current_frame].in_flight_fence),
+      "sumbit_and_present: Failed to vkQueueSubmit");
+
+  VkPresentInfoKHR present_info;
+  present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  present_info.pNext = NULL;
+  present_info.waitSemaphoreCount = 1;
+  present_info.pWaitSemaphores =
+      &context->frame_sync_objects[context->current_frame]
+           .render_finished_semaphore;
+  present_info.swapchainCount = 1;
+  present_info.pSwapchains = &context->swapchain;
+  present_info.pImageIndices = &context->image_index;
+  present_info.pResults = NULL;
+
+  // TODO handle swapchain recreation here if need be
+  VK_CHECK(vkQueuePresentKHR(context->graphics_queue, &present_info),
+           "sumbit_and_present: Failed to vkQueuePresentKHR");
 }

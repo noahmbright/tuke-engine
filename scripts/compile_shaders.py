@@ -1,8 +1,10 @@
+#!/usr/local/bin/python3
 import os
 import re
 import sys
 import subprocess
 import tempfile
+import argparse
 from pathlib import Path
 
 # wanted to try validating linkage at compile time, had this idea
@@ -57,25 +59,35 @@ def compile_shader(filepath, backend):
     with open(filepath, 'r', encoding='utf-8') as f:
         contents = f.read()
 
+    is_vulkan = (backend["name"] == "vulkan")
+
     def replacer(match):
-        key = match.group(1).strip()
-        value = match.group(2).strip() if match.group(2) else None
+        tokens = match.group(1).split()
+        directive = tokens[0]
 
-        if key == "LOCATION":
-            if backend["name"] == "vulkan":
-                return f"layout(location = {value})"
-            if backend["name"] == "opengl":
-                return ""
+        if directive == "LOCATION":
+            if is_vulkan:
+                return f"layout(location = {tokens[1]}) "
+            return ""
 
-        if key in backend:
-            return backend[key]
+        if directive == "SET_BINDING":
+            if is_vulkan:
+                return f"layout(set = {tokens[1]}, binding = {tokens[2]}) "
+            return ""
+
+        if directive in backend:
+            return backend[directive]
         else:
-            print(f"Failed to find key {key} in backend {backend}")
+            print(f"Failed to find key {directive} in backend {backend}")
             return match.group(0)
 
-    return re.sub(r"\{\{\s*(\w+)(?:\s*(\S+))?\s*\}\}", replacer, contents)
+    return re.sub(r"\{\{\s*(.*?)\s*\}\}", replacer, contents)
 
 def compile_to_spirv(source_code, output_path, stage):
+    if args.dump_vulkan_source:
+        print(f"dumping source for {output_path}")
+        print(source_code)
+
     with tempfile.NamedTemporaryFile(suffix=f".{stage}", delete=False, mode='w', encoding='utf-8') as tmp_file:
         tmp_file.write(source_code)
         tmp_filename = tmp_file.name
@@ -100,6 +112,14 @@ def compile_to_spirv(source_code, output_path, stage):
         os.remove(tmp_filename)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dump-vulkan-source",
+        action="store_true",
+        help="Print vulkan source when compiling to glsl 450"
+    )
+    args = parser.parse_args()
+
     shader_subdirectories = [x[0] for x in os.walk(shaders_dir) if os.path.basename(x[0]) != "gen"]
     os.makedirs(header_gen_dir, exist_ok=True)
 
@@ -107,6 +127,22 @@ if __name__ == "__main__":
         files = [os.path.abspath(os.path.join(subdir, f)) for f in os.listdir(subdir) if os.path.isfile(os.path.join(subdir, f))]
         shader_gen_dir = os.path.join(subdir, "gen")
         os.makedirs(shader_gen_dir, exist_ok=True)
+
+        needs_regenerated = False
+        for file in files:
+            source_file_basename = os.path.basename(file)
+            parts = validate_filename_and_get_parts(source_file_basename)
+            if parts is None:
+                continue
+
+            shader_stage = parts[1]
+            output_file_basename = parts[0] + "." + shader_stage
+            test_compiled_filepath = os.path.join(shader_gen_dir, output_file_basename + ".glsl")
+            if source_is_newer(Path(file), Path(test_compiled_filepath)):
+                needs_regenerated = True
+                break
+        if not needs_regenerated:
+            continue
 
         subdir_relative_path = str(Path(subdir).relative_to(shaders_dir)).replace("/", "_") 
         if subdir_relative_path == ".":
@@ -121,17 +157,11 @@ if __name__ == "__main__":
             for source_file in files:
                 source_file_basename = os.path.basename(source_file)
                 parts = validate_filename_and_get_parts(source_file_basename)
-
                 if parts is None:
                     continue
 
                 shader_stage = parts[1]
                 output_file_basename = parts[0] + "." + shader_stage
-
-                test_compiled_filepath = os.path.join(shader_gen_dir, output_file_basename + ".glsl")
-                if not source_is_newer(Path(source_file), Path(test_compiled_filepath)):
-                    continue
-
                 output_file = os.path.join(shader_gen_dir, output_file_basename)
 
                 for backend in backends:
@@ -140,8 +170,6 @@ if __name__ == "__main__":
                     output_filepath = os.path.join(shader_gen_dir, output_filename)
 
                     if backend["name"] == "vulkan":
-
-
                         compile_to_spirv(new_shader_glsl_source, output_filepath, shader_stage)
 
                         with open(output_filepath, "rb") as spirv_f:

@@ -62,18 +62,15 @@ struct SwapchainStorage {
 };
 
 struct VulkanContext {
+  // needed most often
   GLFWwindow *window;
-  VkInstance instance;
-  VkDebugUtilsMessengerEXT debug_messenger;
-  VkSurfaceKHR surface;
-  QueueFamilyIndices queue_family_indices;
-  VkPhysicalDevice physical_device;
-  VkPhysicalDeviceProperties physical_device_properties;
   VkDevice device;
   VkQueue graphics_queue;
   VkQueue present_queue;
   VkQueue compute_queue;
+  uint32_t image_index;
 
+  VkSurfaceCapabilitiesKHR surface_capabilities;
   VkSwapchainKHR swapchain;
   VkSurfaceFormatKHR surface_format;
   VkExtent2D swapchain_extent;
@@ -84,17 +81,25 @@ struct VulkanContext {
   FrameSyncObjects frame_sync_objects[MAX_FRAMES_IN_FLIGHT];
   uint32_t current_frame;
 
-  VkCommandPool graphics_command_pool;
-  bool compute_queue_index_is_different_than_graphics;
-  VkCommandPool compute_command_pool;
-  bool present_queue_index_is_different_than_graphics;
-  VkCommandPool present_command_pool;
-  VkCommandPool transient_command_pool;
-
   VkCommandBuffer graphics_command_buffers[NUM_SWAPCHAIN_IMAGES];
   VkCommandBuffer compute_command_buffers[NUM_SWAPCHAIN_IMAGES];
 
   VkPipelineCache pipeline_cache;
+
+  // init
+  VkInstance instance;
+  VkDebugUtilsMessengerEXT debug_messenger;
+  VkSurfaceKHR surface;
+  QueueFamilyIndices queue_family_indices;
+  VkPhysicalDevice physical_device;
+  VkPhysicalDeviceProperties physical_device_properties;
+
+  VkCommandPool graphics_command_pool;
+  VkCommandPool compute_command_pool;
+  VkCommandPool present_command_pool;
+  VkCommandPool transient_command_pool;
+  bool compute_queue_index_is_different_than_graphics;
+  bool present_queue_index_is_different_than_graphics;
 };
 
 struct VulkanBuffer {
@@ -102,6 +107,11 @@ struct VulkanBuffer {
   VkDeviceMemory memory;
   VkMemoryRequirements memory_requirements;
   VkMemoryPropertyFlags memory_property_flags;
+};
+
+struct ViewportState {
+  VkViewport viewport;
+  VkRect2D scissor;
 };
 
 VulkanContext create_vulkan_context();
@@ -127,3 +137,11 @@ VkPipeline create_graphics_pipeline(
     VkBool32 blending_enabled, VkRenderPass render_pass,
     VkPipelineLayout pipeline_layout, VkPipelineCache pipeline_cache,
     VkCullModeFlags cull_mode);
+
+bool begin_frame(VulkanContext *context);
+VkCommandBuffer begin_command_buffer(VulkanContext *context);
+ViewportState create_viewport_state(VkExtent2D swapchain_extent,
+                                    VkOffset2D offset);
+void begin_render_pass(VulkanContext *context, VkCommandBuffer command_buffer,
+                       VkClearValue clear_value, VkOffset2D offset);
+void submit_and_present(VulkanContext *context, VkCommandBuffer command_buffer);

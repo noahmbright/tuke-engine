@@ -6,11 +6,8 @@
 #include <cstring>
 
 int main() {
-  fprintf(stderr, "starting\n");
   VulkanContext context = create_vulkan_context();
-  fprintf(stderr, "created context\n");
 
-  uint64_t frame_count = 0;
   float positions[] = {0.0f, -0.5f, 0.0f, 0.5f, 0.5f, 0.0f, -0.5f, 0.5f, 0.0f};
   float normals[] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};
   uint32_t position_normal_stride = 3 * sizeof(float);
@@ -37,6 +34,82 @@ int main() {
   VulkanBuffer vertex_buffer =
       create_buffer(&context, vertex_buffer_usage, total_size,
                     vertex_buffer_memory_properties);
+
+  struct FloatUniformBuffer {
+    float x;
+  };
+
+  VkBufferUsageFlags uniform_buffer_usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+  VkMemoryPropertyFlags uniform_buffer_memory_properties =
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+  VulkanBuffer uniform_buffer =
+      create_buffer(&context, uniform_buffer_usage, sizeof(FloatUniformBuffer),
+                    uniform_buffer_memory_properties);
+
+  VkDescriptorSetLayoutBinding ubo_layout_binding;
+  ubo_layout_binding.binding = 0;
+  ubo_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  ubo_layout_binding.descriptorCount = 1;
+  ubo_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  ubo_layout_binding.pImmutableSamplers = NULL;
+
+  VkDescriptorSetLayout descriptor_set_layout;
+  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info;
+  descriptor_set_layout_create_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  descriptor_set_layout_create_info.pNext = NULL;
+  descriptor_set_layout_create_info.flags = 0;
+  descriptor_set_layout_create_info.bindingCount = 1;
+  descriptor_set_layout_create_info.pBindings = &ubo_layout_binding;
+  vkCreateDescriptorSetLayout(context.device,
+                              &descriptor_set_layout_create_info, NULL,
+                              &descriptor_set_layout);
+
+  VkDescriptorPoolSize pool_size = {};
+  pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  pool_size.descriptorCount = 1;
+
+  VkDescriptorPool descriptor_pool;
+  VkDescriptorPoolCreateInfo descriptor_pool_create_info;
+  descriptor_pool_create_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  descriptor_pool_create_info.pNext = NULL;
+  descriptor_pool_create_info.flags = 0;
+  descriptor_pool_create_info.maxSets = 1;
+  descriptor_pool_create_info.poolSizeCount = 1;
+  descriptor_pool_create_info.pPoolSizes = &pool_size;
+  vkCreateDescriptorPool(context.device, &descriptor_pool_create_info, NULL,
+                         &descriptor_pool);
+
+  VkDescriptorSet descriptor_set;
+  VkDescriptorSetAllocateInfo descriptor_set_allocate_info;
+  descriptor_set_allocate_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  descriptor_set_allocate_info.pNext = NULL;
+  descriptor_set_allocate_info.descriptorPool = descriptor_pool;
+  descriptor_set_allocate_info.descriptorSetCount = 1;
+  descriptor_set_allocate_info.pSetLayouts = &descriptor_set_layout;
+  vkAllocateDescriptorSets(context.device, &descriptor_set_allocate_info,
+                           &descriptor_set);
+
+  VkDescriptorBufferInfo descriptor_buffer_info;
+  descriptor_buffer_info.buffer = uniform_buffer.buffer;
+  descriptor_buffer_info.offset = 0;
+  descriptor_buffer_info.range = sizeof(FloatUniformBuffer);
+
+  VkWriteDescriptorSet write_descriptor_set;
+  write_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write_descriptor_set.pNext = NULL;
+  write_descriptor_set.dstSet = descriptor_set;
+  write_descriptor_set.dstBinding = 0;
+  write_descriptor_set.dstArrayElement = 0;
+  write_descriptor_set.descriptorCount = 1;
+  write_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  write_descriptor_set.pImageInfo = NULL;
+  write_descriptor_set.pBufferInfo = &descriptor_buffer_info;
+  write_descriptor_set.pTexelBufferView = NULL;
+  vkUpdateDescriptorSets(context.device, 1, &write_descriptor_set, 0, NULL);
 
   VkBufferCopy copy_regions[2] = {};
   copy_regions[0].size = positions_size;
@@ -106,8 +179,8 @@ int main() {
       VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
   pipeline_layout_create_info.pNext = NULL,
   pipeline_layout_create_info.flags = 0,
-  pipeline_layout_create_info.setLayoutCount = 0,
-  pipeline_layout_create_info.pSetLayouts = NULL,
+  pipeline_layout_create_info.setLayoutCount = 1,
+  pipeline_layout_create_info.pSetLayouts = &descriptor_set_layout,
   pipeline_layout_create_info.pushConstantRangeCount = 0,
   pipeline_layout_create_info.pPushConstantRanges = NULL;
 
@@ -144,109 +217,45 @@ int main() {
   VkDeviceSize buffer_offsets[] = {0, positions_size};
   VkBuffer buffers[] = {vertex_buffer.buffer, vertex_buffer.buffer};
 
-  fprintf(stderr, "waiting for fences...\n");
-  vkWaitForFences(context.device, 1,
-                  &context.frame_sync_objects[frame_count].in_flight_fence,
-                  VK_TRUE, UINT64_MAX);
-  fprintf(stderr, "waited for fences\n");
-  vkResetFences(context.device, 1,
-                &context.frame_sync_objects[frame_count].in_flight_fence);
-  fprintf(stderr, "reset fences\n");
+  VkOffset2D offset;
+  offset.x = 0;
+  offset.y = 0;
+  ViewportState viewport_state =
+      create_viewport_state(context.swapchain_extent, offset);
 
-  uint32_t image_index;
-  vkAcquireNextImageKHR(
-      context.device, context.swapchain, UINT64_MAX,
-      context.frame_sync_objects[frame_count].image_available_semaphore,
-      VK_NULL_HANDLE, &image_index);
-  fprintf(stderr, "Acquired next image\n");
-  VkCommandBuffer command_buffer =
-      context.graphics_command_buffers[image_index];
-  VkFramebuffer framebuffer = context.framebuffers[image_index];
-
-  VkCommandBufferBeginInfo command_buffer_begin_info;
-  command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  command_buffer_begin_info.pNext = NULL;
-  command_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-  command_buffer_begin_info.pInheritanceInfo = NULL;
-
-  VkRenderPassBeginInfo render_pass_begin_info;
-  render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  render_pass_begin_info.pNext = NULL;
-  render_pass_begin_info.renderPass = context.render_pass;
-  render_pass_begin_info.framebuffer = framebuffer;
-  render_pass_begin_info.renderArea.offset.x = 0.0f;
-  render_pass_begin_info.renderArea.offset.y = 0.0f;
-  render_pass_begin_info.renderArea.extent = context.swapchain_extent;
-  render_pass_begin_info.clearValueCount = 1;
+  if (!begin_frame(&context)) {
+    printf("fuk\n");
+  }
   VkClearValue clear_value;
-  float clear_value_array[4] = {1.0f, 0.0f, 0.0f, 1.0f};
-  memcpy(&clear_value.color, clear_value_array, 4);
-  render_pass_begin_info.pClearValues = &clear_value;
+  clear_value.color = {{1.0, 0.0, 0.0, 1.0}};
+  VkCommandBuffer command_buffer = begin_command_buffer(&context);
+  begin_render_pass(&context, command_buffer, clear_value,
+                    viewport_state.scissor.offset);
 
-  VkViewport viewport;
-  viewport.x = 0.0f;
-  viewport.y = 0.0f;
-  viewport.width = (float)context.swapchain_extent.width;
-  viewport.height = (float)context.swapchain_extent.height;
-  viewport.minDepth = 0.0f;
-  viewport.maxDepth = 1.0f;
+  FloatUniformBuffer fub;
+  fub.x = 0.4f;
 
-  VkRect2D scissor;
-  scissor.extent = context.swapchain_extent;
-  scissor.offset.x = 0;
-  scissor.offset.y = 0;
+  void *data;
+  vkMapMemory(context.device, uniform_buffer.memory, 0, sizeof(fub), 0, &data);
+  memcpy(data, &fub, sizeof(fub));
+  vkUnmapMemory(context.device, uniform_buffer.memory);
 
-  vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
-  fprintf(stderr, "begun command buffer");
-  vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info,
-                       VK_SUBPASS_CONTENTS_INLINE);
-  vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-  vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+  vkCmdSetViewport(command_buffer, 0, 1, &viewport_state.viewport);
+  vkCmdSetScissor(command_buffer, 0, 1, &viewport_state.scissor);
   vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     graphics_pipeline);
   vkCmdBindVertexBuffers(command_buffer, 0, 2, buffers, buffer_offsets);
+  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          pipeline_layout, 0, 1, &descriptor_set, 0, NULL);
   vkCmdDraw(command_buffer, 3, 1, 0, 0);
   vkCmdEndRenderPass(command_buffer);
-  vkEndCommandBuffer(command_buffer);
-  fprintf(stderr, "ended command buffer\n");
-
-  VkSubmitInfo submit_info;
-  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submit_info.pNext = NULL;
-  submit_info.waitSemaphoreCount = 1;
-  submit_info.pWaitSemaphores =
-      &context.frame_sync_objects[frame_count].image_available_semaphore;
-  VkPipelineStageFlags wait_stage =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  submit_info.pWaitDstStageMask = &wait_stage;
-  submit_info.commandBufferCount = 1;
-  submit_info.pCommandBuffers = &command_buffer;
-  submit_info.signalSemaphoreCount = 1;
-  submit_info.pSignalSemaphores =
-      &context.frame_sync_objects[frame_count].render_finished_semaphore;
-
-  vkQueueSubmit(context.graphics_queue, 1, &submit_info,
-                context.frame_sync_objects[frame_count].in_flight_fence);
-  fprintf(stderr, "submitted\n");
-
-  VkPresentInfoKHR present_info;
-  present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  present_info.pNext = NULL;
-  present_info.waitSemaphoreCount = 1;
-  present_info.pWaitSemaphores =
-      &context.frame_sync_objects[frame_count].render_finished_semaphore;
-  present_info.swapchainCount = 1;
-  present_info.pSwapchains = &context.swapchain;
-  present_info.pImageIndices = &image_index;
-  present_info.pResults = NULL;
-
-  vkQueuePresentKHR(context.graphics_queue, &present_info);
-  fprintf(stderr, "presented\n");
+  VK_CHECK(vkEndCommandBuffer(command_buffer), "Failed to end command buffer");
+  submit_and_present(&context, command_buffer);
 
   while (!glfwWindowShouldClose(context.window)) {
-    uint8_t frame_index = frame_count % MAX_FRAMES_IN_FLIGHT;
+    uint8_t frame_index = context.current_frame % MAX_FRAMES_IN_FLIGHT;
     glfwPollEvents();
-    frame_count++;
+    context.current_frame++;
     (void)frame_index;
   }
 
@@ -254,8 +263,11 @@ int main() {
   vkDeviceWaitIdle(context.device);
   vkDestroyPipelineLayout(context.device, pipeline_layout, NULL);
   vkDestroyPipeline(context.device, graphics_pipeline, NULL);
+  vkDestroyDescriptorPool(context.device, descriptor_pool, NULL);
+  vkDestroyDescriptorSetLayout(context.device, descriptor_set_layout, NULL);
   vkDestroyShaderModule(context.device, vertex_shader_module, NULL);
   vkDestroyShaderModule(context.device, fragment_shader_module, NULL);
+  destroy_vulkan_buffer(&context, uniform_buffer);
   destroy_vulkan_buffer(&context, staging_buffer);
   destroy_vulkan_buffer(&context, vertex_buffer);
   destroy_vulkan_context(&context);
