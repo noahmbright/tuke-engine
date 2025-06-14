@@ -114,7 +114,7 @@ struct ViewportState {
   VkRect2D scissor;
 };
 
-VulkanContext create_vulkan_context();
+VulkanContext create_vulkan_context(const char *title);
 void destroy_vulkan_context(VulkanContext *);
 VulkanBuffer create_buffer(VulkanContext *context, VkBufferUsageFlags usage,
                            uint32_t size, VkMemoryPropertyFlags properties);

@@ -6,7 +6,7 @@
 #include <cstring>
 
 int main() {
-  VulkanContext context = create_vulkan_context();
+  VulkanContext context = create_vulkan_context("Tuke");
 
   float positions[] = {0.0f, -0.5f, 0.0f, 0.5f, 0.5f, 0.0f, -0.5f, 0.5f, 0.0f};
   float normals[] = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f};

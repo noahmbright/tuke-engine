@@ -82,6 +82,8 @@ void destroy_vulkan_context(VulkanContext *context) {
   vkDestroyDevice(context->device, NULL);
   vkDestroySurfaceKHR(context->instance, context->surface, NULL);
 
+#ifdef TUKE_DISABLE_VULKAN_VALIDATION
+#else
   PFN_vkDestroyDebugUtilsMessengerEXT fpDestroyDebugUtilsMessengerEXT =
       (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
           context->instance, "vkDestroyDebugUtilsMessengerEXT");
@@ -89,7 +91,7 @@ void destroy_vulkan_context(VulkanContext *context) {
     fpDestroyDebugUtilsMessengerEXT(context->instance, context->debug_messenger,
                                     NULL);
   }
-
+#endif
   vkDestroyInstance(context->instance, NULL);
 }
 
@@ -136,12 +138,12 @@ void populate_debug_msngr_create_info(
   debug_msngr_create_info->pUserData = NULL;
 }
 
-VkInstance create_instance() {
+VkInstance create_instance(const char *name) {
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkApplicationInfo.html
   VkApplicationInfo application_info;
   application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   application_info.pNext = NULL;
-  application_info.pApplicationName = "Tuke";
+  application_info.pApplicationName = name;
   application_info.applicationVersion = 1;
   application_info.pEngineName = NULL;
   application_info.engineVersion = 0;
@@ -155,12 +157,24 @@ VkInstance create_instance() {
     fprintf(stderr, "create_instance: glfw_extensions is NULL\n");
     exit(1);
   }
+
   // TODO debug/release
+#ifdef TUKE_DISABLE_VULKAN_VALIDATION
+  const char *extra_extensions[] = {
+      VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+  };
+  const uint32_t extra_extension_count = 1;
+  const char **validation_layers = {};
+  const uint32_t layer_count = 0;
+#else
   const char *extra_extensions[] = {
       VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
       VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
   };
   const uint32_t extra_extension_count = 2;
+  const char *validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
+  const uint32_t layer_count = 1;
+#endif
 
   const uint32_t MAX_EXTENSIONS = 16;
   const uint32_t total_extension_count =
@@ -181,16 +195,17 @@ VkInstance create_instance() {
     enabled_extensions[glfw_extension_count + i] = extra_extensions[i];
   }
 
-  const char *validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
-  const uint32_t layer_count = 1;
-
   VkDebugUtilsMessengerCreateInfoEXT debug_msngr_create_info;
   populate_debug_msngr_create_info(&debug_msngr_create_info);
 
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkInstanceCreateInfo.html
   VkInstanceCreateInfo instance_create_info;
   instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+#ifdef TUKE_DISABLE_VULKAN_VALIDATION
+  instance_create_info.pNext = NULL;
+#else
   instance_create_info.pNext = &debug_msngr_create_info;
+#endif
   instance_create_info.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
   instance_create_info.pApplicationInfo = &application_info;
   instance_create_info.enabledLayerCount = layer_count;
@@ -843,11 +858,15 @@ VkPipelineCache create_pipeline_cache(VkDevice device) {
   return pipeline_cache;
 }
 
-VulkanContext create_vulkan_context() {
+VulkanContext create_vulkan_context(const char *title) {
   VulkanContext context;
-  context.window = new_window(true);
-  context.instance = create_instance();
+  context.window = new_window(true /* is_vulkan*/, title);
+  context.instance = create_instance(title);
+#ifdef TUKE_DISABLE_VULKAN_VALIDATION
+  context.debug_messenger = VK_NULL_HANDLE;
+#else
   context.debug_messenger = create_debug_messenger(context.instance);
+#endif
   context.surface = create_surface(context.instance, context.window);
   context.physical_device = pick_physical_device(
       context.instance, &context.queue_family_indices, context.surface);
