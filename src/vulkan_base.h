@@ -80,6 +80,7 @@ struct VulkanContext {
 
   FrameSyncObjects frame_sync_objects[MAX_FRAMES_IN_FLIGHT];
   uint32_t current_frame;
+  uint8_t current_frame_index;
 
   VkCommandBuffer graphics_command_buffers[NUM_SWAPCHAIN_IMAGES];
   VkCommandBuffer compute_command_buffers[NUM_SWAPCHAIN_IMAGES];

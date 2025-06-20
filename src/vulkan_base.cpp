@@ -1306,20 +1306,20 @@ VkPipeline create_graphics_pipeline(
 }
 
 bool begin_frame(VulkanContext *context) {
-  vkWaitForFences(
-      context->device, 1,
-      &context->frame_sync_objects[context->current_frame].in_flight_fence,
-      VK_TRUE, UINT64_MAX);
+  vkWaitForFences(context->device, 1,
+                  &context->frame_sync_objects[context->current_frame_index]
+                       .in_flight_fence,
+                  VK_TRUE, UINT64_MAX);
 
-  vkResetFences(
-      context->device, 1,
-      &context->frame_sync_objects[context->current_frame].in_flight_fence);
+  vkResetFences(context->device, 1,
+                &context->frame_sync_objects[context->current_frame_index]
+                     .in_flight_fence);
 
-  VkResult result =
-      vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX,
-                            context->frame_sync_objects[context->current_frame]
-                                .image_available_semaphore,
-                            VK_NULL_HANDLE, &context->image_index);
+  VkResult result = vkAcquireNextImageKHR(
+      context->device, context->swapchain, UINT64_MAX,
+      context->frame_sync_objects[context->current_frame_index]
+          .image_available_semaphore,
+      VK_NULL_HANDLE, &context->image_index);
 
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
     recreate_swapchain(context);
@@ -1376,7 +1376,7 @@ void submit_and_present(VulkanContext *context,
   submit_info.pNext = NULL;
   submit_info.waitSemaphoreCount = 1;
   submit_info.pWaitSemaphores =
-      &context->frame_sync_objects[context->current_frame]
+      &context->frame_sync_objects[context->current_frame_index]
            .image_available_semaphore;
   VkPipelineStageFlags wait_stage =
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -1385,13 +1385,13 @@ void submit_and_present(VulkanContext *context,
   submit_info.pCommandBuffers = &command_buffer;
   submit_info.signalSemaphoreCount = 1;
   submit_info.pSignalSemaphores =
-      &context->frame_sync_objects[context->current_frame]
+      &context->frame_sync_objects[context->current_frame_index]
            .render_finished_semaphore;
 
   VK_CHECK(
-      vkQueueSubmit(
-          context->graphics_queue, 1, &submit_info,
-          context->frame_sync_objects[context->current_frame].in_flight_fence),
+      vkQueueSubmit(context->graphics_queue, 1, &submit_info,
+                    context->frame_sync_objects[context->current_frame_index]
+                        .in_flight_fence),
       "sumbit_and_present: Failed to vkQueueSubmit");
 
   VkPresentInfoKHR present_info;
@@ -1399,7 +1399,7 @@ void submit_and_present(VulkanContext *context,
   present_info.pNext = NULL;
   present_info.waitSemaphoreCount = 1;
   present_info.pWaitSemaphores =
-      &context->frame_sync_objects[context->current_frame]
+      &context->frame_sync_objects[context->current_frame_index]
            .render_finished_semaphore;
   present_info.swapchainCount = 1;
   present_info.pSwapchains = &context->swapchain;
