@@ -6,6 +6,7 @@
 #include "vulkan/vulkan_beta.h"
 #include "vulkan/vulkan_core.h"
 #include "window.h"
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -1141,28 +1142,9 @@ ViewportState create_viewport_state(VkExtent2D swapchain_extent,
   return viewport_state;
 }
 
-// TODO Validate shader stages if you want strict pipeline guarantees
-// TODO Print/log pipeline cache usage for debugging
-VkPipeline create_graphics_pipeline(
-    VkDevice device, VkPipelineShaderStageCreateInfo *stages,
-    size_t stage_count,
-    VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info,
-    VkPrimitiveTopology topology, VkExtent2D swapchain_extent,
-    VkPolygonMode polygon_mode, VkSampleCountFlagBits sample_count_flag,
-    VkBool32 blending_enabled, VkRenderPass render_pass,
-    VkPipelineLayout pipeline_layout, VkPipelineCache pipeline_cache,
-    VkCullModeFlags cull_mode) {
-  VkGraphicsPipelineCreateInfo graphics_pipeline_create_info;
-  graphics_pipeline_create_info.sType =
-      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  graphics_pipeline_create_info.pNext = 0;
-  graphics_pipeline_create_info.flags = 0;
-  graphics_pipeline_create_info.stageCount = stage_count;
-  graphics_pipeline_create_info.pStages = stages;
-
-  graphics_pipeline_create_info.pVertexInputState =
-      vertex_input_state_create_info;
-
+VkPipelineInputAssemblyStateCreateInfo
+create_pipeline_input_assembly_state(VkPrimitiveTopology topology,
+                                     VkBool32 primitive_restart_enabled) {
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkPipelineInputAssemblyStateCreateInfo.html
   VkPipelineInputAssemblyStateCreateInfo input_assembly_state_create_info;
   input_assembly_state_create_info.sType =
@@ -1170,29 +1152,14 @@ VkPipeline create_graphics_pipeline(
   input_assembly_state_create_info.pNext = NULL;
   input_assembly_state_create_info.flags = 0;
   input_assembly_state_create_info.topology = topology;
-  input_assembly_state_create_info.primitiveRestartEnable = VK_FALSE;
-  graphics_pipeline_create_info.pInputAssemblyState =
-      &input_assembly_state_create_info;
+  input_assembly_state_create_info.primitiveRestartEnable =
+      primitive_restart_enabled;
+  return input_assembly_state_create_info;
+}
 
-  graphics_pipeline_create_info.pTessellationState = NULL;
-
-  VkOffset2D offset;
-  offset.x = 0.0f;
-  offset.y = 0.0f;
-  ViewportState viewport_state =
-      create_viewport_state(swapchain_extent, offset);
-
-  VkPipelineViewportStateCreateInfo viewport_state_create_info;
-  viewport_state_create_info.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  viewport_state_create_info.pNext = NULL;
-  viewport_state_create_info.flags = 0;
-  viewport_state_create_info.viewportCount = 1;
-  viewport_state_create_info.pViewports = &viewport_state.viewport;
-  viewport_state_create_info.scissorCount = 1;
-  viewport_state_create_info.pScissors = &viewport_state.scissor;
-  graphics_pipeline_create_info.pViewportState = &viewport_state_create_info;
-
+VkPipelineRasterizationStateCreateInfo
+create_rasterization_state(VkPolygonMode polygon_mode,
+                           VkCullModeFlags cull_mode, VkFrontFace front_face) {
   VkPipelineRasterizationStateCreateInfo rasterization_state_create_info;
   rasterization_state_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -1203,16 +1170,19 @@ VkPipeline create_graphics_pipeline(
   rasterization_state_create_info.rasterizerDiscardEnable = VK_FALSE;
   rasterization_state_create_info.polygonMode = polygon_mode;
   rasterization_state_create_info.cullMode = cull_mode;
-  rasterization_state_create_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  rasterization_state_create_info.frontFace = front_face;
   // TODO understand how this is used for shadow mapping
   rasterization_state_create_info.depthBiasEnable = VK_FALSE;
   rasterization_state_create_info.depthBiasConstantFactor = 0.0f;
   rasterization_state_create_info.depthBiasClamp = 0.0f;
   rasterization_state_create_info.depthBiasSlopeFactor = 0.0f;
   rasterization_state_create_info.lineWidth = 1.0f;
-  graphics_pipeline_create_info.pRasterizationState =
-      &rasterization_state_create_info;
 
+  return rasterization_state_create_info;
+}
+
+VkPipelineMultisampleStateCreateInfo
+create_multisample_state(VkSampleCountFlagBits sample_count_flag) {
   VkPipelineMultisampleStateCreateInfo multisample_state_create_info;
   multisample_state_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -1226,9 +1196,10 @@ VkPipeline create_graphics_pipeline(
   // TODO understand alpha to coverage
   multisample_state_create_info.alphaToCoverageEnable = VK_FALSE;
   multisample_state_create_info.alphaToOneEnable = VK_FALSE;
-  graphics_pipeline_create_info.pMultisampleState =
-      &multisample_state_create_info;
+  return multisample_state_create_info;
+}
 
+VkPipelineDepthStencilStateCreateInfo create_depth_stencil_state() {
   VkPipelineDepthStencilStateCreateInfo depth_stencil_state_create_info;
   depth_stencil_state_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -1245,24 +1216,48 @@ VkPipeline create_graphics_pipeline(
   depth_stencil_state_create_info.back = empty_stencil_op_state;
   depth_stencil_state_create_info.minDepthBounds = 0.0f;
   depth_stencil_state_create_info.maxDepthBounds = 1.0f;
-  graphics_pipeline_create_info.pDepthStencilState =
-      &depth_stencil_state_create_info;
+  return depth_stencil_state_create_info;
+}
 
-  const uint32_t num_color_blend_attachments = 1;
-  VkPipelineColorBlendAttachmentState
-      color_blend_attachment_states[num_color_blend_attachments];
-  // TODO Add a blending mode argument or struct
-  color_blend_attachment_states[0].blendEnable = blending_enabled;
-  color_blend_attachment_states[0].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-  color_blend_attachment_states[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-  color_blend_attachment_states[0].colorBlendOp = VK_BLEND_OP_ADD;
-  color_blend_attachment_states[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-  color_blend_attachment_states[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-  color_blend_attachment_states[0].alphaBlendOp = VK_BLEND_OP_ADD;
-  color_blend_attachment_states[0].colorWriteMask =
+VkPipelineColorBlendAttachmentState
+create_color_blend_attachment_state(BlendMode blend_mode) {
+  VkPipelineColorBlendAttachmentState color_blend_attachment_state;
+  VkBool32 blending_enabled =
+      (blend_mode == BLEND_MODE_ALPHA) ? VK_TRUE : VK_FALSE;
+  color_blend_attachment_state.blendEnable = blending_enabled;
+  color_blend_attachment_state.colorWriteMask =
       VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
       VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
+  switch (blend_mode) {
+
+  case BLEND_MODE_ALPHA:
+    color_blend_attachment_state.srcColorBlendFactor =
+        VK_BLEND_FACTOR_SRC_ALPHA;
+    color_blend_attachment_state.dstColorBlendFactor =
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    color_blend_attachment_state.colorBlendOp = VK_BLEND_OP_ADD;
+    color_blend_attachment_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    color_blend_attachment_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    color_blend_attachment_state.alphaBlendOp = VK_BLEND_OP_ADD;
+    return color_blend_attachment_state;
+
+  case BLEND_MODE_OPAQUE:
+    color_blend_attachment_state.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    color_blend_attachment_state.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    color_blend_attachment_state.colorBlendOp = VK_BLEND_OP_ADD;
+    color_blend_attachment_state.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    color_blend_attachment_state.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    color_blend_attachment_state.alphaBlendOp = VK_BLEND_OP_ADD;
+    return color_blend_attachment_state;
+  default:
+    assert(false && "create_blend_mode_state got invalid blend_mode");
+  }
+}
+
+VkPipelineColorBlendStateCreateInfo create_color_blend_state(
+    uint32_t num_color_blend_attachments,
+    const VkPipelineColorBlendAttachmentState *color_blend_attachment_states) {
   VkPipelineColorBlendStateCreateInfo color_blend_state_create_info;
   color_blend_state_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -1275,6 +1270,69 @@ VkPipeline create_graphics_pipeline(
   float blend_constants[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   memcpy(color_blend_state_create_info.blendConstants, blend_constants,
          sizeof(blend_constants));
+  return color_blend_state_create_info;
+}
+
+// TODO Validate shader stages if you want strict pipeline guarantees
+// TODO Print/log pipeline cache usage for debugging
+VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
+                                    VkPipelineCache pipeline_cache) {
+  VkGraphicsPipelineCreateInfo graphics_pipeline_create_info;
+  graphics_pipeline_create_info.sType =
+      VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  graphics_pipeline_create_info.pNext = 0;
+  graphics_pipeline_create_info.flags = 0;
+  graphics_pipeline_create_info.stageCount = config->stage_count;
+  graphics_pipeline_create_info.pStages = config->stages;
+
+  graphics_pipeline_create_info.pVertexInputState =
+      config->vertex_input_state_create_info;
+
+  VkPipelineInputAssemblyStateCreateInfo input_assembly_state =
+      create_pipeline_input_assembly_state(config->topology,
+                                           config->primitive_restart_enabled);
+  graphics_pipeline_create_info.pInputAssemblyState = &input_assembly_state;
+
+  // TOOD?
+  graphics_pipeline_create_info.pTessellationState = NULL;
+
+  VkOffset2D offset;
+  offset.x = 0.0f;
+  offset.y = 0.0f;
+  ViewportState viewport_state =
+      create_viewport_state(config->swapchain_extent, offset);
+
+  VkPipelineViewportStateCreateInfo viewport_state_create_info;
+  viewport_state_create_info.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  viewport_state_create_info.pNext = NULL;
+  viewport_state_create_info.flags = 0;
+  viewport_state_create_info.viewportCount = 1;
+  viewport_state_create_info.pViewports = &viewport_state.viewport;
+  viewport_state_create_info.scissorCount = 1;
+  viewport_state_create_info.pScissors = &viewport_state.scissor;
+  graphics_pipeline_create_info.pViewportState = &viewport_state_create_info;
+
+  VkPipelineRasterizationStateCreateInfo rasterization_state =
+      create_rasterization_state(config->polygon_mode, config->cull_mode,
+                                 config->front_face);
+  graphics_pipeline_create_info.pRasterizationState = &rasterization_state;
+
+  VkPipelineMultisampleStateCreateInfo multisample_state_create_info =
+      create_multisample_state(config->sample_count_flag);
+  graphics_pipeline_create_info.pMultisampleState =
+      &multisample_state_create_info;
+
+  VkPipelineDepthStencilStateCreateInfo depth_stencil_state_create_info =
+      create_depth_stencil_state();
+  graphics_pipeline_create_info.pDepthStencilState =
+      &depth_stencil_state_create_info;
+
+  const uint32_t num_color_blend_attachments = 1;
+  VkPipelineColorBlendAttachmentState color_blend_state =
+      create_color_blend_attachment_state(config->blend_mode);
+  VkPipelineColorBlendStateCreateInfo color_blend_state_create_info =
+      create_color_blend_state(num_color_blend_attachments, &color_blend_state);
   graphics_pipeline_create_info.pColorBlendState =
       &color_blend_state_create_info;
 
@@ -1291,8 +1349,8 @@ VkPipeline create_graphics_pipeline(
   dynamic_state_create_info.pDynamicStates = dynamic_states;
   graphics_pipeline_create_info.pDynamicState = &dynamic_state_create_info;
 
-  graphics_pipeline_create_info.layout = pipeline_layout;
-  graphics_pipeline_create_info.renderPass = render_pass;
+  graphics_pipeline_create_info.layout = config->pipeline_layout;
+  graphics_pipeline_create_info.renderPass = config->render_pass;
   graphics_pipeline_create_info.subpass = 0;
   graphics_pipeline_create_info.basePipelineHandle = VK_NULL_HANDLE;
   graphics_pipeline_create_info.basePipelineIndex = -1;

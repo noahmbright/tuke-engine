@@ -255,12 +255,6 @@ int main() {
   vertex_input_state_create_info.pVertexAttributeDescriptions =
       attribute_descriptions;
 
-  VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  VkPolygonMode polygon_mode = VK_POLYGON_MODE_FILL;
-  VkSampleCountFlagBits sample_count_flag = VK_SAMPLE_COUNT_1_BIT;
-  VkBool32 blending_enabled = VK_FALSE;
-  VkCullModeFlagBits cull_mode = VK_CULL_MODE_NONE;
-
   // TODO this is default
   VkPipelineLayoutCreateInfo pipeline_layout_create_info;
   pipeline_layout_create_info.sType =
@@ -295,12 +289,23 @@ int main() {
   shader_stage_create_infos[1].pName = "main";
   shader_stage_create_infos[1].pSpecializationInfo = NULL;
 
+  PipelineConfig pipeline_config;
+  pipeline_config.stages = shader_stage_create_infos;
+  pipeline_config.stage_count = 2;
+  pipeline_config.vertex_input_state_create_info =
+      &vertex_input_state_create_info;
+  pipeline_config.render_pass = context.render_pass;
+  pipeline_config.pipeline_layout = pipeline_layout;
+  pipeline_config.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipeline_config.primitive_restart_enabled = VK_FALSE;
+  pipeline_config.polygon_mode = VK_POLYGON_MODE_FILL;
+  pipeline_config.cull_mode = VK_CULL_MODE_NONE;
+  pipeline_config.front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  pipeline_config.sample_count_flag = VK_SAMPLE_COUNT_1_BIT;
+  pipeline_config.blend_mode = BLEND_MODE_ALPHA;
+
   VkPipeline graphics_pipeline = create_graphics_pipeline(
-      context.device, shader_stage_create_infos,
-      /*stage_count*/ 2, &vertex_input_state_create_info, topology,
-      context.swapchain_extent, polygon_mode, sample_count_flag,
-      blending_enabled, context.render_pass, pipeline_layout,
-      context.pipeline_cache, cull_mode);
+      context.device, &pipeline_config, context.pipeline_cache);
 
   VkDeviceSize buffer_offsets[] = {0, positions_size};
   VkBuffer buffers[] = {vertex_buffer.buffer, vertex_buffer.buffer};
@@ -308,7 +313,7 @@ int main() {
   while (!glfwWindowShouldClose(context.window)) {
     glfwPollEvents();
     float t = glfwGetTime();
-    float x = sinf(t);
+    float x = fabs(sinf(t));
     render_triangle(&context, x, uniform_buffer, graphics_pipeline,
                     buffer_offsets, buffers, pipeline_layout, descriptor_set);
     context.current_frame++;

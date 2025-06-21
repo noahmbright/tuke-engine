@@ -115,6 +115,34 @@ struct ViewportState {
   VkRect2D scissor;
 };
 
+enum BlendMode { BLEND_MODE_OPAQUE, BLEND_MODE_ALPHA };
+
+struct PipelineConfig {
+  // pipeline create info
+  VkPipelineShaderStageCreateInfo *stages;
+  size_t stage_count;
+  VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info;
+  VkRenderPass render_pass;
+  VkPipelineLayout pipeline_layout;
+
+  // input assembly
+  VkPrimitiveTopology topology;
+  VkBool32 primitive_restart_enabled;
+
+  // rasterization_state
+  VkPolygonMode polygon_mode;
+  VkCullModeFlags cull_mode;
+  VkFrontFace front_face;
+
+  // multisample state
+  VkSampleCountFlagBits sample_count_flag;
+
+  // color blend state
+  BlendMode blend_mode;
+
+  VkExtent2D swapchain_extent;
+};
+
 VulkanContext create_vulkan_context(const char *title);
 void destroy_vulkan_context(VulkanContext *);
 VulkanBuffer create_buffer(VulkanContext *context, VkBufferUsageFlags usage,
@@ -129,15 +157,8 @@ void end_single_use_command_buffer(VulkanContext *context,
 VkShaderModule create_shader_module(VkDevice device, const uint32_t *code,
                                     size_t code_size);
 
-VkPipeline create_graphics_pipeline(
-    VkDevice device, VkPipelineShaderStageCreateInfo *stages,
-    size_t stage_count,
-    VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info,
-    VkPrimitiveTopology topology, VkExtent2D swapchain_extent,
-    VkPolygonMode polygon_mode, VkSampleCountFlagBits sample_count_flag,
-    VkBool32 blending_enabled, VkRenderPass render_pass,
-    VkPipelineLayout pipeline_layout, VkPipelineCache pipeline_cache,
-    VkCullModeFlags cull_mode);
+VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
+                                    VkPipelineCache pipeline_cache);
 
 bool begin_frame(VulkanContext *context);
 VkCommandBuffer begin_command_buffer(VulkanContext *context);
