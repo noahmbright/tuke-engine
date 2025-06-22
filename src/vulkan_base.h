@@ -167,3 +167,34 @@ ViewportState create_viewport_state(VkExtent2D swapchain_extent,
 void begin_render_pass(VulkanContext *context, VkCommandBuffer command_buffer,
                        VkClearValue clear_value, VkOffset2D offset);
 void submit_and_present(VulkanContext *context, VkCommandBuffer command_buffer);
+
+VkPipelineVertexInputStateCreateInfo create_vertex_input_state(
+    uint32_t binding_description_count,
+    const VkVertexInputBindingDescription *binding_descriptions,
+    uint32_t attribute_description_count,
+    const VkVertexInputAttributeDescription *attribute_descriptions);
+
+VkPipelineLayout
+create_pipeline_layout(VkDevice device,
+                       const VkDescriptorSetLayout *descriptor_set_layout,
+                       uint32_t set_layout_count);
+VulkanBuffer create_uniform_buffer(VulkanContext *context, uint32_t size);
+
+VkDescriptorPool create_descriptor_pool(VkDevice device,
+                                        const VkDescriptorPoolSize *pool_sizes,
+                                        uint32_t pool_size_count,
+                                        uint32_t max_sets);
+
+VkDescriptorSet
+create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool,
+                      VkDescriptorSetLayout descriptor_set_layout);
+
+VkDescriptorSetLayout
+create_descriptor_set_layout(VkDevice device,
+                             const VkDescriptorSetLayoutBinding *bindings,
+                             uint32_t binding_count);
+
+void update_uniform_descriptor_sets(VkDevice device, VkBuffer buffer,
+                                    VkDeviceSize offset, VkDeviceSize range,
+                                    VkDescriptorSet descriptor_set,
+                                    uint32_t binding);

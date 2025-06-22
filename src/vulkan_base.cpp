@@ -1468,3 +1468,142 @@ void submit_and_present(VulkanContext *context,
   VK_CHECK(vkQueuePresentKHR(context->graphics_queue, &present_info),
            "sumbit_and_present: Failed to vkQueuePresentKHR");
 }
+
+VkPipelineVertexInputStateCreateInfo create_vertex_input_state(
+    uint32_t binding_description_count,
+    const VkVertexInputBindingDescription *binding_descriptions,
+    uint32_t attribute_description_count,
+    const VkVertexInputAttributeDescription *attribute_descriptions) {
+  VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info;
+  vertex_input_state_create_info.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vertex_input_state_create_info.pNext = NULL;
+  vertex_input_state_create_info.flags = 0;
+  vertex_input_state_create_info.vertexBindingDescriptionCount =
+      binding_description_count;
+  vertex_input_state_create_info.pVertexBindingDescriptions =
+      binding_descriptions;
+  vertex_input_state_create_info.vertexAttributeDescriptionCount =
+      attribute_description_count;
+  vertex_input_state_create_info.pVertexAttributeDescriptions =
+      attribute_descriptions;
+  return vertex_input_state_create_info;
+}
+
+VkPipelineLayout
+create_pipeline_layout(VkDevice device,
+                       const VkDescriptorSetLayout *descriptor_set_layout,
+                       uint32_t set_layout_count) {
+  VkPipelineLayoutCreateInfo pipeline_layout_create_info;
+  pipeline_layout_create_info.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipeline_layout_create_info.pNext = NULL;
+  pipeline_layout_create_info.flags = 0;
+  pipeline_layout_create_info.setLayoutCount = set_layout_count;
+  pipeline_layout_create_info.pSetLayouts = descriptor_set_layout;
+  pipeline_layout_create_info.pushConstantRangeCount = 0;
+  pipeline_layout_create_info.pPushConstantRanges = NULL;
+
+  VkPipelineLayout pipeline_layout;
+  VK_CHECK(vkCreatePipelineLayout(device, &pipeline_layout_create_info, NULL,
+                                  &pipeline_layout),
+           "create_graphics_pipeline: Failed to vkCreatePipelineLayout");
+  return pipeline_layout;
+}
+
+// TODO expand for dynamic uniform buffers, or add a second helper
+VulkanBuffer create_uniform_buffer(VulkanContext *context, uint32_t size) {
+  VkBufferUsageFlags uniform_buffer_usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+  VkMemoryPropertyFlags uniform_buffer_memory_properties =
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+  return create_buffer(context, uniform_buffer_usage, size,
+                       uniform_buffer_memory_properties);
+}
+
+struct FloatUniformBuffer {
+  float x;
+};
+
+// TODO VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
+VkDescriptorPool create_descriptor_pool(VkDevice device,
+                                        const VkDescriptorPoolSize *pool_sizes,
+                                        uint32_t pool_size_count,
+                                        uint32_t max_sets) {
+  VkDescriptorPoolCreateInfo descriptor_pool_create_info;
+  descriptor_pool_create_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  descriptor_pool_create_info.pNext = NULL;
+  descriptor_pool_create_info.flags = 0;
+  descriptor_pool_create_info.maxSets = max_sets;
+  descriptor_pool_create_info.poolSizeCount = pool_size_count;
+  descriptor_pool_create_info.pPoolSizes = pool_sizes;
+
+  VkDescriptorPool descriptor_pool;
+  VK_CHECK(vkCreateDescriptorPool(device, &descriptor_pool_create_info, NULL,
+                                  &descriptor_pool),
+           "create_descriptor_pool: Failed to vkCreateDescriptorPool");
+  return descriptor_pool;
+}
+
+VkDescriptorSet
+create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool,
+                      VkDescriptorSetLayout descriptor_set_layout) {
+  VkDescriptorSetAllocateInfo descriptor_set_allocate_info;
+  descriptor_set_allocate_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  descriptor_set_allocate_info.pNext = NULL;
+  descriptor_set_allocate_info.descriptorPool = descriptor_pool;
+  descriptor_set_allocate_info.descriptorSetCount = 1;
+  descriptor_set_allocate_info.pSetLayouts = &descriptor_set_layout;
+
+  VkDescriptorSet descriptor_set;
+  VK_CHECK(vkAllocateDescriptorSets(device, &descriptor_set_allocate_info,
+                                    &descriptor_set),
+           "create_descriptor_set: failed to vkAllocateDescriptorSets");
+  return descriptor_set;
+}
+
+// TODO VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR
+VkDescriptorSetLayout
+create_descriptor_set_layout(VkDevice device,
+                             const VkDescriptorSetLayoutBinding *bindings,
+                             uint32_t binding_count) {
+  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info;
+  descriptor_set_layout_create_info.sType =
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  descriptor_set_layout_create_info.pNext = NULL;
+  descriptor_set_layout_create_info.flags = 0;
+  descriptor_set_layout_create_info.bindingCount = binding_count;
+  descriptor_set_layout_create_info.pBindings = bindings;
+
+  VkDescriptorSetLayout descriptor_set_layout;
+  VK_CHECK(
+      vkCreateDescriptorSetLayout(device, &descriptor_set_layout_create_info,
+                                  NULL, &descriptor_set_layout),
+      "create_descriptor_set_layout: failed to vkCreateDescriptorSetLayout");
+  return descriptor_set_layout;
+}
+
+void update_uniform_descriptor_sets(VkDevice device, VkBuffer buffer,
+                                    VkDeviceSize offset, VkDeviceSize range,
+                                    VkDescriptorSet descriptor_set,
+                                    uint32_t binding) {
+  VkDescriptorBufferInfo descriptor_buffer_info;
+  descriptor_buffer_info.buffer = buffer;
+  descriptor_buffer_info.offset = offset;
+  descriptor_buffer_info.range = range;
+
+  VkWriteDescriptorSet write_descriptor_set;
+  write_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write_descriptor_set.pNext = NULL;
+  write_descriptor_set.dstSet = descriptor_set;
+  write_descriptor_set.dstBinding = binding;
+  write_descriptor_set.dstArrayElement = 0;
+  write_descriptor_set.descriptorCount = 1;
+  write_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  write_descriptor_set.pImageInfo = NULL;
+  write_descriptor_set.pBufferInfo = &descriptor_buffer_info;
+  write_descriptor_set.pTexelBufferView = NULL;
+  vkUpdateDescriptorSets(device, 1, &write_descriptor_set, 0, NULL);
+}
