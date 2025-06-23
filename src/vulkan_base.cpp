@@ -17,8 +17,6 @@
 // If you're multithreading submissions, use a mutex or lockless ring buffer per
 // queue.
 
-#define MAX_PHYSICAL_DEVICES (16)
-
 void destroy_swapchain(VulkanContext *context) {
   // framebuffers
   for (uint32_t i = 0; i < context->swapchain_storage.image_count; ++i) {
@@ -963,8 +961,9 @@ uint32_t find_memory_type(VkPhysicalDevice physical_device,
   exit(1);
 }
 
-VulkanBuffer create_buffer(VulkanContext *context, VkBufferUsageFlags usage,
-                           uint32_t size, VkMemoryPropertyFlags properties) {
+VulkanBuffer create_buffer_explicit(VulkanContext *context,
+                                    VkBufferUsageFlags usage, VkDeviceSize size,
+                                    VkMemoryPropertyFlags properties) {
   VulkanBuffer vulkan_buffer;
 
   VkBufferCreateInfo buffer_create_info;
@@ -1009,6 +1008,52 @@ VulkanBuffer create_buffer(VulkanContext *context, VkBufferUsageFlags usage,
            "create_buffer: Failed to vkBindBufferMemory");
 
   return vulkan_buffer;
+}
+
+VulkanBuffer create_buffer(VulkanContext *context, BufferType buffer_type,
+                           VkDeviceSize size) {
+  switch (buffer_type) {
+  case BUFFER_TYPE_VERTEX: {
+    VkBufferUsageFlags vertex_buffer_usage =
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    VkMemoryPropertyFlags vertex_buffer_memory_properties =
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    return create_buffer_explicit(context, vertex_buffer_usage, size,
+                                  vertex_buffer_memory_properties);
+  }
+
+  case BUFFER_TYPE_INDEX: {
+    VkBufferUsageFlags index_buffer_usage =
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    VkMemoryPropertyFlags index_buffer_memory_properties =
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    return create_buffer_explicit(context, index_buffer_usage, size,
+                                  index_buffer_memory_properties);
+  }
+
+  case BUFFER_TYPE_STAGING: {
+    VkBufferUsageFlags staging_buffer_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    VkMemoryPropertyFlags staging_buffer_memory_properties =
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    return create_buffer_explicit(context, staging_buffer_usage, size,
+                                  staging_buffer_memory_properties);
+  }
+
+    // TODO expand for dynamic uniform buffers, or add a second helper
+  case BUFFER_TYPE_UNIFORM: {
+    VkBufferUsageFlags uniform_buffer_usage =
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    VkMemoryPropertyFlags uniform_buffer_memory_properties =
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    return create_buffer_explicit(context, uniform_buffer_usage, size,
+                                  uniform_buffer_memory_properties);
+  }
+
+  default:
+    assert(false && "create_buffer: got an invalid buffer_type");
+  }
 }
 
 void write_to_vulkan_buffer(VulkanContext *context, void *src_data,
@@ -1273,17 +1318,41 @@ VkPipelineColorBlendStateCreateInfo create_color_blend_state(
   return color_blend_state_create_info;
 }
 
+VkPipelineShaderStageCreateInfo
+create_shader_stage_info(VkShaderModule module, VkShaderStageFlagBits stage,
+                         const char *entry_point) {
+  VkPipelineShaderStageCreateInfo shader_stage_create_info;
+  shader_stage_create_info.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  shader_stage_create_info.pNext = NULL;
+  shader_stage_create_info.flags = 0;
+  shader_stage_create_info.stage = stage;
+  shader_stage_create_info.module = module;
+  shader_stage_create_info.pName = entry_point;
+  shader_stage_create_info.pSpecializationInfo = NULL;
+  return shader_stage_create_info;
+}
+
 // TODO Validate shader stages if you want strict pipeline guarantees
 // TODO Print/log pipeline cache usage for debugging
 VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
                                     VkPipelineCache pipeline_cache) {
+
+  assert(config->stage_count <= MAX_SHADER_STAGE_COUNT);
+  VkPipelineShaderStageCreateInfo stages[MAX_SHADER_STAGE_COUNT];
+  for (uint32_t i = 0; i < config->stage_count; i++) {
+    stages[i] = create_shader_stage_info(config->stages[i].module,
+                                         config->stages[i].stage,
+                                         config->stages[i].entry_point);
+  }
+
   VkGraphicsPipelineCreateInfo graphics_pipeline_create_info;
   graphics_pipeline_create_info.sType =
       VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
   graphics_pipeline_create_info.pNext = 0;
   graphics_pipeline_create_info.flags = 0;
   graphics_pipeline_create_info.stageCount = config->stage_count;
-  graphics_pipeline_create_info.pStages = config->stages;
+  graphics_pipeline_create_info.pStages = stages;
 
   graphics_pipeline_create_info.pVertexInputState =
       config->vertex_input_state_create_info;
@@ -1509,16 +1578,6 @@ create_pipeline_layout(VkDevice device,
                                   &pipeline_layout),
            "create_graphics_pipeline: Failed to vkCreatePipelineLayout");
   return pipeline_layout;
-}
-
-// TODO expand for dynamic uniform buffers, or add a second helper
-VulkanBuffer create_uniform_buffer(VulkanContext *context, uint32_t size) {
-  VkBufferUsageFlags uniform_buffer_usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-  VkMemoryPropertyFlags uniform_buffer_memory_properties =
-      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-  return create_buffer(context, uniform_buffer_usage, size,
-                       uniform_buffer_memory_properties);
 }
 
 struct FloatUniformBuffer {

@@ -14,6 +14,8 @@
 #define MAX_FRAMES_IN_FLIGHT (2)
 #define NUM_QUEUE_FAMILY_INDICES (3)
 #define NUM_ATTACHMENTS (1) // 0 color, TODO 1 depth
+#define MAX_SHADER_STAGE_COUNT (5)
+#define MAX_PHYSICAL_DEVICES (16)
 
 #define VK_CHECK(result, fmt)                                                  \
   do {                                                                         \
@@ -117,9 +119,15 @@ struct ViewportState {
 
 enum BlendMode { BLEND_MODE_OPAQUE, BLEND_MODE_ALPHA };
 
+struct ShaderStage {
+  VkShaderModule module;
+  VkShaderStageFlagBits stage;
+  const char *entry_point;
+};
+
 struct PipelineConfig {
   // pipeline create info
-  VkPipelineShaderStageCreateInfo *stages;
+  ShaderStage *stages;
   size_t stage_count;
   VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info;
   VkRenderPass render_pass;
@@ -143,10 +151,20 @@ struct PipelineConfig {
   VkExtent2D swapchain_extent;
 };
 
+enum BufferType {
+  BUFFER_TYPE_STAGING,
+  BUFFER_TYPE_VERTEX,
+  BUFFER_TYPE_INDEX,
+  BUFFER_TYPE_UNIFORM,
+};
+
 VulkanContext create_vulkan_context(const char *title);
 void destroy_vulkan_context(VulkanContext *);
-VulkanBuffer create_buffer(VulkanContext *context, VkBufferUsageFlags usage,
-                           uint32_t size, VkMemoryPropertyFlags properties);
+VulkanBuffer create_buffer_explicit(VulkanContext *context,
+                                    VkBufferUsageFlags usage, VkDeviceSize size,
+                                    VkMemoryPropertyFlags properties);
+VulkanBuffer create_buffer(VulkanContext *context, BufferType buffer_type,
+                           VkDeviceSize size);
 void destroy_vulkan_buffer(VulkanContext *context, VulkanBuffer buffer);
 void write_to_vulkan_buffer(VulkanContext *context, void *src_data,
                             VkDeviceSize size, VkDeviceSize offset,
@@ -178,7 +196,6 @@ VkPipelineLayout
 create_pipeline_layout(VkDevice device,
                        const VkDescriptorSetLayout *descriptor_set_layout,
                        uint32_t set_layout_count);
-VulkanBuffer create_uniform_buffer(VulkanContext *context, uint32_t size);
 
 VkDescriptorPool create_descriptor_pool(VkDevice device,
                                         const VkDescriptorPoolSize *pool_sizes,

@@ -1,5 +1,4 @@
 #include "common_shaders.h"
-#include "glm/vec3.hpp"
 #include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
 #include <cstdio>
@@ -53,34 +52,53 @@ int main() {
       0.67f, 0.67f, 0.0f, 0.0f, 0.0f, 1.0f,
   };
 
+  float unit_square_positions[] = {
+      -0.5f,  0.5f, 0.0f,
+      -0.5f, -0.5f, 0.0f,
+       0.5f, -0.5f, 0.0f,
+       0.5f,  0.5f, 0.0f,
+  };
+
+  uint16_t unit_square_indices[] = {
+      0, 1, 2, 0, 2, 3,
+  };
+
+  float quad_positions[] = {
+       0.5,  0.5,
+      -0.5, -0.5
+  };
+  // clang-format on
+
   uint32_t stride = 6 * sizeof(float);
   uint32_t triangle_size = sizeof(triangle_vertices);
   uint32_t square_size = sizeof(square_vertices);
-  uint32_t total_size = triangle_size + square_size;
-  // clang-format on
+  uint32_t unit_square_positions_size = sizeof(unit_square_positions);
+  uint32_t unit_square_indices_size = sizeof(unit_square_indices);
+  uint32_t quad_positions_size = sizeof(quad_positions);
+  uint32_t unit_square_indices_offset = triangle_size + square_size +
+                                        unit_square_positions_size +
+                                        quad_positions_size;
+  uint32_t total_size = unit_square_indices_offset + unit_square_indices_size;
 
-  VkBufferUsageFlags staging_buffer_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-  VkMemoryPropertyFlags staging_buffer_memory_properties =
-      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
   VulkanBuffer staging_buffer =
-      create_buffer(&context, staging_buffer_usage, total_size,
-                    staging_buffer_memory_properties);
+      create_buffer(&context, BUFFER_TYPE_STAGING, total_size);
+  VulkanBuffer vertex_buffer =
+      create_buffer(&context, BUFFER_TYPE_VERTEX, total_size);
+  VulkanBuffer uniform_buffer =
+      create_buffer(&context, BUFFER_TYPE_UNIFORM, sizeof(FloatUniformBuffer));
+  VulkanBuffer index_buffer =
+      create_buffer(&context, BUFFER_TYPE_INDEX, unit_square_indices_size);
+
   write_to_vulkan_buffer(&context, triangle_vertices, triangle_size, 0,
                          staging_buffer);
   write_to_vulkan_buffer(&context, square_vertices, square_size, triangle_size,
                          staging_buffer);
-
-  VkBufferUsageFlags vertex_buffer_usage =
-      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-  VkMemoryPropertyFlags vertex_buffer_memory_properties =
-      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-  VulkanBuffer vertex_buffer =
-      create_buffer(&context, vertex_buffer_usage, total_size,
-                    vertex_buffer_memory_properties);
-
-  VulkanBuffer uniform_buffer =
-      create_uniform_buffer(&context, sizeof(FloatUniformBuffer));
+  write_to_vulkan_buffer(&context, unit_square_positions,
+                         unit_square_positions_size,
+                         triangle_size + square_size, staging_buffer);
+  write_to_vulkan_buffer(&context, unit_square_indices,
+                         unit_square_indices_size, unit_square_indices_offset,
+                         staging_buffer);
 
   VkDescriptorSetLayoutBinding ubo_layout_binding;
   ubo_layout_binding.binding = 0;
@@ -102,19 +120,34 @@ int main() {
   update_uniform_descriptor_sets(context.device, uniform_buffer.buffer, 0,
                                  sizeof(FloatUniformBuffer), descriptor_set, 0);
 
-  const uint32_t num_copy_regions = 2;
-  VkBufferCopy copy_regions[num_copy_regions] = {};
+  const uint32_t num_copy_regions = 4;
+  VkBufferCopy copy_regions[num_copy_regions];
   copy_regions[0].size = triangle_size;
   copy_regions[0].dstOffset = 0;
   copy_regions[0].srcOffset = 0;
   copy_regions[1].size = square_size;
   copy_regions[1].dstOffset = triangle_size;
   copy_regions[1].srcOffset = triangle_size;
+  copy_regions[2].size = unit_square_positions_size;
+  copy_regions[2].dstOffset = triangle_size + square_size;
+  copy_regions[2].srcOffset = triangle_size + square_size;
+  copy_regions[3].size = quad_positions_size;
+  copy_regions[3].dstOffset =
+      triangle_size + square_size + unit_square_positions_size;
+  copy_regions[3].srcOffset =
+      triangle_size + square_size + unit_square_positions_size;
+
+  VkBufferCopy index_copy_region;
+  index_copy_region.dstOffset = 0;
+  index_copy_region.size = unit_square_indices_size;
+  index_copy_region.srcOffset = unit_square_indices_offset;
 
   VkCommandBuffer single_use_command_buffer =
       begin_single_use_command_buffer(&context);
   vkCmdCopyBuffer(single_use_command_buffer, staging_buffer.buffer,
                   vertex_buffer.buffer, num_copy_regions, copy_regions);
+  vkCmdCopyBuffer(single_use_command_buffer, staging_buffer.buffer,
+                  index_buffer.buffer, 1, &index_copy_region);
   end_single_use_command_buffer(&context, single_use_command_buffer);
 
   VkShaderModule vertex_shader_module = create_shader_module(
@@ -123,6 +156,21 @@ int main() {
       context.device, simple_frag_spv, simple_frag_spv_size);
   VkShaderModule square_fragment_shader_module = create_shader_module(
       context.device, square_frag_spv, square_frag_spv_size);
+
+  ShaderStage vertex_shader_stage;
+  vertex_shader_stage.module = vertex_shader_module;
+  vertex_shader_stage.entry_point = "main";
+  vertex_shader_stage.stage = VK_SHADER_STAGE_VERTEX_BIT;
+
+  ShaderStage triangle_fragment_shader_stage;
+  triangle_fragment_shader_stage.module = triangle_fragment_shader_module;
+  triangle_fragment_shader_stage.entry_point = "main";
+  triangle_fragment_shader_stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+  ShaderStage square_fragment_shader_stage;
+  square_fragment_shader_stage.module = square_fragment_shader_module;
+  square_fragment_shader_stage.entry_point = "main";
+  square_fragment_shader_stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
 
   const size_t number_binding_descriptions = 1;
   VkVertexInputBindingDescription
@@ -151,27 +199,13 @@ int main() {
   VkPipelineLayout pipeline_layout =
       create_pipeline_layout(context.device, &descriptor_set_layout, 1);
 
-  VkPipelineShaderStageCreateInfo triangle_shader_stage_create_infos[2];
-  triangle_shader_stage_create_infos[0].sType =
-      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  triangle_shader_stage_create_infos[0].pNext = NULL;
-  triangle_shader_stage_create_infos[0].flags = 0;
-  triangle_shader_stage_create_infos[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-  triangle_shader_stage_create_infos[0].module = vertex_shader_module;
-  triangle_shader_stage_create_infos[0].pName = "main";
-  triangle_shader_stage_create_infos[0].pSpecializationInfo = NULL;
-  triangle_shader_stage_create_infos[1].sType =
-      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  triangle_shader_stage_create_infos[1].pNext = NULL;
-  triangle_shader_stage_create_infos[1].flags = 0;
-  triangle_shader_stage_create_infos[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-  triangle_shader_stage_create_infos[1].module =
-      triangle_fragment_shader_module;
-  triangle_shader_stage_create_infos[1].pName = "main";
-  triangle_shader_stage_create_infos[1].pSpecializationInfo = NULL;
+  ShaderStage triangle_shader_stages[] = {vertex_shader_stage,
+                                          triangle_fragment_shader_stage};
+  ShaderStage square_shader_stages[] = {vertex_shader_stage,
+                                        square_fragment_shader_stage};
 
   PipelineConfig triangle_pipeline_config;
-  triangle_pipeline_config.stages = triangle_shader_stage_create_infos;
+  triangle_pipeline_config.stages = triangle_shader_stages;
   triangle_pipeline_config.stage_count = 2;
   triangle_pipeline_config.vertex_input_state_create_info =
       &vertex_input_state_create_info;
@@ -188,26 +222,8 @@ int main() {
   VkPipeline triangle_graphics_pipeline = create_graphics_pipeline(
       context.device, &triangle_pipeline_config, context.pipeline_cache);
 
-  VkPipelineShaderStageCreateInfo square_shader_stage_create_infos[2];
-  square_shader_stage_create_infos[0].sType =
-      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  square_shader_stage_create_infos[0].pNext = NULL;
-  square_shader_stage_create_infos[0].flags = 0;
-  square_shader_stage_create_infos[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-  square_shader_stage_create_infos[0].module = vertex_shader_module;
-  square_shader_stage_create_infos[0].pName = "main";
-  square_shader_stage_create_infos[0].pSpecializationInfo = NULL;
-  square_shader_stage_create_infos[1].sType =
-      VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  square_shader_stage_create_infos[1].pNext = NULL;
-  square_shader_stage_create_infos[1].flags = 0;
-  square_shader_stage_create_infos[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-  square_shader_stage_create_infos[1].module = square_fragment_shader_module;
-  square_shader_stage_create_infos[1].pName = "main";
-  square_shader_stage_create_infos[1].pSpecializationInfo = NULL;
-
   PipelineConfig square_pipeline_config;
-  square_pipeline_config.stages = square_shader_stage_create_infos;
+  square_pipeline_config.stages = square_shader_stages;
   square_pipeline_config.stage_count = 2;
   square_pipeline_config.vertex_input_state_create_info =
       &vertex_input_state_create_info;
@@ -277,6 +293,7 @@ int main() {
   vkDestroyShaderModule(context.device, triangle_fragment_shader_module, NULL);
   vkDestroyShaderModule(context.device, square_fragment_shader_module, NULL);
   destroy_vulkan_buffer(&context, uniform_buffer);
+  destroy_vulkan_buffer(&context, index_buffer);
   destroy_vulkan_buffer(&context, staging_buffer);
   destroy_vulkan_buffer(&context, vertex_buffer);
   destroy_vulkan_context(&context);
