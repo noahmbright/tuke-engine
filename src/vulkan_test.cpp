@@ -75,13 +75,10 @@ int main() {
   uint32_t unit_square_positions_size = sizeof(unit_square_positions);
   uint32_t unit_square_indices_size = sizeof(unit_square_indices);
   uint32_t quad_positions_size = sizeof(quad_positions);
-  uint32_t unit_square_indices_offset = triangle_size + square_size +
-                                        unit_square_positions_size +
-                                        quad_positions_size;
-  uint32_t total_size = unit_square_indices_offset + unit_square_indices_size;
+  uint32_t total_size = triangle_size + square_size +
+                        unit_square_positions_size + quad_positions_size +
+                        sizeof(unit_square_indices);
 
-  VulkanBuffer staging_buffer =
-      create_buffer(&context, BUFFER_TYPE_STAGING, total_size);
   VulkanBuffer vertex_buffer =
       create_buffer(&context, BUFFER_TYPE_VERTEX, total_size);
   VulkanBuffer uniform_buffer =
@@ -89,16 +86,20 @@ int main() {
   VulkanBuffer index_buffer =
       create_buffer(&context, BUFFER_TYPE_INDEX, unit_square_indices_size);
 
-  write_to_vulkan_buffer(&context, triangle_vertices, triangle_size, 0,
-                         staging_buffer);
-  write_to_vulkan_buffer(&context, square_vertices, square_size, triangle_size,
-                         staging_buffer);
-  write_to_vulkan_buffer(&context, unit_square_positions,
-                         unit_square_positions_size,
-                         triangle_size + square_size, staging_buffer);
-  write_to_vulkan_buffer(&context, unit_square_indices,
-                         unit_square_indices_size, unit_square_indices_offset,
-                         staging_buffer);
+  StagingArena staging_arena = create_staging_arena(&context, total_size);
+  uint32_t triangle_offset = STAGE_ARRAY(
+      &context, &staging_arena, triangle_vertices, vertex_buffer.buffer);
+  uint32_t square_offset = STAGE_ARRAY(&context, &staging_arena,
+                                       square_vertices, vertex_buffer.buffer);
+  uint32_t unit_square_position_offset = STAGE_ARRAY(
+      &context, &staging_arena, unit_square_positions, vertex_buffer.buffer);
+  uint32_t unit_square_indices_offset = STAGE_ARRAY(
+      &context, &staging_arena, unit_square_indices, vertex_buffer.buffer);
+  flush_staging_arena(&context, &staging_arena);
+  (void)triangle_offset;
+  (void)square_offset;
+  (void)unit_square_position_offset;
+  (void)unit_square_indices_offset;
 
   VkDescriptorSetLayoutBinding ubo_layout_binding;
   ubo_layout_binding.binding = 0;
@@ -119,36 +120,6 @@ int main() {
       context.device, descriptor_pool, descriptor_set_layout);
   update_uniform_descriptor_sets(context.device, uniform_buffer.buffer, 0,
                                  sizeof(FloatUniformBuffer), descriptor_set, 0);
-
-  const uint32_t num_copy_regions = 4;
-  VkBufferCopy copy_regions[num_copy_regions];
-  copy_regions[0].size = triangle_size;
-  copy_regions[0].dstOffset = 0;
-  copy_regions[0].srcOffset = 0;
-  copy_regions[1].size = square_size;
-  copy_regions[1].dstOffset = triangle_size;
-  copy_regions[1].srcOffset = triangle_size;
-  copy_regions[2].size = unit_square_positions_size;
-  copy_regions[2].dstOffset = triangle_size + square_size;
-  copy_regions[2].srcOffset = triangle_size + square_size;
-  copy_regions[3].size = quad_positions_size;
-  copy_regions[3].dstOffset =
-      triangle_size + square_size + unit_square_positions_size;
-  copy_regions[3].srcOffset =
-      triangle_size + square_size + unit_square_positions_size;
-
-  VkBufferCopy index_copy_region;
-  index_copy_region.dstOffset = 0;
-  index_copy_region.size = unit_square_indices_size;
-  index_copy_region.srcOffset = unit_square_indices_offset;
-
-  VkCommandBuffer single_use_command_buffer =
-      begin_single_use_command_buffer(&context);
-  vkCmdCopyBuffer(single_use_command_buffer, staging_buffer.buffer,
-                  vertex_buffer.buffer, num_copy_regions, copy_regions);
-  vkCmdCopyBuffer(single_use_command_buffer, staging_buffer.buffer,
-                  index_buffer.buffer, 1, &index_copy_region);
-  end_single_use_command_buffer(&context, single_use_command_buffer);
 
   VkShaderModule vertex_shader_module = create_shader_module(
       context.device, simple_vert_spv, simple_vert_spv_size);
@@ -294,7 +265,7 @@ int main() {
   vkDestroyShaderModule(context.device, square_fragment_shader_module, NULL);
   destroy_vulkan_buffer(&context, uniform_buffer);
   destroy_vulkan_buffer(&context, index_buffer);
-  destroy_vulkan_buffer(&context, staging_buffer);
+  destroy_vulkan_buffer(&context, staging_arena.buffer);
   destroy_vulkan_buffer(&context, vertex_buffer);
   destroy_vulkan_context(&context);
   return 0;

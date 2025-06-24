@@ -16,6 +16,7 @@
 #define NUM_ATTACHMENTS (1) // 0 color, TODO 1 depth
 #define MAX_SHADER_STAGE_COUNT (5)
 #define MAX_PHYSICAL_DEVICES (16)
+#define MAX_COPY_REGIONS (32)
 
 #define VK_CHECK(result, fmt)                                                  \
   do {                                                                         \
@@ -158,6 +159,15 @@ enum BufferType {
   BUFFER_TYPE_UNIFORM,
 };
 
+struct StagingArena {
+  VulkanBuffer buffer;
+  uint32_t total_size;
+  VkBuffer destination_buffers[MAX_COPY_REGIONS];
+  VkBufferCopy copy_regions[MAX_COPY_REGIONS];
+  uint32_t num_copy_regions;
+  uint32_t offset;
+};
+
 VulkanContext create_vulkan_context(const char *title);
 void destroy_vulkan_context(VulkanContext *);
 VulkanBuffer create_buffer_explicit(VulkanContext *context,
@@ -215,3 +225,15 @@ void update_uniform_descriptor_sets(VkDevice device, VkBuffer buffer,
                                     VkDeviceSize offset, VkDeviceSize range,
                                     VkDescriptorSet descriptor_set,
                                     uint32_t binding);
+
+StagingArena create_staging_arena(VulkanContext *context, uint32_t total_size);
+uint32_t stage_data_explicit(VulkanContext *context, StagingArena *arena,
+                             void *data, uint32_t size, VkBuffer destination,
+                             uint32_t dst_offset);
+uint32_t stage_data_auto(VulkanContext *context, StagingArena *arena,
+                         void *data, uint32_t size, VkBuffer destination);
+
+#define STAGE_ARRAY(context, arena, array, destination)                        \
+  (stage_data_auto(context, arena, array, sizeof(array), destination))
+
+void flush_staging_arena(VulkanContext *context, StagingArena *arena);

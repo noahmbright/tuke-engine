@@ -1666,3 +1666,73 @@ void update_uniform_descriptor_sets(VkDevice device, VkBuffer buffer,
   write_descriptor_set.pTexelBufferView = NULL;
   vkUpdateDescriptorSets(device, 1, &write_descriptor_set, 0, NULL);
 }
+
+StagingArena create_staging_arena(VulkanContext *context, uint32_t total_size) {
+  StagingArena staging_arena;
+  VulkanBuffer staging_buffer =
+      create_buffer(context, BUFFER_TYPE_STAGING, total_size);
+  staging_arena.buffer = staging_buffer;
+  staging_arena.total_size = total_size;
+  staging_arena.offset = 0;
+  staging_arena.num_copy_regions = 0;
+  memset(staging_arena.copy_regions, 0, sizeof(staging_arena.copy_regions));
+  return staging_arena;
+}
+
+// TODO alignment padding?
+// add handle with size, usage, offset, instead of just returning offset?
+uint32_t stage_data_explicit(VulkanContext *context, StagingArena *arena,
+                             void *data, uint32_t size, VkBuffer destination,
+                             uint32_t dst_offset) {
+  assert(arena->offset + size <= arena->total_size);
+  assert(arena->num_copy_regions < MAX_COPY_REGIONS);
+  uint32_t written_data_offset = arena->offset;
+
+  VkBufferCopy copy_region;
+  copy_region.srcOffset = arena->offset;
+  copy_region.dstOffset = dst_offset;
+  copy_region.size = size;
+  arena->copy_regions[arena->num_copy_regions] = copy_region;
+  arena->destination_buffers[arena->num_copy_regions] = destination;
+  arena->num_copy_regions++;
+
+  write_to_vulkan_buffer(context, data, size, arena->offset, arena->buffer);
+
+  arena->offset += size;
+  return written_data_offset;
+}
+
+uint32_t stage_data_auto(VulkanContext *context, StagingArena *arena,
+                         void *data, uint32_t size, VkBuffer destination) {
+  return stage_data_explicit(context, arena, data, size, destination,
+                             arena->offset);
+}
+
+void flush_staging_arena(VulkanContext *context, StagingArena *arena) {
+  VkCommandBuffer command_buffer = begin_single_use_command_buffer(context);
+
+  if (arena->num_copy_regions == 0) {
+    return;
+  }
+
+  VkBuffer current_destination = arena->destination_buffers[0];
+  uint32_t current_batch_start = 0;
+
+  for (uint32_t i = 1; i < arena->num_copy_regions; i++) {
+    if (arena->destination_buffers[i] == current_destination) {
+      continue;
+    }
+
+    vkCmdCopyBuffer(command_buffer, arena->buffer.buffer, current_destination,
+                    i - current_batch_start,
+                    arena->copy_regions + current_batch_start);
+    current_destination = arena->destination_buffers[i];
+    current_batch_start = i;
+  }
+
+  vkCmdCopyBuffer(command_buffer, arena->buffer.buffer, current_destination,
+                  arena->num_copy_regions - current_batch_start,
+                  arena->copy_regions + current_batch_start);
+
+  end_single_use_command_buffer(context, command_buffer);
+}
