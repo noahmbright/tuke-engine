@@ -1,4 +1,5 @@
 #include "common_shaders.h"
+#include "renderer.h"
 #include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
 #include <cstdio>
@@ -69,7 +70,6 @@ int main() {
   };
   // clang-format on
 
-  uint32_t stride = 6 * sizeof(float);
   uint32_t triangle_size = sizeof(triangle_vertices);
   uint32_t square_size = sizeof(square_vertices);
   uint32_t unit_square_positions_size = sizeof(unit_square_positions);
@@ -143,30 +143,6 @@ int main() {
   square_fragment_shader_stage.entry_point = "main";
   square_fragment_shader_stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-  const size_t number_binding_descriptions = 1;
-  VkVertexInputBindingDescription
-      binding_descriptions[number_binding_descriptions];
-  binding_descriptions[0].stride = stride;
-  binding_descriptions[0].binding = 0;
-  binding_descriptions[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-  const size_t number_attribute_descriptions = 2;
-  VkVertexInputAttributeDescription
-      attribute_descriptions[number_attribute_descriptions];
-  attribute_descriptions[0].binding = 0;
-  attribute_descriptions[0].location = 0;
-  attribute_descriptions[0].offset = 0;
-  attribute_descriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-  attribute_descriptions[1].binding = 0;
-  attribute_descriptions[1].location = 1;
-  attribute_descriptions[1].offset = 3 * sizeof(float);
-  attribute_descriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-
-  VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info =
-      create_vertex_input_state(
-          number_binding_descriptions, binding_descriptions,
-          number_attribute_descriptions, attribute_descriptions);
-
   VkPipelineLayout pipeline_layout =
       create_pipeline_layout(context.device, &descriptor_set_layout, 1);
 
@@ -179,7 +155,7 @@ int main() {
   triangle_pipeline_config.stages = triangle_shader_stages;
   triangle_pipeline_config.stage_count = 2;
   triangle_pipeline_config.vertex_input_state_create_info =
-      &vertex_input_state_create_info;
+      &context.vertex_layouts[VERTEX_LAYOUT_POSITION_NORMAL];
   triangle_pipeline_config.render_pass = context.render_pass;
   triangle_pipeline_config.pipeline_layout = pipeline_layout;
   triangle_pipeline_config.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -197,7 +173,7 @@ int main() {
   square_pipeline_config.stages = square_shader_stages;
   square_pipeline_config.stage_count = 2;
   square_pipeline_config.vertex_input_state_create_info =
-      &vertex_input_state_create_info;
+      &context.vertex_layouts[VERTEX_LAYOUT_POSITION_NORMAL];
   square_pipeline_config.render_pass = context.render_pass;
   square_pipeline_config.pipeline_layout = pipeline_layout;
   square_pipeline_config.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;

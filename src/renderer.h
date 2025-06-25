@@ -56,6 +56,16 @@ const float cube_vertices[] = {
 };
 // clang-format on
 
+enum VertexLayoutID {
+  VERTEX_LAYOUT_POSITION,
+  VERTEX_LAYOUT_POSITION_NORMAL,
+  VERTEX_LAYOUT_POSITION_NORMAL_UV,
+
+  VERTEX_LAYOUT_COUNT
+};
+
+extern const void **active_vertex_layouts;
+
 struct RenderData {
   unsigned program;
   unsigned vao;

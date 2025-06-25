@@ -1,5 +1,6 @@
 #pragma once
 
+#include "renderer.h"
 #include "vulkan/vulkan_core.h"
 #include <cstdio>
 #include <cstdlib>
@@ -17,6 +18,8 @@
 #define MAX_SHADER_STAGE_COUNT (5)
 #define MAX_PHYSICAL_DEVICES (16)
 #define MAX_COPY_REGIONS (32)
+#define MAX_VERTEX_BINDINGS (4)
+#define MAX_VERTEX_ATTRIBUTES (4)
 
 #define VK_CHECK(result, fmt)                                                  \
   do {                                                                         \
@@ -89,6 +92,7 @@ struct VulkanContext {
   VkCommandBuffer compute_command_buffers[NUM_SWAPCHAIN_IMAGES];
 
   VkPipelineCache pipeline_cache;
+  VkPipelineVertexInputStateCreateInfo vertex_layouts[VERTEX_LAYOUT_COUNT];
 
   // init
   VkInstance instance;
@@ -167,6 +171,17 @@ struct StagingArena {
   uint32_t num_copy_regions;
   uint32_t offset;
 };
+
+struct VulkanVertexLayout {
+  size_t binding_description_count;
+  VkVertexInputBindingDescription binding_descriptions[MAX_VERTEX_BINDINGS];
+
+  size_t attribute_description_count;
+  VkVertexInputAttributeDescription
+      attribute_descriptions[MAX_VERTEX_ATTRIBUTES];
+};
+
+extern const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT];
 
 VulkanContext create_vulkan_context(const char *title);
 void destroy_vulkan_context(VulkanContext *);
