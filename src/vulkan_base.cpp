@@ -1636,6 +1636,7 @@ VkPipelineLayout
 create_pipeline_layout(VkDevice device,
                        const VkDescriptorSetLayout *descriptor_set_layout,
                        uint32_t set_layout_count) {
+
   VkPipelineLayoutCreateInfo pipeline_layout_create_info;
   pipeline_layout_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1808,4 +1809,60 @@ void flush_staging_arena(VulkanContext *context, StagingArena *arena) {
                   arena->copy_regions + current_batch_start);
 
   end_single_use_command_buffer(context, command_buffer);
+}
+
+ShaderStage create_shader_stage(VkShaderModule module,
+                                VkShaderStageFlagBits stage,
+                                const char *entry_point) {
+  ShaderStage shader_stage;
+  shader_stage.module = module;
+  shader_stage.entry_point = entry_point;
+  shader_stage.stage = stage;
+  return shader_stage;
+}
+
+UniformBuffer create_uniform_buffer_explicit(
+    VulkanContext *context, uint32_t binding, VkShaderStageFlags stage_flags,
+    uint32_t descriptor_count, uint32_t buffer_size, uint32_t binding_count,
+    VkDescriptorPool descriptor_pool) {
+  UniformBuffer uniform_buffer;
+
+  VkDescriptorSetLayoutBinding ubo_layout_binding;
+  ubo_layout_binding.binding = binding;
+  ubo_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  ubo_layout_binding.descriptorCount = descriptor_count;
+  ubo_layout_binding.stageFlags = stage_flags;
+  ubo_layout_binding.pImmutableSamplers = NULL;
+
+  VkDescriptorSetLayout descriptor_set_layout = create_descriptor_set_layout(
+      context->device, &ubo_layout_binding, binding_count);
+  VkDescriptorSet descriptor_set = create_descriptor_set(
+      context->device, descriptor_pool, descriptor_set_layout);
+
+  VulkanBuffer vulkan_buffer =
+      create_buffer(context, BUFFER_TYPE_UNIFORM, buffer_size);
+  update_uniform_descriptor_sets(context->device, vulkan_buffer.buffer, 0,
+                                 buffer_size, descriptor_set, 0);
+
+  uniform_buffer.vulkan_buffer = vulkan_buffer;
+  uniform_buffer.descriptor_set_layout = descriptor_set_layout;
+  uniform_buffer.descriptor_set = descriptor_set;
+  uniform_buffer.size = buffer_size;
+  return uniform_buffer;
+}
+
+// TODO better understand bindings and what is necessary
+UniformBuffer create_uniform_buffer(VulkanContext *context,
+                                    uint32_t buffer_size,
+                                    VkDescriptorPool descriptor_pool) {
+  return create_uniform_buffer_explicit(
+      context, 0, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT, 1,
+      buffer_size, 1, descriptor_pool);
+}
+
+void destroy_uniform_buffer(VulkanContext *context,
+                            UniformBuffer *uniform_buffer) {
+  vkDestroyDescriptorSetLayout(context->device,
+                               uniform_buffer->descriptor_set_layout, NULL);
+  destroy_vulkan_buffer(context, uniform_buffer->vulkan_buffer);
 }

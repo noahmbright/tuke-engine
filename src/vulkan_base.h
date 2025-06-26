@@ -117,6 +117,13 @@ struct VulkanBuffer {
   VkMemoryPropertyFlags memory_property_flags;
 };
 
+struct UniformBuffer {
+  VulkanBuffer vulkan_buffer;
+  VkDescriptorSetLayout descriptor_set_layout;
+  VkDescriptorSet descriptor_set;
+  uint32_t size;
+};
+
 struct ViewportState {
   VkViewport viewport;
   VkRect2D scissor;
@@ -252,3 +259,12 @@ uint32_t stage_data_auto(VulkanContext *context, StagingArena *arena,
   (stage_data_auto(context, arena, array, sizeof(array), destination))
 
 void flush_staging_arena(VulkanContext *context, StagingArena *arena);
+ShaderStage create_shader_stage(VkShaderModule module,
+                                VkShaderStageFlagBits stage,
+                                const char *entry_point);
+
+UniformBuffer create_uniform_buffer(VulkanContext *context,
+                                    uint32_t buffer_size,
+                                    VkDescriptorPool descriptor_pool);
+void destroy_uniform_buffer(VulkanContext *context,
+                            UniformBuffer *uniform_buffer);

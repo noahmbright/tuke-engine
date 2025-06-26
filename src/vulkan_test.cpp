@@ -81,8 +81,6 @@ int main() {
 
   VulkanBuffer vertex_buffer =
       create_buffer(&context, BUFFER_TYPE_VERTEX, total_size);
-  VulkanBuffer uniform_buffer =
-      create_buffer(&context, BUFFER_TYPE_UNIFORM, sizeof(FloatUniformBuffer));
   VulkanBuffer index_buffer =
       create_buffer(&context, BUFFER_TYPE_INDEX, unit_square_indices_size);
 
@@ -101,51 +99,30 @@ int main() {
   (void)unit_square_position_offset;
   (void)unit_square_indices_offset;
 
-  VkDescriptorSetLayoutBinding ubo_layout_binding;
-  ubo_layout_binding.binding = 0;
-  ubo_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  ubo_layout_binding.descriptorCount = 1;
-  ubo_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-  ubo_layout_binding.pImmutableSamplers = NULL;
-
-  VkDescriptorPoolSize pool_size = {};
-  pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  pool_size.descriptorCount = 1;
-
-  VkDescriptorSetLayout descriptor_set_layout =
-      create_descriptor_set_layout(context.device, &ubo_layout_binding, 1);
-  VkDescriptorPool descriptor_pool =
-      create_descriptor_pool(context.device, &pool_size, 1, 1);
-  VkDescriptorSet descriptor_set = create_descriptor_set(
-      context.device, descriptor_pool, descriptor_set_layout);
-  update_uniform_descriptor_sets(context.device, uniform_buffer.buffer, 0,
-                                 sizeof(FloatUniformBuffer), descriptor_set, 0);
-
   VkShaderModule vertex_shader_module = create_shader_module(
       context.device, simple_vert_spv, simple_vert_spv_size);
   VkShaderModule triangle_fragment_shader_module = create_shader_module(
       context.device, simple_frag_spv, simple_frag_spv_size);
   VkShaderModule square_fragment_shader_module = create_shader_module(
       context.device, square_frag_spv, square_frag_spv_size);
+  ShaderStage vertex_shader_stage = create_shader_stage(
+      vertex_shader_module, VK_SHADER_STAGE_VERTEX_BIT, "main");
+  ShaderStage triangle_fragment_shader_stage = create_shader_stage(
+      triangle_fragment_shader_module, VK_SHADER_STAGE_FRAGMENT_BIT, "main");
+  ShaderStage square_fragment_shader_stage = create_shader_stage(
+      square_fragment_shader_module, VK_SHADER_STAGE_FRAGMENT_BIT, "main");
 
-  ShaderStage vertex_shader_stage;
-  vertex_shader_stage.module = vertex_shader_module;
-  vertex_shader_stage.entry_point = "main";
-  vertex_shader_stage.stage = VK_SHADER_STAGE_VERTEX_BIT;
+  VkDescriptorPoolSize pool_size = {};
+  pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  pool_size.descriptorCount = 1;
 
-  ShaderStage triangle_fragment_shader_stage;
-  triangle_fragment_shader_stage.module = triangle_fragment_shader_module;
-  triangle_fragment_shader_stage.entry_point = "main";
-  triangle_fragment_shader_stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+  VkDescriptorPool descriptor_pool =
+      create_descriptor_pool(context.device, &pool_size, 1, 1);
+  UniformBuffer uniform_buffer = create_uniform_buffer(
+      &context, sizeof(FloatUniformBuffer), descriptor_pool);
 
-  ShaderStage square_fragment_shader_stage;
-  square_fragment_shader_stage.module = square_fragment_shader_module;
-  square_fragment_shader_stage.entry_point = "main";
-  square_fragment_shader_stage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-  VkPipelineLayout pipeline_layout =
-      create_pipeline_layout(context.device, &descriptor_set_layout, 1);
-
+  VkPipelineLayout pipeline_layout = create_pipeline_layout(
+      context.device, &uniform_buffer.descriptor_set_layout, 1);
   ShaderStage triangle_shader_stages[] = {vertex_shader_stage,
                                           triangle_fragment_shader_stage};
   ShaderStage square_shader_stages[] = {vertex_shader_stage,
@@ -203,7 +180,7 @@ int main() {
       continue;
     }
 
-    update_uniform_buffer(&context, uniform_buffer, x);
+    update_uniform_buffer(&context, uniform_buffer.vulkan_buffer, x);
 
     VkCommandBuffer command_buffer = begin_command_buffer(&context);
     VkClearValue clear_value;
@@ -215,10 +192,12 @@ int main() {
 
     // triangle
     render_mesh(command_buffer, 3, triangle_graphics_pipeline, 0,
-                vertex_buffer.buffer, pipeline_layout, descriptor_set);
+                vertex_buffer.buffer, pipeline_layout,
+                uniform_buffer.descriptor_set);
     // square
     render_mesh(command_buffer, 6, square_graphics_pipeline, triangle_size,
-                vertex_buffer.buffer, pipeline_layout, descriptor_set);
+                vertex_buffer.buffer, pipeline_layout,
+                uniform_buffer.descriptor_set);
 
     vkCmdEndRenderPass(command_buffer);
     VK_CHECK(vkEndCommandBuffer(command_buffer),
@@ -234,12 +213,11 @@ int main() {
   vkDestroyPipelineLayout(context.device, pipeline_layout, NULL);
   vkDestroyPipeline(context.device, square_graphics_pipeline, NULL);
   vkDestroyPipeline(context.device, triangle_graphics_pipeline, NULL);
+  destroy_uniform_buffer(&context, &uniform_buffer);
   vkDestroyDescriptorPool(context.device, descriptor_pool, NULL);
-  vkDestroyDescriptorSetLayout(context.device, descriptor_set_layout, NULL);
   vkDestroyShaderModule(context.device, vertex_shader_module, NULL);
   vkDestroyShaderModule(context.device, triangle_fragment_shader_module, NULL);
   vkDestroyShaderModule(context.device, square_fragment_shader_module, NULL);
-  destroy_vulkan_buffer(&context, uniform_buffer);
   destroy_vulkan_buffer(&context, index_buffer);
   destroy_vulkan_buffer(&context, staging_arena.buffer);
   destroy_vulkan_buffer(&context, vertex_buffer);
