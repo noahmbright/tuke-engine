@@ -15,71 +15,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT] = {
-    [VERTEX_LAYOUT_POSITION] =
-        {.attribute_description_count = 1,
-         .attribute_descriptions[0] =
-             {
-                 .location = 0,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                 .offset = 0,
-             },
-         .binding_description_count = 1,
-         .binding_descriptions[0] = {.binding = 0,
-                                     .stride = 3 * sizeof(float),
-                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
-
-    [VERTEX_LAYOUT_POSITION_NORMAL] =
-        {.attribute_description_count = 2,
-         .attribute_descriptions[0] =
-             {
-                 .location = 0,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                 .offset = 0,
-             },
-         .attribute_descriptions[1] =
-             {
-                 .location = 1,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                 .offset = 3 * sizeof(float),
-             },
-         .binding_description_count = 1,
-         .binding_descriptions[0] = {.binding = 0,
-                                     .stride = 6 * sizeof(float),
-                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
-
-    [VERTEX_LAYOUT_POSITION_NORMAL_UV] =
-        {.attribute_description_count = 3,
-         .attribute_descriptions[0] =
-             {
-                 .location = 0,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                 .offset = 0,
-             },
-         .attribute_descriptions[1] =
-             {
-                 .location = 1,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                 .offset = 3 * sizeof(float),
-             },
-         .attribute_descriptions[2] =
-             {
-                 .location = 2,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32_SFLOAT,
-                 .offset = 6 * sizeof(float),
-             },
-         .binding_description_count = 1,
-         .binding_descriptions[0] = {.binding = 0,
-                                     .stride = 8 * sizeof(float),
-                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
-};
-
 // If you're multithreading submissions, use a mutex or lockless ring buffer
 // per queue.
 
@@ -923,6 +858,92 @@ VkPipelineCache create_pipeline_cache(VkDevice device) {
   return pipeline_cache;
 }
 
+const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT] = {
+    [VERTEX_LAYOUT_POSITION] =
+        {.attribute_description_count = 1,
+         .attribute_descriptions[0] =
+             {
+                 .location = 0,
+                 .binding = 0,
+                 .format = VK_FORMAT_R32G32B32_SFLOAT,
+                 .offset = 0,
+             },
+         .binding_description_count = 1,
+         .binding_descriptions[0] = {.binding = 0,
+                                     .stride = 3 * sizeof(float),
+                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
+
+    [VERTEX_LAYOUT_POSITION_NORMAL] =
+        {.attribute_description_count = 2,
+         .attribute_descriptions[0] =
+             {
+                 .location = 0,
+                 .binding = 0,
+                 .format = VK_FORMAT_R32G32B32_SFLOAT,
+                 .offset = 0,
+             },
+         .attribute_descriptions[1] =
+             {
+                 .location = 1,
+                 .binding = 0,
+                 .format = VK_FORMAT_R32G32B32_SFLOAT,
+                 .offset = 3 * sizeof(float),
+             },
+         .binding_description_count = 1,
+         .binding_descriptions[0] = {.binding = 0,
+                                     .stride = 6 * sizeof(float),
+                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
+
+    [VERTEX_LAYOUT_POSITION_NORMAL_UV] =
+        {.attribute_description_count = 3,
+         .attribute_descriptions[0] =
+             {
+                 .location = 0,
+                 .binding = 0,
+                 .format = VK_FORMAT_R32G32B32_SFLOAT,
+                 .offset = 0,
+             },
+         .attribute_descriptions[1] =
+             {
+                 .location = 1,
+                 .binding = 0,
+                 .format = VK_FORMAT_R32G32B32_SFLOAT,
+                 .offset = 3 * sizeof(float),
+             },
+         .attribute_descriptions[2] =
+             {
+                 .location = 2,
+                 .binding = 0,
+                 .format = VK_FORMAT_R32G32_SFLOAT,
+                 .offset = 6 * sizeof(float),
+             },
+         .binding_description_count = 1,
+         .binding_descriptions[0] = {.binding = 0,
+                                     .stride = 8 * sizeof(float),
+                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
+};
+
+PipelineConfig create_default_graphics_pipeline_config(
+    const VulkanContext *context, const GraphicsPipelineStages shader_stages,
+    VertexLayoutID layout_id, VkPipelineLayout pipeline_layout) {
+  PipelineConfig pipeline_config;
+  pipeline_config.stages[0] = shader_stages.vertex_shader;
+  pipeline_config.stages[1] = shader_stages.fragment_shader;
+  pipeline_config.stage_count = 2;
+  pipeline_config.vertex_input_state_create_info =
+      &context->vertex_layouts[layout_id];
+  pipeline_config.render_pass = context->render_pass;
+  pipeline_config.pipeline_layout = pipeline_layout;
+  pipeline_config.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipeline_config.primitive_restart_enabled = VK_FALSE;
+  pipeline_config.polygon_mode = VK_POLYGON_MODE_FILL;
+  pipeline_config.cull_mode = VK_CULL_MODE_NONE;
+  pipeline_config.front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  pipeline_config.sample_count_flag = VK_SAMPLE_COUNT_1_BIT;
+  pipeline_config.blend_mode = BLEND_MODE_ALPHA;
+  return pipeline_config;
+}
+
 VulkanContext create_vulkan_context(const char *title) {
   VulkanContext context;
   context.window = new_window(true /* is_vulkan*/, title);
@@ -1654,31 +1675,6 @@ create_pipeline_layout(VkDevice device,
                                   &pipeline_layout),
            "create_graphics_pipeline: Failed to vkCreatePipelineLayout");
   return pipeline_layout;
-}
-
-struct FloatUniformBuffer {
-  float x;
-};
-
-PipelineConfig create_default_graphics_pipeline_config(
-    const VulkanContext *context, const GraphicsPipelineStages shader_stages,
-    VertexLayoutID layout_id, VkPipelineLayout pipeline_layout) {
-  PipelineConfig pipeline_config;
-  pipeline_config.stages[0] = shader_stages.vertex_shader;
-  pipeline_config.stages[1] = shader_stages.fragment_shader;
-  pipeline_config.stage_count = 2;
-  pipeline_config.vertex_input_state_create_info =
-      &context->vertex_layouts[layout_id];
-  pipeline_config.render_pass = context->render_pass;
-  pipeline_config.pipeline_layout = pipeline_layout;
-  pipeline_config.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  pipeline_config.primitive_restart_enabled = VK_FALSE;
-  pipeline_config.polygon_mode = VK_POLYGON_MODE_FILL;
-  pipeline_config.cull_mode = VK_CULL_MODE_NONE;
-  pipeline_config.front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-  pipeline_config.sample_count_flag = VK_SAMPLE_COUNT_1_BIT;
-  pipeline_config.blend_mode = BLEND_MODE_ALPHA;
-  return pipeline_config;
 }
 
 // TODO VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT

@@ -8,8 +8,9 @@
 #include <cstring>
 
 void render_mesh(VkCommandBuffer command_buffer, uint32_t num_vertices,
-                 VkPipeline graphics_pipeline, VkDeviceSize buffer_offset,
-                 VkBuffer buffer, VkPipelineLayout pipeline_layout,
+                 uint32_t instance_count, VkPipeline graphics_pipeline,
+                 VkDeviceSize buffer_offset, VkBuffer buffer,
+                 VkPipelineLayout pipeline_layout,
                  VkDescriptorSet descriptor_set) {
 
   vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -17,7 +18,11 @@ void render_mesh(VkCommandBuffer command_buffer, uint32_t num_vertices,
   vkCmdBindVertexBuffers(command_buffer, 0, 1, &buffer, &buffer_offset);
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           pipeline_layout, 0, 1, &descriptor_set, 0, NULL);
-  vkCmdDraw(command_buffer, num_vertices, 1, 0, 0);
+
+  uint32_t first_vertex = 0;
+  uint32_t first_instance = 0;
+  vkCmdDraw(command_buffer, num_vertices, instance_count, first_vertex,
+            first_instance);
 }
 
 struct MVPUniform {
@@ -45,19 +50,9 @@ int main() {
       0.67f, 0.67f, 0.0f, 0.0f, 0.0f, 1.0f,
   };
 
-  //float unit_square_positions[] = {
-  //    -0.5f,  0.5f, 0.0f,
-  //    -0.5f, -0.5f, 0.0f,
-  //     0.5f, -0.5f, 0.0f,
-  //     0.5f,  0.5f, 0.0f,
-  //};
-
   float unit_square_positions[] = {
       -0.5f,  0.5f, 0.0f,
       -0.5f, -0.5f, 0.0f,
-       0.5f, -0.5f, 0.0f,
-
-      -0.5f,  0.5f, 0.0f,
        0.5f, -0.5f, 0.0f,
        0.5f,  0.5f, 0.0f,
   };
@@ -95,9 +90,23 @@ int main() {
       &context, &staging_arena, unit_square_positions, vertex_buffer.buffer);
   uint32_t unit_square_indices_offset = STAGE_ARRAY(
       &context, &staging_arena, unit_square_indices, vertex_buffer.buffer);
+  uint32_t quad_positions_offset = STAGE_ARRAY(
+      &context, &staging_arena, quad_positions, vertex_buffer.buffer);
   flush_staging_arena(&context, &staging_arena);
   (void)unit_square_position_offset;
   (void)unit_square_indices_offset;
+
+  uint32_t instance_count = 2;
+  VkVertexInputBindingDescription instance_binding;
+  instance_binding.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+  instance_binding.stride = 2 * sizeof(float);
+  instance_binding.binding = 1;
+
+  VkVertexInputAttributeDescription instance_description;
+  instance_description.binding = 1;
+  instance_description.location = 0;
+  instance_description.offset = 0;
+  instance_description.format = VK_FORMAT_R32G32_SFLOAT;
 
   VkDescriptorPoolSize x_pool_size = {};
   x_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -173,6 +182,40 @@ int main() {
       create_default_graphics_pipeline_config(&context, instanced_quad_stages,
                                               VERTEX_LAYOUT_POSITION,
                                               mvp_pipeline_layout);
+
+  VkVertexInputBindingDescription instanced_quad_vertex_descriptions[2] = {
+      [0] = {.binding = 0,
+             .stride = 3 * sizeof(float),
+             .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
+      [1] = {.binding = 1,
+             .stride = 2 * sizeof(float),
+             .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE},
+  };
+
+  VkVertexInputAttributeDescription instanced_quad_vertex_attributes[2] = {
+      [0] = {.binding = 0,
+             .format = VK_FORMAT_R32G32B32_SFLOAT,
+             .offset = 0,
+             .location = 0},
+      [1] = {.binding = 1,
+             .format = VK_FORMAT_R32G32_SFLOAT,
+             .offset = 0,
+             .location = 1},
+  };
+
+  VkPipelineVertexInputStateCreateInfo instanced_quad_vertex_input_state;
+  instanced_quad_vertex_input_state.sType =
+      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  instanced_quad_vertex_input_state.pNext = NULL;
+  instanced_quad_vertex_input_state.flags = 0;
+  instanced_quad_vertex_input_state.vertexBindingDescriptionCount = 2;
+  instanced_quad_vertex_input_state.pVertexBindingDescriptions =
+      instanced_quad_vertex_descriptions;
+  instanced_quad_vertex_input_state.vertexAttributeDescriptionCount = 2;
+  instanced_quad_vertex_input_state.pVertexAttributeDescriptions =
+      instanced_quad_vertex_attributes;
+  instanced_quad_pipeline_config.vertex_input_state_create_info =
+      &instanced_quad_vertex_input_state;
   VkPipeline instanced_quad_graphics_pipeline = create_graphics_pipeline(
       context.device, &instanced_quad_pipeline_config, context.pipeline_cache);
 
@@ -193,8 +236,8 @@ int main() {
 
     MVPUniform mvp;
     mvp.model = glm::mat4(1.0f);
+    mvp.model = glm::scale(mvp.model, glm::vec3(0.5f));
     mvp.model = glm::rotate(mvp.model, sint, glm::vec3(0.0f, 0.0f, 1.0f));
-    mvp.model = glm::translate(mvp.model, glm::vec3(1.0f, 0.0f, 0.0f));
 
     if (!begin_frame(&context)) {
       printf("fuk\n");
@@ -211,17 +254,26 @@ int main() {
     vkCmdSetScissor(command_buffer, 0, 1, &viewport_state.scissor);
 
     // triangle
-    render_mesh(command_buffer, 3, triangle_graphics_pipeline, triangle_offset,
-                vertex_buffer.buffer, x_pipeline_layout,
+    render_mesh(command_buffer, 3, 1, triangle_graphics_pipeline,
+                triangle_offset, vertex_buffer.buffer, x_pipeline_layout,
                 x_uniform_buffer.descriptor_set);
     // square
-    render_mesh(command_buffer, 6, square_graphics_pipeline, square_offset,
+    render_mesh(command_buffer, 6, 1, square_graphics_pipeline, square_offset,
                 vertex_buffer.buffer, x_pipeline_layout,
                 x_uniform_buffer.descriptor_set);
     // unit square
-    render_mesh(command_buffer, 6, instanced_quad_graphics_pipeline,
-                unit_square_position_offset, vertex_buffer.buffer,
-                mvp_pipeline_layout, mvp_uniform_buffer.descriptor_set);
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      instanced_quad_graphics_pipeline);
+    VkDeviceSize offset0 = unit_square_position_offset;
+    VkDeviceSize offset1 = quad_positions_offset;
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer.buffer,
+                           &offset0);
+    vkCmdBindVertexBuffers(command_buffer, 1, 1, &vertex_buffer.buffer,
+                           &offset1);
+    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            mvp_pipeline_layout, 0, 1,
+                            &mvp_uniform_buffer.descriptor_set, 0, NULL);
+    vkCmdDraw(command_buffer, 4, instance_count, 0, 0);
 
     vkCmdEndRenderPass(command_buffer);
     VK_CHECK(vkEndCommandBuffer(command_buffer),
