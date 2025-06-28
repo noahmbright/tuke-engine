@@ -194,6 +194,15 @@ struct VulkanVertexLayout {
       attribute_descriptions[MAX_VERTEX_ATTRIBUTES];
 };
 
+struct VertexLayoutBuilder {
+  size_t binding_description_count;
+  VkVertexInputBindingDescription binding_descriptions[MAX_VERTEX_BINDINGS];
+
+  size_t attribute_description_count;
+  VkVertexInputAttributeDescription
+      attribute_descriptions[MAX_VERTEX_ATTRIBUTES];
+};
+
 extern const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT];
 
 VulkanContext create_vulkan_context(const char *title);
@@ -288,4 +297,24 @@ void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
 
 PipelineConfig create_default_graphics_pipeline_config(
     const VulkanContext *context, const GraphicsPipelineStages shader_stages,
-    VertexLayoutID layout_id, VkPipelineLayout pipeline_layout);
+    const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
+    VkPipelineLayout pipeline_layout);
+
+VkPipelineVertexInputStateCreateInfo
+get_common_vertex_input_state(VulkanContext *context, VertexLayoutID layout_id);
+
+VkVertexInputBindingDescription
+create_instanced_vertex_binding_description(uint32_t binding, uint32_t stride);
+VkVertexInputAttributeDescription
+create_vertex_attribute_description(uint32_t location, uint32_t binding,
+                                    VkFormat format, uint32_t offset);
+VkVertexInputBindingDescription
+create_vertex_binding_description(uint32_t binding, uint32_t stride);
+
+VertexLayoutBuilder create_vertex_layout_builder();
+void push_vertex_binding(VertexLayoutBuilder *builder, uint32_t binding,
+                         uint32_t stride, VkVertexInputRate input_rate);
+void push_vertex_attribute(VertexLayoutBuilder *builder, uint32_t location,
+                           uint32_t binding, VkFormat format, uint32_t offset);
+VkPipelineVertexInputStateCreateInfo
+build_vertex_input_state(VertexLayoutBuilder *builder);

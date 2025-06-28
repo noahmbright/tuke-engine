@@ -64,6 +64,10 @@ int main() {
   float quad_positions[] = {
        0.5,  0.5,
       -0.5, -0.5
+      -0.1, -0.1
+      -0.1, -0.1
+      -0.3, -0.3
+      -0.3, -0.3
   };
   // clang-format on
 
@@ -96,18 +100,6 @@ int main() {
   (void)unit_square_position_offset;
   (void)unit_square_indices_offset;
 
-  uint32_t instance_count = 2;
-  VkVertexInputBindingDescription instance_binding;
-  instance_binding.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
-  instance_binding.stride = 2 * sizeof(float);
-  instance_binding.binding = 1;
-
-  VkVertexInputAttributeDescription instance_description;
-  instance_description.binding = 1;
-  instance_description.location = 0;
-  instance_description.offset = 0;
-  instance_description.format = VK_FORMAT_R32G32_SFLOAT;
-
   VkDescriptorPoolSize x_pool_size = {};
   x_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   x_pool_size.descriptorCount = 1;
@@ -116,6 +108,7 @@ int main() {
   mvp_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   mvp_pool_size.descriptorCount = 1;
 
+  // TODO manage pool ownership - can I use one pool for both descriptors?
   VkDescriptorPool x_descriptor_pool =
       create_descriptor_pool(context.device, &x_pool_size, 1, 1);
   VkDescriptorPool mvp_descriptor_pool =
@@ -126,6 +119,7 @@ int main() {
   UniformBuffer mvp_uniform_buffer =
       create_uniform_buffer(&context, sizeof(MVPUniform), mvp_descriptor_pool);
 
+  // TODO cache, produce a single struct with size and source and other metadata
   VkShaderModule vertex_shader_module = create_shader_module(
       context.device, simple_vert_spv, simple_vert_spv_size);
   VkShaderModule instanced_quad_vertex_shader_module = create_shader_module(
@@ -137,6 +131,8 @@ int main() {
   VkShaderModule instanced_quad_fragment_shader_module = create_shader_module(
       context.device, instanced_quad_frag_spv, instanced_quad_frag_spv_size);
 
+  // TODO remove "main" boilerplate, see if I can go straight to
+  // GraphicsPipelineStages
   ShaderStage vertex_shader_stage = create_shader_stage(
       vertex_shader_module, VK_SHADER_STAGE_VERTEX_BIT, "main");
   ShaderStage instanced_quad_vertex_shader_stage = create_shader_stage(
@@ -164,58 +160,43 @@ int main() {
   VkPipelineLayout mvp_pipeline_layout = create_pipeline_layout(
       context.device, &mvp_uniform_buffer.descriptor_set_layout, 1);
 
+  uint32_t instance_count = 6;
+
+  VertexLayoutBuilder instance_vertex_layout_builder =
+      create_vertex_layout_builder();
+  push_vertex_binding(&instance_vertex_layout_builder, 0, 3 * sizeof(float),
+                      VK_VERTEX_INPUT_RATE_VERTEX);
+  push_vertex_binding(&instance_vertex_layout_builder, 1, 2 * sizeof(float),
+                      VK_VERTEX_INPUT_RATE_INSTANCE);
+  push_vertex_attribute(&instance_vertex_layout_builder, 0, 0,
+                        VK_FORMAT_R32G32B32_SFLOAT, 0);
+  push_vertex_attribute(&instance_vertex_layout_builder, 1, 1,
+                        VK_FORMAT_R32G32_SFLOAT, 0);
+
+  VkPipelineVertexInputStateCreateInfo instanced_quad_vertex_input_state =
+      build_vertex_input_state(&instance_vertex_layout_builder);
+
+  VkPipelineVertexInputStateCreateInfo postion_normal_vertex_layout =
+      get_common_vertex_input_state(&context, VERTEX_LAYOUT_POSITION_NORMAL);
+
   PipelineConfig triangle_pipeline_config =
       create_default_graphics_pipeline_config(&context, triangle_stages,
-                                              VERTEX_LAYOUT_POSITION_NORMAL,
+                                              &postion_normal_vertex_layout,
                                               x_pipeline_layout);
   VkPipeline triangle_graphics_pipeline = create_graphics_pipeline(
       context.device, &triangle_pipeline_config, context.pipeline_cache);
 
   PipelineConfig square_pipeline_config =
       create_default_graphics_pipeline_config(&context, square_stages,
-                                              VERTEX_LAYOUT_POSITION_NORMAL,
+                                              &postion_normal_vertex_layout,
                                               x_pipeline_layout);
   VkPipeline square_graphics_pipeline = create_graphics_pipeline(
       context.device, &square_pipeline_config, context.pipeline_cache);
 
   PipelineConfig instanced_quad_pipeline_config =
-      create_default_graphics_pipeline_config(&context, instanced_quad_stages,
-                                              VERTEX_LAYOUT_POSITION,
-                                              mvp_pipeline_layout);
-
-  VkVertexInputBindingDescription instanced_quad_vertex_descriptions[2] = {
-      [0] = {.binding = 0,
-             .stride = 3 * sizeof(float),
-             .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
-      [1] = {.binding = 1,
-             .stride = 2 * sizeof(float),
-             .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE},
-  };
-
-  VkVertexInputAttributeDescription instanced_quad_vertex_attributes[2] = {
-      [0] = {.binding = 0,
-             .format = VK_FORMAT_R32G32B32_SFLOAT,
-             .offset = 0,
-             .location = 0},
-      [1] = {.binding = 1,
-             .format = VK_FORMAT_R32G32_SFLOAT,
-             .offset = 0,
-             .location = 1},
-  };
-
-  VkPipelineVertexInputStateCreateInfo instanced_quad_vertex_input_state;
-  instanced_quad_vertex_input_state.sType =
-      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  instanced_quad_vertex_input_state.pNext = NULL;
-  instanced_quad_vertex_input_state.flags = 0;
-  instanced_quad_vertex_input_state.vertexBindingDescriptionCount = 2;
-  instanced_quad_vertex_input_state.pVertexBindingDescriptions =
-      instanced_quad_vertex_descriptions;
-  instanced_quad_vertex_input_state.vertexAttributeDescriptionCount = 2;
-  instanced_quad_vertex_input_state.pVertexAttributeDescriptions =
-      instanced_quad_vertex_attributes;
-  instanced_quad_pipeline_config.vertex_input_state_create_info =
-      &instanced_quad_vertex_input_state;
+      create_default_graphics_pipeline_config(
+          &context, instanced_quad_stages, &instanced_quad_vertex_input_state,
+          mvp_pipeline_layout);
   VkPipeline instanced_quad_graphics_pipeline = create_graphics_pipeline(
       context.device, &instanced_quad_pipeline_config, context.pipeline_cache);
 

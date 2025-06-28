@@ -858,80 +858,90 @@ VkPipelineCache create_pipeline_cache(VkDevice device) {
   return pipeline_cache;
 }
 
+VkVertexInputBindingDescription
+create_instanced_vertex_binding_description(uint32_t binding, uint32_t stride) {
+  VkVertexInputBindingDescription description;
+  description.binding = binding;
+  description.stride = stride;
+  description.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+  return description;
+}
+
+VkVertexInputBindingDescription
+create_vertex_binding_description(uint32_t binding, uint32_t stride) {
+  VkVertexInputBindingDescription description;
+  description.binding = binding;
+  description.stride = stride;
+  description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+  return description;
+}
+
+VkVertexInputAttributeDescription
+create_vertex_attribute_description(uint32_t location, uint32_t binding,
+                                    VkFormat format, uint32_t offset) {
+  VkVertexInputAttributeDescription description;
+  description.location = location;
+  description.binding = binding;
+  description.format = format;
+  description.offset = offset;
+  return description;
+}
+
 const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT] = {
-    [VERTEX_LAYOUT_POSITION] =
-        {.attribute_description_count = 1,
-         .attribute_descriptions[0] =
-             {
-                 .location = 0,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                 .offset = 0,
-             },
-         .binding_description_count = 1,
-         .binding_descriptions[0] = {.binding = 0,
-                                     .stride = 3 * sizeof(float),
-                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
+    [VERTEX_LAYOUT_POSITION] = {.attribute_description_count = 1,
+                                .attribute_descriptions[0] =
+                                    create_vertex_attribute_description(
+                                        0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0),
+
+                                .binding_description_count = 1,
+                                .binding_descriptions[0] =
+                                    create_vertex_binding_description(
+                                        0, 3 * sizeof(float))},
 
     [VERTEX_LAYOUT_POSITION_NORMAL] =
-        {.attribute_description_count = 2,
-         .attribute_descriptions[0] =
-             {
-                 .location = 0,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                 .offset = 0,
-             },
-         .attribute_descriptions[1] =
-             {
-                 .location = 1,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                 .offset = 3 * sizeof(float),
-             },
-         .binding_description_count = 1,
-         .binding_descriptions[0] = {.binding = 0,
-                                     .stride = 6 * sizeof(float),
-                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
+        {
+            .attribute_description_count = 2,
+            .attribute_descriptions[0] = create_vertex_attribute_description(
+                0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0),
+            .attribute_descriptions[1] = create_vertex_attribute_description(
+                1, 0, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(float)),
+
+            .binding_description_count = 1,
+            .binding_descriptions[0] =
+                create_vertex_binding_description(0, 6 * sizeof(float)),
+        },
 
     [VERTEX_LAYOUT_POSITION_NORMAL_UV] =
         {.attribute_description_count = 3,
-         .attribute_descriptions[0] =
-             {
-                 .location = 0,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                 .offset = 0,
-             },
-         .attribute_descriptions[1] =
-             {
-                 .location = 1,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32B32_SFLOAT,
-                 .offset = 3 * sizeof(float),
-             },
-         .attribute_descriptions[2] =
-             {
-                 .location = 2,
-                 .binding = 0,
-                 .format = VK_FORMAT_R32G32_SFLOAT,
-                 .offset = 6 * sizeof(float),
-             },
+         .attribute_descriptions[0] = create_vertex_attribute_description(
+             0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0),
+         .attribute_descriptions[1] = create_vertex_attribute_description(
+             1, 0, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(float)),
+         .attribute_descriptions[2] = create_vertex_attribute_description(
+             2, 0, VK_FORMAT_R32G32_SFLOAT, 6 * sizeof(float)),
+
          .binding_description_count = 1,
          .binding_descriptions[0] = {.binding = 0,
                                      .stride = 8 * sizeof(float),
                                      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
 };
 
+VkPipelineVertexInputStateCreateInfo
+get_common_vertex_input_state(VulkanContext *context,
+                              VertexLayoutID layout_id) {
+  assert(layout_id >= 0 && layout_id <= VERTEX_LAYOUT_MANUAL);
+  return context->vertex_layouts[layout_id];
+}
+
 PipelineConfig create_default_graphics_pipeline_config(
     const VulkanContext *context, const GraphicsPipelineStages shader_stages,
-    VertexLayoutID layout_id, VkPipelineLayout pipeline_layout) {
+    const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
+    VkPipelineLayout pipeline_layout) {
   PipelineConfig pipeline_config;
   pipeline_config.stages[0] = shader_stages.vertex_shader;
   pipeline_config.stages[1] = shader_stages.fragment_shader;
   pipeline_config.stage_count = 2;
-  pipeline_config.vertex_input_state_create_info =
-      &context->vertex_layouts[layout_id];
+  pipeline_config.vertex_input_state_create_info = vertex_input_state;
   pipeline_config.render_pass = context->render_pass;
   pipeline_config.pipeline_layout = pipeline_layout;
   pipeline_config.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -1449,6 +1459,9 @@ VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
   graphics_pipeline_create_info.stageCount = config->stage_count;
   graphics_pipeline_create_info.pStages = stages;
 
+  assert(config->vertex_input_state_create_info &&
+         "create_graphics_pipeline: vertex_input_state_create_info is NULL. "
+         "Did you mean to fill out this structure manually?");
   graphics_pipeline_create_info.pVertexInputState =
       config->vertex_input_state_create_info;
 
@@ -1639,19 +1652,24 @@ VkPipelineVertexInputStateCreateInfo create_vertex_input_state(
     const VkVertexInputBindingDescription *binding_descriptions,
     uint32_t attribute_description_count,
     const VkVertexInputAttributeDescription *attribute_descriptions) {
+
   VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info;
   vertex_input_state_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
   vertex_input_state_create_info.pNext = NULL;
   vertex_input_state_create_info.flags = 0;
+
   vertex_input_state_create_info.vertexBindingDescriptionCount =
       binding_description_count;
   vertex_input_state_create_info.pVertexBindingDescriptions =
       binding_descriptions;
+
   vertex_input_state_create_info.vertexAttributeDescriptionCount =
       attribute_description_count;
   vertex_input_state_create_info.pVertexAttributeDescriptions =
       attribute_descriptions;
+
   return vertex_input_state_create_info;
 }
 
@@ -1911,4 +1929,49 @@ void destroy_uniform_buffer(const VulkanContext *context,
 void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
                              uint32_t size) {
   memcpy(uniform_buffer->mapped, data, size);
+}
+
+VertexLayoutBuilder create_vertex_layout_builder() {
+  VertexLayoutBuilder builder;
+  builder.binding_description_count = 0;
+  memset(builder.binding_descriptions, 0, sizeof(builder.binding_descriptions));
+  builder.attribute_description_count = 0;
+  memset(builder.attribute_descriptions, 0,
+         sizeof(builder.attribute_descriptions));
+  return builder;
+}
+
+void push_vertex_binding(VertexLayoutBuilder *builder, uint32_t binding,
+                         uint32_t stride, VkVertexInputRate input_rate) {
+  assert(builder->binding_description_count < MAX_VERTEX_BINDINGS);
+
+  VkVertexInputBindingDescription *description =
+      &builder->binding_descriptions[builder->binding_description_count];
+  description->binding = binding;
+  description->stride = stride;
+  description->inputRate = input_rate;
+
+  builder->binding_description_count++;
+}
+
+void push_vertex_attribute(VertexLayoutBuilder *builder, uint32_t location,
+                           uint32_t binding, VkFormat format, uint32_t offset) {
+
+  assert(builder->attribute_description_count < MAX_VERTEX_ATTRIBUTES);
+
+  VkVertexInputAttributeDescription *description =
+      &builder->attribute_descriptions[builder->attribute_description_count];
+  description->location = location;
+  description->binding = binding;
+  description->format = format;
+  description->offset = offset;
+
+  builder->attribute_description_count++;
+}
+
+VkPipelineVertexInputStateCreateInfo
+build_vertex_input_state(VertexLayoutBuilder *builder) {
+  return create_vertex_input_state(
+      builder->binding_description_count, builder->binding_descriptions,
+      builder->attribute_description_count, builder->attribute_descriptions);
 }
