@@ -121,6 +121,7 @@ struct UniformBuffer {
   VulkanBuffer vulkan_buffer;
   VkDescriptorSetLayout descriptor_set_layout;
   VkDescriptorSet descriptor_set;
+  void *mapped;
   uint32_t size;
 };
 
@@ -137,11 +138,16 @@ struct ShaderStage {
   const char *entry_point;
 };
 
+struct GraphicsPipelineStages {
+  ShaderStage vertex_shader;
+  ShaderStage fragment_shader;
+};
+
 struct PipelineConfig {
   // pipeline create info
-  ShaderStage *stages;
+  ShaderStage stages[MAX_SHADER_STAGE_COUNT];
   size_t stage_count;
-  VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info;
+  const VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info;
   VkRenderPass render_pass;
   VkPipelineLayout pipeline_layout;
 
@@ -192,12 +198,12 @@ extern const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT];
 
 VulkanContext create_vulkan_context(const char *title);
 void destroy_vulkan_context(VulkanContext *);
-VulkanBuffer create_buffer_explicit(VulkanContext *context,
+VulkanBuffer create_buffer_explicit(const VulkanContext *context,
                                     VkBufferUsageFlags usage, VkDeviceSize size,
                                     VkMemoryPropertyFlags properties);
-VulkanBuffer create_buffer(VulkanContext *context, BufferType buffer_type,
+VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type,
                            VkDeviceSize size);
-void destroy_vulkan_buffer(VulkanContext *context, VulkanBuffer buffer);
+void destroy_vulkan_buffer(const VulkanContext *context, VulkanBuffer buffer);
 void write_to_vulkan_buffer(VulkanContext *context, void *src_data,
                             VkDeviceSize size, VkDeviceSize offset,
                             VulkanBuffer vulkan_buffer);
@@ -211,12 +217,14 @@ VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
                                     VkPipelineCache pipeline_cache);
 
 bool begin_frame(VulkanContext *context);
-VkCommandBuffer begin_command_buffer(VulkanContext *context);
+VkCommandBuffer begin_command_buffer(const VulkanContext *context);
 ViewportState create_viewport_state(VkExtent2D swapchain_extent,
                                     VkOffset2D offset);
-void begin_render_pass(VulkanContext *context, VkCommandBuffer command_buffer,
-                       VkClearValue clear_value, VkOffset2D offset);
-void submit_and_present(VulkanContext *context, VkCommandBuffer command_buffer);
+void begin_render_pass(const VulkanContext *context,
+                       VkCommandBuffer command_buffer, VkClearValue clear_value,
+                       VkOffset2D offset);
+void submit_and_present(const VulkanContext *context,
+                        VkCommandBuffer command_buffer);
 
 VkPipelineVertexInputStateCreateInfo create_vertex_input_state(
     uint32_t binding_description_count,
@@ -248,23 +256,36 @@ void update_uniform_descriptor_sets(VkDevice device, VkBuffer buffer,
                                     VkDescriptorSet descriptor_set,
                                     uint32_t binding);
 
-StagingArena create_staging_arena(VulkanContext *context, uint32_t total_size);
-uint32_t stage_data_explicit(VulkanContext *context, StagingArena *arena,
+StagingArena create_staging_arena(const VulkanContext *context,
+                                  uint32_t total_size);
+uint32_t stage_data_explicit(const VulkanContext *context, StagingArena *arena,
                              void *data, uint32_t size, VkBuffer destination,
                              uint32_t dst_offset);
-uint32_t stage_data_auto(VulkanContext *context, StagingArena *arena,
+uint32_t stage_data_auto(const VulkanContext *context, StagingArena *arena,
                          void *data, uint32_t size, VkBuffer destination);
 
 #define STAGE_ARRAY(context, arena, array, destination)                        \
   (stage_data_auto(context, arena, array, sizeof(array), destination))
 
-void flush_staging_arena(VulkanContext *context, StagingArena *arena);
+void flush_staging_arena(const VulkanContext *context, StagingArena *arena);
 ShaderStage create_shader_stage(VkShaderModule module,
                                 VkShaderStageFlagBits stage,
                                 const char *entry_point);
 
-UniformBuffer create_uniform_buffer(VulkanContext *context,
+UniformBuffer create_uniform_buffer(const VulkanContext *context,
                                     uint32_t buffer_size,
                                     VkDescriptorPool descriptor_pool);
-void destroy_uniform_buffer(VulkanContext *context,
+
+UniformBuffer create_dynamic_uniform_buffer(const VulkanContext *context,
+                                            uint32_t buffer_size,
+                                            VkDescriptorPool descriptor_pool);
+
+void destroy_uniform_buffer(const VulkanContext *context,
                             UniformBuffer *uniform_buffer);
+
+void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
+                             uint32_t size);
+
+PipelineConfig create_default_graphics_pipeline_config(
+    const VulkanContext *context, const GraphicsPipelineStages shader_stages,
+    VertexLayoutID layout_id, VkPipelineLayout pipeline_layout);

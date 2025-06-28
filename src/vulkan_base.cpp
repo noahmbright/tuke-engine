@@ -50,6 +50,7 @@ const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT] = {
          .binding_descriptions[0] = {.binding = 0,
                                      .stride = 6 * sizeof(float),
                                      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
+
     [VERTEX_LAYOUT_POSITION_NORMAL_UV] =
         {.attribute_description_count = 3,
          .attribute_descriptions[0] =
@@ -1034,7 +1035,7 @@ uint32_t find_memory_type(VkPhysicalDevice physical_device,
   exit(1);
 }
 
-VulkanBuffer create_buffer_explicit(VulkanContext *context,
+VulkanBuffer create_buffer_explicit(const VulkanContext *context,
                                     VkBufferUsageFlags usage, VkDeviceSize size,
                                     VkMemoryPropertyFlags properties) {
   VulkanBuffer vulkan_buffer;
@@ -1083,7 +1084,7 @@ VulkanBuffer create_buffer_explicit(VulkanContext *context,
   return vulkan_buffer;
 }
 
-VulkanBuffer create_buffer(VulkanContext *context, BufferType buffer_type,
+VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type,
                            VkDeviceSize size) {
   switch (buffer_type) {
   case BUFFER_TYPE_VERTEX: {
@@ -1129,7 +1130,7 @@ VulkanBuffer create_buffer(VulkanContext *context, BufferType buffer_type,
   }
 }
 
-void write_to_vulkan_buffer(VulkanContext *context, void *src_data,
+void write_to_vulkan_buffer(const VulkanContext *context, void *src_data,
                             VkDeviceSize size, VkDeviceSize offset,
                             VulkanBuffer vulkan_buffer) {
   if (!(vulkan_buffer.memory_property_flags &
@@ -1172,12 +1173,12 @@ void write_to_vulkan_buffer(VulkanContext *context, void *src_data,
   vkUnmapMemory(context->device, vulkan_buffer.memory);
 }
 
-void destroy_vulkan_buffer(VulkanContext *context, VulkanBuffer buffer) {
+void destroy_vulkan_buffer(const VulkanContext *context, VulkanBuffer buffer) {
   vkDestroyBuffer(context->device, buffer.buffer, NULL);
   vkFreeMemory(context->device, buffer.memory, NULL);
 }
 
-VkCommandBuffer begin_single_use_command_buffer(VulkanContext *context) {
+VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context) {
   VkCommandBufferAllocateInfo allocate_info;
   allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   allocate_info.pNext = 0;
@@ -1201,7 +1202,7 @@ VkCommandBuffer begin_single_use_command_buffer(VulkanContext *context) {
   return command_buffer;
 }
 
-void end_single_use_command_buffer(VulkanContext *context,
+void end_single_use_command_buffer(const VulkanContext *context,
                                    VkCommandBuffer command_buffer) {
   VK_CHECK(vkEndCommandBuffer(command_buffer),
            "end_single_use_command_buffer: failed to vkEndCommandBuffer");
@@ -1534,7 +1535,7 @@ bool begin_frame(VulkanContext *context) {
   return true;
 }
 
-VkCommandBuffer begin_command_buffer(VulkanContext *context) {
+VkCommandBuffer begin_command_buffer(const VulkanContext *context) {
   VkCommandBuffer command_buffer =
       context->graphics_command_buffers[context->image_index];
 
@@ -1552,8 +1553,9 @@ VkCommandBuffer begin_command_buffer(VulkanContext *context) {
 
 // potentially rename to begin_default_render_pass
 // leaves open possibility of rendering to other framebuffers
-void begin_render_pass(VulkanContext *context, VkCommandBuffer command_buffer,
-                       VkClearValue clear_value, VkOffset2D offset) {
+void begin_render_pass(const VulkanContext *context,
+                       VkCommandBuffer command_buffer, VkClearValue clear_value,
+                       VkOffset2D offset) {
   VkRenderPassBeginInfo render_pass_begin_info;
   render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   render_pass_begin_info.pNext = NULL;
@@ -1568,7 +1570,7 @@ void begin_render_pass(VulkanContext *context, VkCommandBuffer command_buffer,
                        VK_SUBPASS_CONTENTS_INLINE);
 }
 
-void submit_and_present(VulkanContext *context,
+void submit_and_present(const VulkanContext *context,
                         VkCommandBuffer command_buffer) {
 
   VkSubmitInfo submit_info;
@@ -1658,6 +1660,27 @@ struct FloatUniformBuffer {
   float x;
 };
 
+PipelineConfig create_default_graphics_pipeline_config(
+    const VulkanContext *context, const GraphicsPipelineStages shader_stages,
+    VertexLayoutID layout_id, VkPipelineLayout pipeline_layout) {
+  PipelineConfig pipeline_config;
+  pipeline_config.stages[0] = shader_stages.vertex_shader;
+  pipeline_config.stages[1] = shader_stages.fragment_shader;
+  pipeline_config.stage_count = 2;
+  pipeline_config.vertex_input_state_create_info =
+      &context->vertex_layouts[layout_id];
+  pipeline_config.render_pass = context->render_pass;
+  pipeline_config.pipeline_layout = pipeline_layout;
+  pipeline_config.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  pipeline_config.primitive_restart_enabled = VK_FALSE;
+  pipeline_config.polygon_mode = VK_POLYGON_MODE_FILL;
+  pipeline_config.cull_mode = VK_CULL_MODE_NONE;
+  pipeline_config.front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  pipeline_config.sample_count_flag = VK_SAMPLE_COUNT_1_BIT;
+  pipeline_config.blend_mode = BLEND_MODE_ALPHA;
+  return pipeline_config;
+}
+
 // TODO VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
 VkDescriptorPool create_descriptor_pool(VkDevice device,
                                         const VkDescriptorPoolSize *pool_sizes,
@@ -1741,7 +1764,8 @@ void update_uniform_descriptor_sets(VkDevice device, VkBuffer buffer,
   vkUpdateDescriptorSets(device, 1, &write_descriptor_set, 0, NULL);
 }
 
-StagingArena create_staging_arena(VulkanContext *context, uint32_t total_size) {
+StagingArena create_staging_arena(const VulkanContext *context,
+                                  uint32_t total_size) {
   StagingArena staging_arena;
   VulkanBuffer staging_buffer =
       create_buffer(context, BUFFER_TYPE_STAGING, total_size);
@@ -1755,7 +1779,7 @@ StagingArena create_staging_arena(VulkanContext *context, uint32_t total_size) {
 
 // TODO alignment padding?
 // add handle with size, usage, offset, instead of just returning offset?
-uint32_t stage_data_explicit(VulkanContext *context, StagingArena *arena,
+uint32_t stage_data_explicit(const VulkanContext *context, StagingArena *arena,
                              void *data, uint32_t size, VkBuffer destination,
                              uint32_t dst_offset) {
   assert(arena->offset + size <= arena->total_size);
@@ -1776,13 +1800,13 @@ uint32_t stage_data_explicit(VulkanContext *context, StagingArena *arena,
   return written_data_offset;
 }
 
-uint32_t stage_data_auto(VulkanContext *context, StagingArena *arena,
+uint32_t stage_data_auto(const VulkanContext *context, StagingArena *arena,
                          void *data, uint32_t size, VkBuffer destination) {
   return stage_data_explicit(context, arena, data, size, destination,
                              arena->offset);
 }
 
-void flush_staging_arena(VulkanContext *context, StagingArena *arena) {
+void flush_staging_arena(const VulkanContext *context, StagingArena *arena) {
   VkCommandBuffer command_buffer = begin_single_use_command_buffer(context);
 
   if (arena->num_copy_regions == 0) {
@@ -1821,15 +1845,19 @@ ShaderStage create_shader_stage(VkShaderModule module,
   return shader_stage;
 }
 
-UniformBuffer create_uniform_buffer_explicit(
-    VulkanContext *context, uint32_t binding, VkShaderStageFlags stage_flags,
-    uint32_t descriptor_count, uint32_t buffer_size, uint32_t binding_count,
-    VkDescriptorPool descriptor_pool) {
+UniformBuffer
+create_uniform_buffer_explicit(const VulkanContext *context, uint32_t binding,
+                               VkShaderStageFlags stage_flags,
+                               uint32_t descriptor_count, uint32_t buffer_size,
+                               uint32_t binding_count,
+                               VkDescriptorPool descriptor_pool, bool dynamic) {
   UniformBuffer uniform_buffer;
 
   VkDescriptorSetLayoutBinding ubo_layout_binding;
   ubo_layout_binding.binding = binding;
-  ubo_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  ubo_layout_binding.descriptorType =
+      dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
+              : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   ubo_layout_binding.descriptorCount = descriptor_count;
   ubo_layout_binding.stageFlags = stage_flags;
   ubo_layout_binding.pImmutableSamplers = NULL;
@@ -1852,17 +1880,39 @@ UniformBuffer create_uniform_buffer_explicit(
 }
 
 // TODO better understand bindings and what is necessary
-UniformBuffer create_uniform_buffer(VulkanContext *context,
+UniformBuffer create_uniform_buffer(const VulkanContext *context,
                                     uint32_t buffer_size,
                                     VkDescriptorPool descriptor_pool) {
-  return create_uniform_buffer_explicit(
+  UniformBuffer uniform_buffer = create_uniform_buffer_explicit(
       context, 0, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT, 1,
-      buffer_size, 1, descriptor_pool);
+      buffer_size, 1, descriptor_pool, false);
+
+  vkMapMemory(context->device, uniform_buffer.vulkan_buffer.memory, 0,
+              buffer_size, 0, &uniform_buffer.mapped);
+
+  return uniform_buffer;
 }
 
-void destroy_uniform_buffer(VulkanContext *context,
+// TODO finish when I actually need dynamic buffers
+UniformBuffer create_dynamic_uniform_buffer(const VulkanContext *context,
+                                            uint32_t c_struct_size,
+                                            VkDescriptorPool descriptor_pool) {
+
+  UniformBuffer uniform_buffer = create_uniform_buffer_explicit(
+      context, 0, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT, 1,
+      c_struct_size, 1, descriptor_pool, true);
+
+  return uniform_buffer;
+}
+
+void destroy_uniform_buffer(const VulkanContext *context,
                             UniformBuffer *uniform_buffer) {
   vkDestroyDescriptorSetLayout(context->device,
                                uniform_buffer->descriptor_set_layout, NULL);
   destroy_vulkan_buffer(context, uniform_buffer->vulkan_buffer);
+}
+
+void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
+                             uint32_t size) {
+  memcpy(uniform_buffer->mapped, data, size);
 }
