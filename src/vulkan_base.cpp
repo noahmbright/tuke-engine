@@ -1804,6 +1804,7 @@ uint32_t stage_data_explicit(const VulkanContext *context, StagingArena *arena,
   copy_region.srcOffset = arena->offset;
   copy_region.dstOffset = dst_offset;
   copy_region.size = size;
+
   arena->copy_regions[arena->num_copy_regions] = copy_region;
   arena->destination_buffers[arena->num_copy_regions] = destination;
   arena->num_copy_regions++;
@@ -1821,6 +1822,7 @@ uint32_t stage_data_auto(const VulkanContext *context, StagingArena *arena,
 }
 
 void flush_staging_arena(const VulkanContext *context, StagingArena *arena) {
+
   VkCommandBuffer command_buffer = begin_single_use_command_buffer(context);
 
   if (arena->num_copy_regions == 0) {
@@ -1838,6 +1840,7 @@ void flush_staging_arena(const VulkanContext *context, StagingArena *arena) {
     vkCmdCopyBuffer(command_buffer, arena->buffer.buffer, current_destination,
                     i - current_batch_start,
                     arena->copy_regions + current_batch_start);
+
     current_destination = arena->destination_buffers[i];
     current_batch_start = i;
   }

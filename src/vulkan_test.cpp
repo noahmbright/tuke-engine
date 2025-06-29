@@ -85,6 +85,7 @@ int main() {
   VulkanBuffer index_buffer =
       create_buffer(&context, BUFFER_TYPE_INDEX, unit_square_indices_size);
 
+  // TODO clean up buffering to several destinations
   StagingArena staging_arena = create_staging_arena(&context, total_size);
   uint32_t triangle_offset = STAGE_ARRAY(
       &context, &staging_arena, triangle_vertices, vertex_buffer.buffer);
@@ -92,11 +93,14 @@ int main() {
                                        square_vertices, vertex_buffer.buffer);
   uint32_t unit_square_position_offset = STAGE_ARRAY(
       &context, &staging_arena, unit_square_positions, vertex_buffer.buffer);
-  uint32_t unit_square_indices_offset = STAGE_ARRAY(
-      &context, &staging_arena, unit_square_indices, vertex_buffer.buffer);
   uint32_t quad_positions_offset = STAGE_ARRAY(
       &context, &staging_arena, quad_positions, vertex_buffer.buffer);
+
+  uint32_t unit_square_indices_offset =
+      stage_data_explicit(&context, &staging_arena, unit_square_indices,
+                          sizeof(unit_square_indices), index_buffer.buffer, 0);
   flush_staging_arena(&context, &staging_arena);
+
   (void)unit_square_position_offset;
   (void)unit_square_indices_offset;
 
@@ -251,10 +255,15 @@ int main() {
                            &offset0);
     vkCmdBindVertexBuffers(command_buffer, 1, 1, &vertex_buffer.buffer,
                            &offset1);
+    vkCmdBindVertexBuffers(command_buffer, 1, 1, &vertex_buffer.buffer,
+                           &offset1);
+    vkCmdBindIndexBuffer(command_buffer, index_buffer.buffer, 0,
+                         VK_INDEX_TYPE_UINT16);
     vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             mvp_pipeline_layout, 0, 1,
                             &mvp_uniform_buffer.descriptor_set, 0, NULL);
-    vkCmdDraw(command_buffer, 4, instance_count, 0, 0);
+    // vkCmdDraw(command_buffer, 4, instance_count, 0, 0);
+    vkCmdDrawIndexed(command_buffer, 6, instance_count, 0, 0, 0);
 
     vkCmdEndRenderPass(command_buffer);
     VK_CHECK(vkEndCommandBuffer(command_buffer),
