@@ -1,11 +1,10 @@
 #pragma once
 
 #include "renderer.h"
+#include "tuke_engine.h"
 #include "vulkan/vulkan_core.h"
-#include <cstdio>
-#include <cstdlib>
-#include <iostream>
-#include <vector>
+#include <stdio.h>
+#include <stdlib.h>
 #define GLFW_INCLUDE_VULKAN
 #include "GLFW/glfw3.h"
 #include "glm/glm.hpp"
@@ -20,6 +19,12 @@
 #define MAX_COPY_REGIONS (32)
 #define MAX_VERTEX_BINDINGS (4)
 #define MAX_VERTEX_ATTRIBUTES (4)
+
+#define MAX_LAYOUT_BINDINGS (4)
+#define MAX_DESCRIPTOR_WRITES (4)
+#define MAX_DESCRIPTOR_COPIES (4)
+#define MAX_DESCRIPTOR_BUFFER_INFOS (4)
+#define MAX_DESCRIPTOR_IMAGE_INFOS (4)
 
 #define VK_CHECK(result, fmt)                                                  \
   do {                                                                         \
@@ -53,7 +58,7 @@ struct QueueFamilyIndices {
 struct SwapchainStorage {
   bool use_static;
 
-  uint32_t image_count;
+  u32 image_count;
   union {
     struct {
       VkImage images[NUM_SWAPCHAIN_IMAGES];
@@ -74,7 +79,7 @@ struct VulkanContext {
   VkQueue graphics_queue;
   VkQueue present_queue;
   VkQueue compute_queue;
-  uint32_t image_index;
+  u32 image_index;
 
   VkSurfaceCapabilitiesKHR surface_capabilities;
   VkSwapchainKHR swapchain;
@@ -85,7 +90,7 @@ struct VulkanContext {
   VkFramebuffer framebuffers[NUM_SWAPCHAIN_IMAGES];
 
   FrameSyncObjects frame_sync_objects[MAX_FRAMES_IN_FLIGHT];
-  uint32_t current_frame;
+  u32 current_frame;
   uint8_t current_frame_index;
 
   VkCommandBuffer graphics_command_buffers[NUM_SWAPCHAIN_IMAGES];
@@ -119,10 +124,8 @@ struct VulkanBuffer {
 
 struct UniformBuffer {
   VulkanBuffer vulkan_buffer;
-  VkDescriptorSetLayout descriptor_set_layout;
-  VkDescriptorSet descriptor_set;
   void *mapped;
-  uint32_t size;
+  u32 size;
 };
 
 struct ViewportState {
@@ -178,11 +181,11 @@ enum BufferType {
 
 struct StagingArena {
   VulkanBuffer buffer;
-  uint32_t total_size;
+  u32 total_size;
   VkBuffer destination_buffers[MAX_COPY_REGIONS];
   VkBufferCopy copy_regions[MAX_COPY_REGIONS];
-  uint32_t num_copy_regions;
-  uint32_t offset;
+  u32 num_copy_regions;
+  u32 offset;
 };
 
 struct VulkanVertexLayout {
@@ -203,6 +206,30 @@ struct VertexLayoutBuilder {
       attribute_descriptions[MAX_VERTEX_ATTRIBUTES];
 };
 
+struct DescriptorSetBuilder {
+  VkDevice device;
+  VkDescriptorSetLayout descriptor_set_layout;
+  VkDescriptorSetLayoutBinding layout_bindings[MAX_LAYOUT_BINDINGS];
+  u32 binding_count;
+
+  u32 write_descriptor_count;
+  VkWriteDescriptorSet descriptor_writes[MAX_DESCRIPTOR_WRITES];
+  u32 copy_descriptor_count;
+  VkCopyDescriptorSet descriptor_copies[MAX_DESCRIPTOR_COPIES];
+
+  u32 buffer_info_count;
+  VkDescriptorBufferInfo descriptor_buffer_infos[MAX_DESCRIPTOR_BUFFER_INFOS];
+  u32 image_info_count;
+  VkDescriptorImageInfo descriptor_image_infos[MAX_DESCRIPTOR_IMAGE_INFOS];
+};
+
+struct VulkanTexture {
+  VkImage image;
+  u32 height, width;
+  VkDeviceMemory device_memory;
+  VkImageView image_view;
+};
+
 extern const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT];
 
 VulkanContext create_vulkan_context(const char *title);
@@ -216,10 +243,10 @@ void destroy_vulkan_buffer(const VulkanContext *context, VulkanBuffer buffer);
 void write_to_vulkan_buffer(VulkanContext *context, void *src_data,
                             VkDeviceSize size, VkDeviceSize offset,
                             VulkanBuffer vulkan_buffer);
-VkCommandBuffer begin_single_use_command_buffer(VulkanContext *context);
-void end_single_use_command_buffer(VulkanContext *context,
+VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context);
+void end_single_use_command_buffer(const VulkanContext *context,
                                    VkCommandBuffer command_buffer);
-VkShaderModule create_shader_module(VkDevice device, const uint32_t *code,
+VkShaderModule create_shader_module(VkDevice device, const u32 *code,
                                     size_t code_size);
 
 VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
@@ -236,42 +263,35 @@ void submit_and_present(const VulkanContext *context,
                         VkCommandBuffer command_buffer);
 
 VkPipelineVertexInputStateCreateInfo create_vertex_input_state(
-    uint32_t binding_description_count,
+    u32 binding_description_count,
     const VkVertexInputBindingDescription *binding_descriptions,
-    uint32_t attribute_description_count,
+    u32 attribute_description_count,
     const VkVertexInputAttributeDescription *attribute_descriptions);
 
 VkPipelineLayout
 create_pipeline_layout(VkDevice device,
                        const VkDescriptorSetLayout *descriptor_set_layout,
-                       uint32_t set_layout_count);
+                       u32 set_layout_count);
 
 VkDescriptorPool create_descriptor_pool(VkDevice device,
                                         const VkDescriptorPoolSize *pool_sizes,
-                                        uint32_t pool_size_count,
-                                        uint32_t max_sets);
+                                        u32 pool_size_count, u32 max_sets);
 
 VkDescriptorSet
 create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool,
-                      VkDescriptorSetLayout descriptor_set_layout);
+                      VkDescriptorSetLayout *descriptor_set_layout);
 
 VkDescriptorSetLayout
 create_descriptor_set_layout(VkDevice device,
                              const VkDescriptorSetLayoutBinding *bindings,
-                             uint32_t binding_count);
+                             u32 binding_count);
 
-void update_uniform_descriptor_sets(VkDevice device, VkBuffer buffer,
-                                    VkDeviceSize offset, VkDeviceSize range,
-                                    VkDescriptorSet descriptor_set,
-                                    uint32_t binding);
-
-StagingArena create_staging_arena(const VulkanContext *context,
-                                  uint32_t total_size);
-uint32_t stage_data_explicit(const VulkanContext *context, StagingArena *arena,
-                             void *data, uint32_t size, VkBuffer destination,
-                             uint32_t dst_offset);
-uint32_t stage_data_auto(const VulkanContext *context, StagingArena *arena,
-                         void *data, uint32_t size, VkBuffer destination);
+StagingArena create_staging_arena(const VulkanContext *context, u32 total_size);
+u32 stage_data_explicit(const VulkanContext *context, StagingArena *arena,
+                        void *data, u32 size, VkBuffer destination,
+                        u32 dst_offset);
+u32 stage_data_auto(const VulkanContext *context, StagingArena *arena,
+                    void *data, u32 size, VkBuffer destination);
 
 #define STAGE_ARRAY(context, arena, array, destination)                        \
   (stage_data_auto(context, arena, array, sizeof(array), destination))
@@ -281,19 +301,16 @@ ShaderStage create_shader_stage(VkShaderModule module,
                                 VkShaderStageFlagBits stage,
                                 const char *entry_point);
 
+// TODO abstract over dynamic uniform buffers
 UniformBuffer create_uniform_buffer(const VulkanContext *context,
-                                    uint32_t buffer_size,
-                                    VkDescriptorPool descriptor_pool);
 
-UniformBuffer create_dynamic_uniform_buffer(const VulkanContext *context,
-                                            uint32_t buffer_size,
-                                            VkDescriptorPool descriptor_pool);
+                                    u32 buffer_size);
 
 void destroy_uniform_buffer(const VulkanContext *context,
                             UniformBuffer *uniform_buffer);
 
 void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
-                             uint32_t size);
+                             u32 size);
 
 PipelineConfig create_default_graphics_pipeline_config(
     const VulkanContext *context, const GraphicsPipelineStages shader_stages,
@@ -304,17 +321,47 @@ VkPipelineVertexInputStateCreateInfo
 get_common_vertex_input_state(VulkanContext *context, VertexLayoutID layout_id);
 
 VkVertexInputBindingDescription
-create_instanced_vertex_binding_description(uint32_t binding, uint32_t stride);
+create_instanced_vertex_binding_description(u32 binding, u32 stride);
 VkVertexInputAttributeDescription
-create_vertex_attribute_description(uint32_t location, uint32_t binding,
-                                    VkFormat format, uint32_t offset);
-VkVertexInputBindingDescription
-create_vertex_binding_description(uint32_t binding, uint32_t stride);
+create_vertex_attribute_description(u32 location, u32 binding, VkFormat format,
+                                    u32 offset);
+VkVertexInputBindingDescription create_vertex_binding_description(u32 binding,
+                                                                  u32 stride);
 
 VertexLayoutBuilder create_vertex_layout_builder();
-void push_vertex_binding(VertexLayoutBuilder *builder, uint32_t binding,
-                         uint32_t stride, VkVertexInputRate input_rate);
-void push_vertex_attribute(VertexLayoutBuilder *builder, uint32_t location,
-                           uint32_t binding, VkFormat format, uint32_t offset);
+void push_vertex_binding(VertexLayoutBuilder *builder, u32 binding, u32 stride,
+                         VkVertexInputRate input_rate);
+void push_vertex_attribute(VertexLayoutBuilder *builder, u32 location,
+                           u32 binding, VkFormat format, u32 offset);
 VkPipelineVertexInputStateCreateInfo
 build_vertex_input_state(VertexLayoutBuilder *builder);
+
+u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter,
+                     VkMemoryPropertyFlags properties);
+
+VulkanTexture create_vulkan_texture_from_file(VulkanContext *context,
+                                              const char *path);
+
+VulkanTexture load_vulkan_textures(VulkanContext *context, const char **paths,
+                                   u32 num_paths);
+
+void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
+
+VkSampler create_sampler(VkDevice device);
+
+VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(
+    u32 binding, VkShaderStageFlags stage_flags,
+    VkDescriptorType descriptor_type, u32 descriptor_count);
+
+DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context);
+
+VkDescriptorSet build_descriptor_set(DescriptorSetBuilder *builder,
+                                     VkDescriptorPool descriptor_pool);
+
+void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
+                                       UniformBuffer *uniform_buffer,
+                                       u32 binding, u32 descriptor_count,
+                                       VkShaderStageFlags stage_flags,
+                                       bool dynamic);
+
+void destroy_descriptor_set_builder(DescriptorSetBuilder *builder);

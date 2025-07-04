@@ -34,10 +34,39 @@ const char *read_file(const char *path, unsigned long *size) {
   return buffer;
 }
 
-unsigned load_texture(const char *path) {
+STBHandle load_texture_metadata(const char *path) {
+  STBHandle handle;
+  if (!stbi_info(path, &handle.width, &handle.height, &handle.n_channels)) {
+    fprintf(stderr, "load_texture_metadata: Failed to load %s", path);
+  }
+  handle.data = NULL;
+  return handle;
+}
+
+STBHandle load_texture(const char *path) {
+  STBHandle handle;
   stbi_set_flip_vertically_on_load(true);
-  int tex_w, tex_h, n_channels;
-  unsigned char *tex_data = stbi_load(path, &tex_w, &tex_h, &n_channels, 0);
+  handle.data =
+      stbi_load(path, &handle.width, &handle.height, &handle.n_channels, 4);
+  handle.n_channels = 4;
+  if (!handle.data) {
+    fprintf(stderr, "load_texture: Failed to stbi_load %s\n", path);
+    exit(1);
+  }
+  return handle;
+}
+
+void free_stb_handle(STBHandle *handle) {
+  if (handle->data) {
+    stbi_image_free(handle->data);
+  } else {
+    fprintf(stderr, "free_stb_handle: Tried to free NULL STBHandle");
+  }
+  handle->data = NULL;
+}
+
+unsigned load_texture_opengl(const char *path) {
+  STBHandle handle = load_texture(path);
 
   unsigned texture;
   glGenTextures(1, &texture);
@@ -47,14 +76,15 @@ unsigned load_texture(const char *path) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
                   GL_LINEAR_MIPMAP_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  if (tex_data) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, tex_w, tex_h, 0, GL_RGB,
-                 GL_UNSIGNED_BYTE, tex_data);
+  if (handle.data) {
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, handle.width, handle.height, 0,
+                 GL_RGB, GL_UNSIGNED_BYTE, handle.data);
     glGenerateMipmap(GL_TEXTURE_2D);
   } else {
     fprintf(stderr, "stbi_load returned nullptr\n");
   }
-  stbi_image_free(tex_data);
+
+  free_stb_handle(&handle);
 
   return texture;
 }

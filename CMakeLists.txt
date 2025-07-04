@@ -7,7 +7,7 @@ find_package(Vulkan REQUIRED)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 23)
-add_compile_options(-Wall -Wextra -Wpedantic -Fsanitize=address)
+add_compile_options(-g -Wall -Wextra -Wpedantic -Fsanitize=address)
 
 file(GLOB_RECURSE SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/gl.c

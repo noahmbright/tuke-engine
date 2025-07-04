@@ -1,5 +1,6 @@
 #include "vulkan_base.h"
 #include "renderer.h"
+#include "tuke_engine.h"
 #include "utils.h"
 
 // https://www.glfw.org/docs/latest/group__vulkan.html#ga9308f2acf6b5f6ff49cf0d4aa9ba1fab
@@ -20,13 +21,13 @@
 
 void destroy_swapchain(VulkanContext *context) {
   // framebuffers
-  for (uint32_t i = 0; i < context->swapchain_storage.image_count; ++i) {
+  for (u32 i = 0; i < context->swapchain_storage.image_count; ++i) {
     vkDestroyFramebuffer(context->device, context->framebuffers[i], NULL);
     context->framebuffers[i] = VK_NULL_HANDLE;
   }
 
   // swapchain image views
-  for (uint32_t i = 0; i < context->swapchain_storage.image_count; i++) {
+  for (u32 i = 0; i < context->swapchain_storage.image_count; i++) {
     if (context->swapchain_storage.use_static) {
       vkDestroyImageView(
           context->device,
@@ -150,7 +151,7 @@ VkInstance create_instance(const char *name) {
   application_info.apiVersion = VK_API_VERSION_1_3;
 
   // https://www.glfw.org/docs/latest/vulkan_guide.html#vulkan_ext
-  uint32_t glfw_extension_count;
+  u32 glfw_extension_count;
   const char **glfw_extensions =
       glfwGetRequiredInstanceExtensions(&glfw_extension_count);
   if (glfw_extensions == NULL) {
@@ -163,21 +164,21 @@ VkInstance create_instance(const char *name) {
   const char *extra_extensions[] = {
       VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
   };
-  const uint32_t extra_extension_count = 1;
+  const u32 extra_extension_count = 1;
   const char **validation_layers = {};
-  const uint32_t layer_count = 0;
+  const u32 layer_count = 0;
 #else
   const char *extra_extensions[] = {
       VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
       VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
   };
-  const uint32_t extra_extension_count = 2;
+  const u32 extra_extension_count = 2;
   const char *validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
-  const uint32_t layer_count = 1;
+  const u32 layer_count = 1;
 #endif
 
-  const uint32_t MAX_EXTENSIONS = 16;
-  const uint32_t total_extension_count =
+  const u32 MAX_EXTENSIONS = 16;
+  const u32 total_extension_count =
       extra_extension_count + glfw_extension_count;
   if (total_extension_count > MAX_EXTENSIONS) {
     fprintf(stderr,
@@ -191,7 +192,7 @@ VkInstance create_instance(const char *name) {
   memcpy(enabled_extensions, glfw_extensions,
          sizeof(char *) * glfw_extension_count);
 
-  for (uint32_t i = 0; i < extra_extension_count; i++) {
+  for (u32 i = 0; i < extra_extension_count; i++) {
     enabled_extensions[glfw_extension_count + i] = extra_extensions[i];
   }
 
@@ -246,9 +247,9 @@ VkSurfaceKHR create_surface(VkInstance instance, GLFWwindow *window) {
   return surface;
 }
 
-uint32_t get_physical_devices(VkInstance instance,
-                              VkPhysicalDevice *physical_devices) {
-  uint32_t device_count;
+u32 get_physical_devices(VkInstance instance,
+                         VkPhysicalDevice *physical_devices) {
+  u32 device_count;
   VK_CHECK(vkEnumeratePhysicalDevices(instance, &device_count, NULL),
            "get_physical_devices, failed to vkEnumeratePhysicalDevices");
   if (device_count == 0) {
@@ -274,7 +275,7 @@ uint32_t get_physical_devices(VkInstance instance,
 QueueFamilyIndices
 queue_family_indices_from_physical_device(VkPhysicalDevice physical_device,
                                           VkSurfaceKHR surface) {
-  uint32_t queue_family_count = 0;
+  u32 queue_family_count = 0;
   vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count,
                                            NULL);
 
@@ -294,7 +295,7 @@ queue_family_indices_from_physical_device(VkPhysicalDevice physical_device,
     queue_family_count = MAX_QUEUE_FAMILIES;
   }
 
-  for (uint32_t i = 0; i < queue_family_count; i++) {
+  for (u32 i = 0; i < queue_family_count; i++) {
     if (queue_families[i].queueCount <= 0) {
       continue;
     }
@@ -336,11 +337,10 @@ VkPhysicalDevice pick_physical_device(VkInstance instance,
                                       VkSurfaceKHR surface) {
 
   VkPhysicalDevice physical_devices[MAX_PHYSICAL_DEVICES];
-  uint32_t num_physical_devices =
-      get_physical_devices(instance, physical_devices);
+  u32 num_physical_devices = get_physical_devices(instance, physical_devices);
 
   VkPhysicalDevice res = NULL;
-  for (uint32_t i = 0; i < num_physical_devices; i++) {
+  for (u32 i = 0; i < num_physical_devices; i++) {
     VkPhysicalDevice physical_device = physical_devices[i];
     *queue_family_indices =
         queue_family_indices_from_physical_device(physical_device, surface);
@@ -366,18 +366,18 @@ VkPhysicalDevice pick_physical_device(VkInstance instance,
   return res;
 }
 
-uint32_t get_unique_queue_infos(QueueFamilyIndices queue_family_indices,
-                                VkDeviceQueueCreateInfo *out_infos) {
-  uint32_t num_unique_queue_families = 0;
-  uint32_t indices[NUM_QUEUE_FAMILY_INDICES] = {
-      (uint32_t)queue_family_indices.compute_family,
-      (uint32_t)queue_family_indices.graphics_family,
-      (uint32_t)queue_family_indices.present_family,
+u32 get_unique_queue_infos(QueueFamilyIndices queue_family_indices,
+                           VkDeviceQueueCreateInfo *out_infos) {
+  u32 num_unique_queue_families = 0;
+  u32 indices[NUM_QUEUE_FAMILY_INDICES] = {
+      (u32)queue_family_indices.compute_family,
+      (u32)queue_family_indices.graphics_family,
+      (u32)queue_family_indices.present_family,
   };
 
-  for (uint32_t i = 0; i < NUM_QUEUE_FAMILY_INDICES; i++) {
+  for (u32 i = 0; i < NUM_QUEUE_FAMILY_INDICES; i++) {
     bool is_duplicate = false;
-    for (uint32_t j = 0; j < i; j++) {
+    for (u32 j = 0; j < i; j++) {
       if (indices[i] == indices[j]) {
         is_duplicate = true;
         break;
@@ -407,7 +407,7 @@ VkDevice create_device(QueueFamilyIndices queue_family_indices,
                        VkPhysicalDevice physical_device) {
 
   VkDeviceQueueCreateInfo queue_create_infos[NUM_QUEUE_FAMILY_INDICES];
-  uint32_t num_unique_queue_families =
+  u32 num_unique_queue_families =
       get_unique_queue_infos(queue_family_indices, queue_create_infos);
 
   const char *device_extensions[] = {
@@ -437,7 +437,7 @@ VkDevice create_device(QueueFamilyIndices queue_family_indices,
   return device;
 }
 
-uint32_t clamp(uint32_t x, uint32_t min, uint32_t max) {
+u32 clamp(u32 x, u32 min, u32 max) {
   if (x < min) {
     return min;
   }
@@ -450,8 +450,8 @@ uint32_t clamp(uint32_t x, uint32_t min, uint32_t max) {
 VkSurfaceFormatKHR get_surface_format(VkPhysicalDevice physical_device,
                                       VkSurfaceKHR surface) {
 
-  uint32_t format_count = 0;
-  const uint32_t max_format_count = 128;
+  u32 format_count = 0;
+  const u32 max_format_count = 128;
   vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count,
                                        NULL);
 
@@ -466,7 +466,7 @@ VkSurfaceFormatKHR get_surface_format(VkPhysicalDevice physical_device,
                                        formats);
 
   VkSurfaceFormatKHR surface_format = formats[0];
-  for (uint32_t i = 0; i < format_count; i++) {
+  for (u32 i = 0; i < format_count; i++) {
     if (formats[i].format == VK_FORMAT_B8G8R8A8_UNORM &&
         formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
       surface_format = formats[i];
@@ -513,14 +513,14 @@ VkSwapchainKHR create_swapchain(VkDevice device,
                                 VkSurfaceFormatKHR surface_format,
                                 VkSurfaceCapabilitiesKHR surface_capabilities,
                                 VkExtent2D swapchain_extent) {
-  uint32_t image_count = surface_capabilities.minImageCount + 1;
+  u32 image_count = surface_capabilities.minImageCount + 1;
   if (surface_capabilities.maxImageCount > 0 &&
       image_count > surface_capabilities.maxImageCount) {
     image_count = surface_capabilities.maxImageCount;
   }
 
-  uint32_t present_mode_count = 0;
-  const uint32_t max_present_mode_count = 16;
+  u32 present_mode_count = 0;
+  const u32 max_present_mode_count = 16;
   vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface,
                                             &present_mode_count, NULL);
   VkPresentModeKHR present_modes[max_present_mode_count];
@@ -531,16 +531,16 @@ VkSwapchainKHR create_swapchain(VkDevice device,
   if (present_mode_count > max_present_mode_count) {
     present_mode_count = max_present_mode_count;
   }
-  for (uint32_t i = 0; i < present_mode_count; i++) {
+  for (u32 i = 0; i < present_mode_count; i++) {
     if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
       present_mode = present_modes[i];
       break;
     }
   }
 
-  uint32_t queue_family_indices_array[] = {
-      (uint32_t)queue_family_indices.graphics_family,
-      (uint32_t)queue_family_indices.present_family,
+  u32 queue_family_indices_array[] = {
+      (u32)queue_family_indices.graphics_family,
+      (u32)queue_family_indices.present_family,
   };
 
   VkSwapchainCreateInfoKHR swapchain_create_info;
@@ -587,7 +587,7 @@ SwapchainStorage create_swapchain_storage(VkDevice device,
   SwapchainStorage storage;
   storage.use_static = true;
 
-  uint32_t swapchain_image_count;
+  u32 swapchain_image_count;
   VkResult result =
       vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, NULL);
 
@@ -612,7 +612,7 @@ SwapchainStorage create_swapchain_storage(VkDevice device,
 
   VK_CHECK(result, "get_swapchain_images: Failed to vkGetSwapchainImagesKHR");
 
-  for (uint32_t i = 0; i < swapchain_image_count; i++) {
+  for (u32 i = 0; i < swapchain_image_count; i++) {
     VkImageViewCreateInfo image_view_create_info;
     image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     image_view_create_info.pNext = NULL;
@@ -752,7 +752,7 @@ VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass render_pass,
 }
 
 void init_framebuffers(VulkanContext *context) {
-  for (uint32_t i = 0; i < context->swapchain_storage.image_count; i++) {
+  for (u32 i = 0; i < context->swapchain_storage.image_count; i++) {
     VkImageView view =
         context->swapchain_storage.use_static
             ? context->swapchain_storage.as.static_storage.image_views[i]
@@ -789,7 +789,7 @@ void create_frame_sync_objects(VkDevice device,
   fence_create_info.pNext = NULL;
   fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+  for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
     VK_CHECK_VARIADIC(
         vkCreateSemaphore(device, &semaphore_create_info, NULL,
                           &frame_sync_objects[i].image_available_semaphore),
@@ -811,7 +811,7 @@ void create_frame_sync_objects(VkDevice device,
   }
 }
 
-VkCommandPool create_command_pool(VkDevice device, uint32_t queue_family_index,
+VkCommandPool create_command_pool(VkDevice device, u32 queue_family_index,
                                   bool transient) {
   VkCommandPoolCreateInfo command_pool_create_info;
   command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -829,7 +829,7 @@ VkCommandPool create_command_pool(VkDevice device, uint32_t queue_family_index,
 }
 
 void allocate_command_buffers(VkDevice device, VkCommandPool command_pool,
-                              uint32_t command_buffer_count,
+                              u32 command_buffer_count,
                               VkCommandBuffer *command_buffers) {
   VkCommandBufferAllocateInfo allocate_info;
   allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -859,7 +859,7 @@ VkPipelineCache create_pipeline_cache(VkDevice device) {
 }
 
 VkVertexInputBindingDescription
-create_instanced_vertex_binding_description(uint32_t binding, uint32_t stride) {
+create_instanced_vertex_binding_description(u32 binding, u32 stride) {
   VkVertexInputBindingDescription description;
   description.binding = binding;
   description.stride = stride;
@@ -867,8 +867,8 @@ create_instanced_vertex_binding_description(uint32_t binding, uint32_t stride) {
   return description;
 }
 
-VkVertexInputBindingDescription
-create_vertex_binding_description(uint32_t binding, uint32_t stride) {
+VkVertexInputBindingDescription create_vertex_binding_description(u32 binding,
+                                                                  u32 stride) {
   VkVertexInputBindingDescription description;
   description.binding = binding;
   description.stride = stride;
@@ -877,8 +877,8 @@ create_vertex_binding_description(uint32_t binding, uint32_t stride) {
 }
 
 VkVertexInputAttributeDescription
-create_vertex_attribute_description(uint32_t location, uint32_t binding,
-                                    VkFormat format, uint32_t offset) {
+create_vertex_attribute_description(u32 location, u32 binding, VkFormat format,
+                                    u32 offset) {
   VkVertexInputAttributeDescription description;
   description.location = location;
   description.binding = binding;
@@ -1050,18 +1050,19 @@ VulkanContext create_vulkan_context(const char *title) {
   return context;
 }
 
-uint32_t find_memory_type(VkPhysicalDevice physical_device,
-                          uint32_t type_filter,
-                          VkMemoryPropertyFlags properties) {
+u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter,
+                     VkMemoryPropertyFlags properties) {
   VkPhysicalDeviceMemoryProperties mem_properties;
+
   vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_properties);
-  for (uint32_t i = 0; i < mem_properties.memoryTypeCount; i++) {
+  for (u32 i = 0; i < mem_properties.memoryTypeCount; i++) {
     if ((type_filter & (1 << i)) &&
         (mem_properties.memoryTypes[i].propertyFlags & properties) ==
             properties) {
       return i;
     }
   }
+
   fprintf(stderr, "Failed to find suitable memory type.\n");
   exit(1);
 }
@@ -1098,6 +1099,7 @@ VulkanBuffer create_buffer_explicit(const VulkanContext *context,
   memory_allocate_info.allocationSize = memory_requirements.size;
   memory_allocate_info.memoryTypeIndex = find_memory_type(
       context->physical_device, memory_requirements.memoryTypeBits, properties);
+
   VK_CHECK(vkAllocateMemory(context->device, &memory_allocate_info, NULL,
                             &vulkan_buffer.memory),
            "create_buffer: failed to vkAllocateMemory");
@@ -1254,11 +1256,12 @@ void end_single_use_command_buffer(const VulkanContext *context,
       "end_single_use_command_buffer: failed to vkQueueSubmit");
   VK_CHECK(vkQueueWaitIdle(context->graphics_queue),
            "end_single_use_command_buffer: failed to vkQueueWaitIdle");
+
   vkFreeCommandBuffers(context->device, context->transient_command_pool, 1,
                        &command_buffer);
 }
 
-VkShaderModule create_shader_module(VkDevice device, const uint32_t *code,
+VkShaderModule create_shader_module(VkDevice device, const u32 *code,
                                     size_t code_size) {
   VkShaderModuleCreateInfo shader_module_create_info;
   shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1406,7 +1409,7 @@ create_color_blend_attachment_state(BlendMode blend_mode) {
 }
 
 VkPipelineColorBlendStateCreateInfo create_color_blend_state(
-    uint32_t num_color_blend_attachments,
+    u32 num_color_blend_attachments,
     const VkPipelineColorBlendAttachmentState *color_blend_attachment_states) {
   VkPipelineColorBlendStateCreateInfo color_blend_state_create_info;
   color_blend_state_create_info.sType =
@@ -1445,7 +1448,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
 
   assert(config->stage_count <= MAX_SHADER_STAGE_COUNT);
   VkPipelineShaderStageCreateInfo stages[MAX_SHADER_STAGE_COUNT];
-  for (uint32_t i = 0; i < config->stage_count; i++) {
+  for (u32 i = 0; i < config->stage_count; i++) {
     stages[i] = create_shader_stage_info(config->stages[i].module,
                                          config->stages[i].stage,
                                          config->stages[i].entry_point);
@@ -1505,7 +1508,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
   graphics_pipeline_create_info.pDepthStencilState =
       &depth_stencil_state_create_info;
 
-  const uint32_t num_color_blend_attachments = 1;
+  const u32 num_color_blend_attachments = 1;
   VkPipelineColorBlendAttachmentState color_blend_state =
       create_color_blend_attachment_state(config->blend_mode);
   VkPipelineColorBlendStateCreateInfo color_blend_state_create_info =
@@ -1514,7 +1517,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
       &color_blend_state_create_info;
 
   // anticipating use of vkCmdSetViewport(), vkCmdSetScissor()
-  const uint32_t num_dynamic_states = 2;
+  const u32 num_dynamic_states = 2;
   VkDynamicState dynamic_states[num_dynamic_states] = {
       VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
   VkPipelineDynamicStateCreateInfo dynamic_state_create_info;
@@ -1648,9 +1651,9 @@ void submit_and_present(const VulkanContext *context,
 }
 
 VkPipelineVertexInputStateCreateInfo create_vertex_input_state(
-    uint32_t binding_description_count,
+    u32 binding_description_count,
     const VkVertexInputBindingDescription *binding_descriptions,
-    uint32_t attribute_description_count,
+    u32 attribute_description_count,
     const VkVertexInputAttributeDescription *attribute_descriptions) {
 
   VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info;
@@ -1676,7 +1679,7 @@ VkPipelineVertexInputStateCreateInfo create_vertex_input_state(
 VkPipelineLayout
 create_pipeline_layout(VkDevice device,
                        const VkDescriptorSetLayout *descriptor_set_layout,
-                       uint32_t set_layout_count) {
+                       u32 set_layout_count) {
 
   VkPipelineLayoutCreateInfo pipeline_layout_create_info;
   pipeline_layout_create_info.sType =
@@ -1698,8 +1701,7 @@ create_pipeline_layout(VkDevice device,
 // TODO VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
 VkDescriptorPool create_descriptor_pool(VkDevice device,
                                         const VkDescriptorPoolSize *pool_sizes,
-                                        uint32_t pool_size_count,
-                                        uint32_t max_sets) {
+                                        u32 pool_size_count, u32 max_sets) {
   VkDescriptorPoolCreateInfo descriptor_pool_create_info;
   descriptor_pool_create_info.sType =
       VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1718,14 +1720,15 @@ VkDescriptorPool create_descriptor_pool(VkDevice device,
 
 VkDescriptorSet
 create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool,
-                      VkDescriptorSetLayout descriptor_set_layout) {
+                      VkDescriptorSetLayout *descriptor_set_layout) {
+
   VkDescriptorSetAllocateInfo descriptor_set_allocate_info;
   descriptor_set_allocate_info.sType =
       VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
   descriptor_set_allocate_info.pNext = NULL;
   descriptor_set_allocate_info.descriptorPool = descriptor_pool;
   descriptor_set_allocate_info.descriptorSetCount = 1;
-  descriptor_set_allocate_info.pSetLayouts = &descriptor_set_layout;
+  descriptor_set_allocate_info.pSetLayouts = descriptor_set_layout;
 
   VkDescriptorSet descriptor_set;
   VK_CHECK(vkAllocateDescriptorSets(device, &descriptor_set_allocate_info,
@@ -1738,7 +1741,8 @@ create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool,
 VkDescriptorSetLayout
 create_descriptor_set_layout(VkDevice device,
                              const VkDescriptorSetLayoutBinding *bindings,
-                             uint32_t binding_count) {
+                             u32 binding_count) {
+
   VkDescriptorSetLayoutCreateInfo descriptor_set_layout_create_info;
   descriptor_set_layout_create_info.sType =
       VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1752,34 +1756,12 @@ create_descriptor_set_layout(VkDevice device,
       vkCreateDescriptorSetLayout(device, &descriptor_set_layout_create_info,
                                   NULL, &descriptor_set_layout),
       "create_descriptor_set_layout: failed to vkCreateDescriptorSetLayout");
+
   return descriptor_set_layout;
 }
 
-void update_uniform_descriptor_sets(VkDevice device, VkBuffer buffer,
-                                    VkDeviceSize offset, VkDeviceSize range,
-                                    VkDescriptorSet descriptor_set,
-                                    uint32_t binding) {
-  VkDescriptorBufferInfo descriptor_buffer_info;
-  descriptor_buffer_info.buffer = buffer;
-  descriptor_buffer_info.offset = offset;
-  descriptor_buffer_info.range = range;
-
-  VkWriteDescriptorSet write_descriptor_set;
-  write_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  write_descriptor_set.pNext = NULL;
-  write_descriptor_set.dstSet = descriptor_set;
-  write_descriptor_set.dstBinding = binding;
-  write_descriptor_set.dstArrayElement = 0;
-  write_descriptor_set.descriptorCount = 1;
-  write_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  write_descriptor_set.pImageInfo = NULL;
-  write_descriptor_set.pBufferInfo = &descriptor_buffer_info;
-  write_descriptor_set.pTexelBufferView = NULL;
-  vkUpdateDescriptorSets(device, 1, &write_descriptor_set, 0, NULL);
-}
-
 StagingArena create_staging_arena(const VulkanContext *context,
-                                  uint32_t total_size) {
+                                  u32 total_size) {
   StagingArena staging_arena;
   VulkanBuffer staging_buffer =
       create_buffer(context, BUFFER_TYPE_STAGING, total_size);
@@ -1793,12 +1775,12 @@ StagingArena create_staging_arena(const VulkanContext *context,
 
 // TODO alignment padding?
 // add handle with size, usage, offset, instead of just returning offset?
-uint32_t stage_data_explicit(const VulkanContext *context, StagingArena *arena,
-                             void *data, uint32_t size, VkBuffer destination,
-                             uint32_t dst_offset) {
+u32 stage_data_explicit(const VulkanContext *context, StagingArena *arena,
+                        void *data, u32 size, VkBuffer destination,
+                        u32 dst_offset) {
   assert(arena->offset + size <= arena->total_size);
   assert(arena->num_copy_regions < MAX_COPY_REGIONS);
-  uint32_t written_data_offset = arena->offset;
+  u32 written_data_offset = arena->offset;
 
   VkBufferCopy copy_region;
   copy_region.srcOffset = arena->offset;
@@ -1815,8 +1797,8 @@ uint32_t stage_data_explicit(const VulkanContext *context, StagingArena *arena,
   return written_data_offset;
 }
 
-uint32_t stage_data_auto(const VulkanContext *context, StagingArena *arena,
-                         void *data, uint32_t size, VkBuffer destination) {
+u32 stage_data_auto(const VulkanContext *context, StagingArena *arena,
+                    void *data, u32 size, VkBuffer destination) {
   return stage_data_explicit(context, arena, data, size, destination,
                              arena->offset);
 }
@@ -1830,9 +1812,9 @@ void flush_staging_arena(const VulkanContext *context, StagingArena *arena) {
   }
 
   VkBuffer current_destination = arena->destination_buffers[0];
-  uint32_t current_batch_start = 0;
+  u32 current_batch_start = 0;
 
-  for (uint32_t i = 1; i < arena->num_copy_regions; i++) {
+  for (u32 i = 1; i < arena->num_copy_regions; i++) {
     if (arena->destination_buffers[i] == current_destination) {
       continue;
     }
@@ -1862,75 +1844,53 @@ ShaderStage create_shader_stage(VkShaderModule module,
   return shader_stage;
 }
 
-UniformBuffer
-create_uniform_buffer_explicit(const VulkanContext *context, uint32_t binding,
-                               VkShaderStageFlags stage_flags,
-                               uint32_t descriptor_count, uint32_t buffer_size,
-                               uint32_t binding_count,
-                               VkDescriptorPool descriptor_pool, bool dynamic) {
+// binding: the binding stipulated in the shader
+// stage_flags: the flags indicating what shader stages will this layout binding
+// descriptor_type: flags for uniform, sampler, storage, etc
+// descriptor_count: if the shader allocates an array of the uniform, how many
+// TODO immutable samplers?
+VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(
+    u32 binding, VkShaderStageFlags stage_flags,
+    VkDescriptorType descriptor_type, u32 descriptor_count) {
+
+  VkDescriptorSetLayoutBinding layout_binding;
+
+  layout_binding.binding = binding;
+  layout_binding.descriptorType = descriptor_type;
+  layout_binding.descriptorCount = descriptor_count;
+  layout_binding.stageFlags = stage_flags;
+  layout_binding.pImmutableSamplers = NULL;
+
+  return layout_binding;
+}
+
+UniformBuffer create_uniform_buffer_explicit(const VulkanContext *context,
+                                             u32 buffer_size) {
+
   UniformBuffer uniform_buffer;
 
-  VkDescriptorSetLayoutBinding ubo_layout_binding;
-  ubo_layout_binding.binding = binding;
-  ubo_layout_binding.descriptorType =
-      dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
-              : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  ubo_layout_binding.descriptorCount = descriptor_count;
-  ubo_layout_binding.stageFlags = stage_flags;
-  ubo_layout_binding.pImmutableSamplers = NULL;
-
-  VkDescriptorSetLayout descriptor_set_layout = create_descriptor_set_layout(
-      context->device, &ubo_layout_binding, binding_count);
-  VkDescriptorSet descriptor_set = create_descriptor_set(
-      context->device, descriptor_pool, descriptor_set_layout);
-
-  VulkanBuffer vulkan_buffer =
+  uniform_buffer.vulkan_buffer =
       create_buffer(context, BUFFER_TYPE_UNIFORM, buffer_size);
-  update_uniform_descriptor_sets(context->device, vulkan_buffer.buffer, 0,
-                                 buffer_size, descriptor_set, 0);
-
-  uniform_buffer.vulkan_buffer = vulkan_buffer;
-  uniform_buffer.descriptor_set_layout = descriptor_set_layout;
-  uniform_buffer.descriptor_set = descriptor_set;
   uniform_buffer.size = buffer_size;
+
+  VK_CHECK(vkMapMemory(context->device, uniform_buffer.vulkan_buffer.memory, 0,
+                       buffer_size, 0, &uniform_buffer.mapped),
+           "create_uniform_buffer_explicit: failed to vkMapMemory");
+
   return uniform_buffer;
 }
-
-// TODO better understand bindings and what is necessary
 UniformBuffer create_uniform_buffer(const VulkanContext *context,
-                                    uint32_t buffer_size,
-                                    VkDescriptorPool descriptor_pool) {
-  UniformBuffer uniform_buffer = create_uniform_buffer_explicit(
-      context, 0, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT, 1,
-      buffer_size, 1, descriptor_pool, false);
-
-  vkMapMemory(context->device, uniform_buffer.vulkan_buffer.memory, 0,
-              buffer_size, 0, &uniform_buffer.mapped);
-
-  return uniform_buffer;
-}
-
-// TODO finish when I actually need dynamic buffers
-UniformBuffer create_dynamic_uniform_buffer(const VulkanContext *context,
-                                            uint32_t c_struct_size,
-                                            VkDescriptorPool descriptor_pool) {
-
-  UniformBuffer uniform_buffer = create_uniform_buffer_explicit(
-      context, 0, VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT, 1,
-      c_struct_size, 1, descriptor_pool, true);
-
-  return uniform_buffer;
+                                    u32 buffer_size) {
+  return create_uniform_buffer_explicit(context, buffer_size);
 }
 
 void destroy_uniform_buffer(const VulkanContext *context,
                             UniformBuffer *uniform_buffer) {
-  vkDestroyDescriptorSetLayout(context->device,
-                               uniform_buffer->descriptor_set_layout, NULL);
   destroy_vulkan_buffer(context, uniform_buffer->vulkan_buffer);
 }
 
 void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
-                             uint32_t size) {
+                             u32 size) {
   memcpy(uniform_buffer->mapped, data, size);
 }
 
@@ -1944,8 +1904,8 @@ VertexLayoutBuilder create_vertex_layout_builder() {
   return builder;
 }
 
-void push_vertex_binding(VertexLayoutBuilder *builder, uint32_t binding,
-                         uint32_t stride, VkVertexInputRate input_rate) {
+void push_vertex_binding(VertexLayoutBuilder *builder, u32 binding, u32 stride,
+                         VkVertexInputRate input_rate) {
   assert(builder->binding_description_count < MAX_VERTEX_BINDINGS);
 
   VkVertexInputBindingDescription *description =
@@ -1957,8 +1917,8 @@ void push_vertex_binding(VertexLayoutBuilder *builder, uint32_t binding,
   builder->binding_description_count++;
 }
 
-void push_vertex_attribute(VertexLayoutBuilder *builder, uint32_t location,
-                           uint32_t binding, VkFormat format, uint32_t offset) {
+void push_vertex_attribute(VertexLayoutBuilder *builder, u32 location,
+                           u32 binding, VkFormat format, u32 offset) {
 
   assert(builder->attribute_description_count < MAX_VERTEX_ATTRIBUTES);
 
@@ -1977,4 +1937,365 @@ build_vertex_input_state(VertexLayoutBuilder *builder) {
   return create_vertex_input_state(
       builder->binding_description_count, builder->binding_descriptions,
       builder->attribute_description_count, builder->attribute_descriptions);
+}
+
+// TODO format in the depth buffer chapter?
+void transition_image_layout(VulkanContext *context,
+                             VulkanTexture vulkan_texture,
+                             VkImageLayout old_layout,
+                             VkImageLayout new_layout) {
+
+  VkImageMemoryBarrier image_memory_barrier;
+  image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  image_memory_barrier.pNext = NULL;
+  image_memory_barrier.srcAccessMask = 0;
+  image_memory_barrier.dstAccessMask = 0;
+  image_memory_barrier.oldLayout = old_layout;
+  image_memory_barrier.newLayout = new_layout;
+  image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  image_memory_barrier.image = vulkan_texture.image;
+  image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  image_memory_barrier.subresourceRange.baseMipLevel = 0;
+  image_memory_barrier.subresourceRange.levelCount = 1;
+  image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+  image_memory_barrier.subresourceRange.layerCount = 1;
+
+  // TODO I don't yet understand these transition cases
+  VkPipelineStageFlags src_stage, dst_stage;
+  if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
+      new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+
+    image_memory_barrier.srcAccessMask = 0;
+    image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+    src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+  } else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+             new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+
+    image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+
+  } else {
+    assert(false && "Unsupported layout transition!");
+  }
+
+  VkCommandBuffer single_use_command_buffer =
+      begin_single_use_command_buffer(context);
+  // TODO what are all these arguments?
+  vkCmdPipelineBarrier(single_use_command_buffer, src_stage, dst_stage, 0, 0,
+                       NULL, 0, NULL, 1, &image_memory_barrier);
+  end_single_use_command_buffer(context, single_use_command_buffer);
+}
+
+// TODO how to handle reusing staging buffers?
+// Need to see usage when multiple textures are present
+// current idea: anticipate loading several textures at once, read from files,
+// pick one with max size, and allocate staging buffer with that size, and
+// stream the textures in one by one after that
+VulkanTexture create_vulkan_texture_from_file(VulkanContext *context,
+                                              const char *path,
+                                              VulkanBuffer staging_buffer,
+                                              void *ptr_to_mapped_memory) {
+
+  VulkanTexture vulkan_texture;
+  STBHandle stb_handle = load_texture(path);
+
+  // create image
+  // TODO better understand all these fields
+  // When do I need more samples? Need mipmap support
+  // don't understand queue families
+  // what is needed for a texture image vs other images?
+  VkImageCreateInfo texture_image_info;
+  texture_image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  texture_image_info.pNext = 0;
+  texture_image_info.flags = 0;
+  texture_image_info.imageType = VK_IMAGE_TYPE_2D;
+  // TODO fallback for HW where formats are not supported?
+  texture_image_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+  texture_image_info.extent.width = stb_handle.width;
+  texture_image_info.extent.height = stb_handle.height;
+  texture_image_info.extent.depth = 1;
+  texture_image_info.mipLevels = 1;
+  texture_image_info.arrayLayers = 1;
+  texture_image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+  texture_image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+  texture_image_info.usage =
+      VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  texture_image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  texture_image_info.queueFamilyIndexCount = 0;
+  texture_image_info.pQueueFamilyIndices = NULL;
+  texture_image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  VkImage image;
+  VK_CHECK(vkCreateImage(context->device, &texture_image_info, NULL, &image),
+           "failed to vkCreateImage");
+  vulkan_texture.image = image;
+
+  // create memory
+  VkMemoryRequirements memory_requirements;
+  vkGetImageMemoryRequirements(context->device, image, &memory_requirements);
+
+  VkMemoryAllocateInfo memory_allocate_info;
+  memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  memory_allocate_info.pNext = 0;
+  memory_allocate_info.allocationSize = memory_requirements.size;
+  memory_allocate_info.memoryTypeIndex = find_memory_type(
+      context->physical_device, memory_requirements.memoryTypeBits,
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+  VkDeviceMemory device_memory;
+  VK_CHECK(vkAllocateMemory(context->device, &memory_allocate_info, NULL,
+                            &device_memory),
+           "create_buffer: failed to vkAllocateMemory");
+
+  VK_CHECK(vkBindImageMemory(context->device, image, device_memory, 0),
+           "create_vulkan_texture_from_file: failed to vkBindImageMemory");
+
+  // map memory
+  u32 texture_size = 4 * stb_handle.width * stb_handle.height;
+  assert(stb_handle.data);
+  assert(ptr_to_mapped_memory);
+  memcpy(ptr_to_mapped_memory, stb_handle.data, texture_size);
+
+  // first transition
+  transition_image_layout(context, vulkan_texture, VK_IMAGE_LAYOUT_UNDEFINED,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+  // copy buffer to image
+  VkBufferImageCopy buffer_image_copy;
+  buffer_image_copy.bufferOffset = 0;
+  // 0 indicates tightly packed - could we also used handle width/height?
+  buffer_image_copy.bufferRowLength = 0;
+  buffer_image_copy.bufferImageHeight = 0;
+
+  buffer_image_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  buffer_image_copy.imageSubresource.mipLevel = 0;
+  buffer_image_copy.imageSubresource.baseArrayLayer = 0;
+  buffer_image_copy.imageSubresource.layerCount = 1;
+
+  buffer_image_copy.imageOffset.x = 0;
+  buffer_image_copy.imageOffset.y = 0;
+  buffer_image_copy.imageOffset.z = 0;
+  buffer_image_copy.imageExtent.width = stb_handle.width;
+  buffer_image_copy.imageExtent.height = stb_handle.height;
+  buffer_image_copy.imageExtent.depth = 1;
+
+  VkCommandBuffer image_copy_command_buffer =
+      begin_single_use_command_buffer(context);
+  vkCmdCopyBufferToImage(
+      image_copy_command_buffer, staging_buffer.buffer, vulkan_texture.image,
+      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_image_copy);
+  end_single_use_command_buffer(context, image_copy_command_buffer);
+
+  // second transition
+  transition_image_layout(context, vulkan_texture,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+  // imageview
+  VkImageViewCreateInfo image_view_create_info;
+  image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  image_view_create_info.pNext = NULL;
+  image_view_create_info.flags = 0;
+  image_view_create_info.image = image;
+  image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  image_view_create_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+  image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+  image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+  image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+  image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+  image_view_create_info.subresourceRange.aspectMask =
+      VK_IMAGE_ASPECT_COLOR_BIT;
+  image_view_create_info.subresourceRange.baseMipLevel = 0;
+  image_view_create_info.subresourceRange.levelCount = 1;
+  image_view_create_info.subresourceRange.baseArrayLayer = 0;
+  image_view_create_info.subresourceRange.layerCount = 1;
+
+  VkImageView image_view;
+  VK_CHECK(vkCreateImageView(context->device, &image_view_create_info, NULL,
+                             &image_view),
+           "failed to vkCreateImageView");
+
+  vulkan_texture.image = image;
+  vulkan_texture.device_memory = device_memory;
+  vulkan_texture.width = stb_handle.width;
+  vulkan_texture.height = stb_handle.height;
+  vulkan_texture.image_view = image_view;
+
+  // TODO sampler?
+
+  free_stb_handle(&stb_handle);
+
+  return vulkan_texture;
+}
+
+// TODO return type - would I prefer to return an array of textures, or do I
+// want to be able to refer to textures by name?
+// I could pass an array of structs containing a VulkanTexture and a path
+// Also could do hashing
+VulkanTexture load_vulkan_textures(VulkanContext *context, const char **paths,
+                                   u32 num_paths) {
+
+  // TODO
+  assert(num_paths == 1);
+
+  u32 max_size = 0;
+
+  for (u32 i = 0; i < num_paths; i++) {
+    STBHandle metadata = load_texture_metadata(paths[i]);
+
+    // TODO need to fix this 4 issue
+    u32 texture_size = metadata.width * metadata.height * 4;
+    max_size = (texture_size > max_size) ? texture_size : max_size;
+  }
+
+  VulkanBuffer staging_buffer =
+      create_buffer(context, BUFFER_TYPE_STAGING, max_size);
+  void *texture_data;
+  VK_CHECK(vkMapMemory(context->device, staging_buffer.memory, 0,
+                       staging_buffer.memory_requirements.size, 0,
+                       &texture_data),
+           "load_vulkan_textures: failed to VkMapMemory");
+
+  VulkanTexture texture;
+  for (u32 i = 0; i < num_paths; i++) {
+    texture = create_vulkan_texture_from_file(context, paths[i], staging_buffer,
+                                              texture_data);
+  }
+
+  vkUnmapMemory(context->device, staging_buffer.memory);
+  destroy_vulkan_buffer(context, staging_buffer);
+
+  return texture;
+}
+
+void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture) {
+  vkDestroyImage(device, vulkan_texture->image, NULL);
+  vkDestroyImageView(device, vulkan_texture->image_view, NULL);
+  vkFreeMemory(device, vulkan_texture->device_memory, NULL);
+}
+
+VkSampler create_sampler(VkDevice device) {
+
+  VkSamplerCreateInfo sampler_create_info;
+  sampler_create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+  sampler_create_info.pNext = NULL;
+  sampler_create_info.flags = 0;
+  sampler_create_info.magFilter = VK_FILTER_LINEAR;
+  sampler_create_info.minFilter = VK_FILTER_LINEAR;
+  sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  sampler_create_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_create_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_create_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  sampler_create_info.mipLodBias = 0.0f;
+  sampler_create_info.anisotropyEnable = VK_FALSE;
+  sampler_create_info.maxAnisotropy = 0.0f;
+  sampler_create_info.compareEnable = VK_TRUE;
+  sampler_create_info.compareOp = VK_COMPARE_OP_LESS;
+  sampler_create_info.minLod = 1.0f;
+  sampler_create_info.maxLod = 1.0f;
+  sampler_create_info.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+  sampler_create_info.unnormalizedCoordinates = VK_FALSE;
+
+  VkSampler sampler;
+  VK_CHECK(vkCreateSampler(device, &sampler_create_info, NULL, &sampler),
+           "create_sampler: failed to vkCreateSampler");
+  return sampler;
+}
+
+DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {
+
+  DescriptorSetBuilder builder;
+  builder.device = context->device;
+  builder.descriptor_set_layout = VK_NULL_HANDLE;
+
+  builder.binding_count = 0;
+  memset(builder.layout_bindings, 0, sizeof(builder.layout_bindings));
+
+  builder.write_descriptor_count = 0;
+  memset(builder.descriptor_writes, 0, sizeof(builder.descriptor_writes));
+  builder.copy_descriptor_count = 0;
+  memset(builder.descriptor_copies, 0, sizeof(builder.descriptor_copies));
+
+  builder.buffer_info_count = 0;
+  memset(builder.descriptor_buffer_infos, 0,
+         sizeof(builder.descriptor_buffer_infos));
+  builder.image_info_count = 0;
+  memset(builder.descriptor_image_infos, 0,
+         sizeof(builder.descriptor_image_infos));
+
+  return builder;
+};
+
+void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
+                                       UniformBuffer *uniform_buffer,
+                                       u32 binding, u32 descriptor_count,
+                                       VkShaderStageFlags stage_flags,
+                                       bool dynamic) {
+  assert(builder->write_descriptor_count < MAX_DESCRIPTOR_WRITES);
+  assert(builder->buffer_info_count < MAX_DESCRIPTOR_BUFFER_INFOS);
+
+  // this binding handle would describe which binding, array of uniform
+  // size, and what shader stage the uniform is used in
+  VkDescriptorType descriptor_type =
+      dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
+              : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+  builder->layout_bindings[builder->binding_count] =
+      create_descriptor_set_layout_binding(binding, stage_flags,
+                                           descriptor_type, descriptor_count);
+  builder->binding_count++;
+
+  VkDescriptorBufferInfo *descriptor_buffer_info =
+      &builder->descriptor_buffer_infos[builder->buffer_info_count];
+  descriptor_buffer_info->buffer = uniform_buffer->vulkan_buffer.buffer;
+  descriptor_buffer_info->offset = 0;                   // TODO?
+  descriptor_buffer_info->range = uniform_buffer->size; // TODO?
+
+  VkWriteDescriptorSet *descriptor_write_info =
+      &builder->descriptor_writes[builder->write_descriptor_count];
+  descriptor_write_info->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  descriptor_write_info->pNext = NULL;
+  descriptor_write_info->dstSet = VK_NULL_HANDLE;
+  descriptor_write_info->dstBinding = binding;
+  descriptor_write_info->dstArrayElement = 0;
+  descriptor_write_info->descriptorCount = 1;
+  descriptor_write_info->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  descriptor_write_info->pImageInfo = NULL;
+  descriptor_write_info->pBufferInfo = descriptor_buffer_info;
+  descriptor_write_info->pTexelBufferView = NULL;
+
+  builder->write_descriptor_count++;
+  builder->buffer_info_count++;
+}
+
+VkDescriptorSet build_descriptor_set(DescriptorSetBuilder *builder,
+                                     VkDescriptorPool descriptor_pool) {
+  builder->descriptor_set_layout = create_descriptor_set_layout(
+      builder->device, builder->layout_bindings, builder->binding_count);
+
+  VkDescriptorSet descriptor_set = create_descriptor_set(
+      builder->device, descriptor_pool, &builder->descriptor_set_layout);
+
+  for (u32 i = 0; i < builder->write_descriptor_count; i++) {
+    builder->descriptor_writes[i].dstSet = descriptor_set;
+  }
+
+  vkUpdateDescriptorSets(builder->device, builder->write_descriptor_count,
+                         builder->descriptor_writes,
+                         builder->copy_descriptor_count,
+                         builder->descriptor_copies);
+
+  return descriptor_set;
+}
+
+void destroy_descriptor_set_builder(DescriptorSetBuilder *builder) {
+  vkDestroyDescriptorSetLayout(builder->device, builder->descriptor_set_layout,
+                               NULL);
 }

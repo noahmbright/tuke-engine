@@ -1,4 +1,5 @@
 build
 .DS_Store
-*/gen
+*gen
 ideas.md
+dialogue

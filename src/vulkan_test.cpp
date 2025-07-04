@@ -2,13 +2,14 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/glm.hpp"
 #include "renderer.h"
+#include "utils.h"
 #include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
 #include <cstdio>
 #include <cstring>
 
-void render_mesh(VkCommandBuffer command_buffer, uint32_t num_vertices,
-                 uint32_t instance_count, VkPipeline graphics_pipeline,
+void render_mesh(VkCommandBuffer command_buffer, u32 num_vertices,
+                 u32 instance_count, VkPipeline graphics_pipeline,
                  VkDeviceSize buffer_offset, VkBuffer buffer,
                  VkPipelineLayout pipeline_layout,
                  VkDescriptorSet descriptor_set) {
@@ -19,8 +20,8 @@ void render_mesh(VkCommandBuffer command_buffer, uint32_t num_vertices,
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                           pipeline_layout, 0, 1, &descriptor_set, 0, NULL);
 
-  uint32_t first_vertex = 0;
-  uint32_t first_instance = 0;
+  u32 first_vertex = 0;
+  u32 first_instance = 0;
   vkCmdDraw(command_buffer, num_vertices, instance_count, first_vertex,
             first_instance);
 }
@@ -33,6 +34,22 @@ struct MVPUniform {
 
 int main() {
   VulkanContext context = create_vulkan_context("Tuke");
+
+  const u32 num_textures = 1;
+  const char *texture_names[num_textures] = {"textures/generic_girl.jpg"};
+  VulkanTexture texture =
+      load_vulkan_textures(&context, texture_names, num_textures);
+  VkSampler sampler = create_sampler(context.device);
+
+  VkDescriptorSetLayoutBinding texture_descriptor_set_layout_binding =
+      create_descriptor_set_layout_binding(
+          0, VK_SHADER_STAGE_FRAGMENT_BIT,
+          VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1);
+
+  VkDescriptorImageInfo descriptor_image_info;
+  descriptor_image_info.sampler = sampler;
+  descriptor_image_info.imageView = texture.image_view;
+  descriptor_image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
   // clang-format off
   float triangle_vertices[] = {
@@ -71,14 +88,13 @@ int main() {
   };
   // clang-format on
 
-  uint32_t triangle_size = sizeof(triangle_vertices);
-  uint32_t square_size = sizeof(square_vertices);
-  uint32_t unit_square_positions_size = sizeof(unit_square_positions);
-  uint32_t unit_square_indices_size = sizeof(unit_square_indices);
-  uint32_t quad_positions_size = sizeof(quad_positions);
-  uint32_t total_size = triangle_size + square_size +
-                        unit_square_positions_size + quad_positions_size +
-                        sizeof(unit_square_indices);
+  u32 triangle_size = sizeof(triangle_vertices);
+  u32 square_size = sizeof(square_vertices);
+  u32 unit_square_positions_size = sizeof(unit_square_positions);
+  u32 unit_square_indices_size = sizeof(unit_square_indices);
+  u32 quad_positions_size = sizeof(quad_positions);
+  u32 total_size = triangle_size + square_size + unit_square_positions_size +
+                   quad_positions_size + sizeof(unit_square_indices);
 
   VulkanBuffer vertex_buffer =
       create_buffer(&context, BUFFER_TYPE_VERTEX, total_size);
@@ -87,16 +103,16 @@ int main() {
 
   // TODO clean up buffering to several destinations
   StagingArena staging_arena = create_staging_arena(&context, total_size);
-  uint32_t triangle_offset = STAGE_ARRAY(
-      &context, &staging_arena, triangle_vertices, vertex_buffer.buffer);
-  uint32_t square_offset = STAGE_ARRAY(&context, &staging_arena,
-                                       square_vertices, vertex_buffer.buffer);
-  uint32_t unit_square_position_offset = STAGE_ARRAY(
+  u32 triangle_offset = STAGE_ARRAY(&context, &staging_arena, triangle_vertices,
+                                    vertex_buffer.buffer);
+  u32 square_offset = STAGE_ARRAY(&context, &staging_arena, square_vertices,
+                                  vertex_buffer.buffer);
+  u32 unit_square_position_offset = STAGE_ARRAY(
       &context, &staging_arena, unit_square_positions, vertex_buffer.buffer);
-  uint32_t quad_positions_offset = STAGE_ARRAY(
-      &context, &staging_arena, quad_positions, vertex_buffer.buffer);
+  u32 quad_positions_offset = STAGE_ARRAY(&context, &staging_arena,
+                                          quad_positions, vertex_buffer.buffer);
 
-  uint32_t unit_square_indices_offset =
+  u32 unit_square_indices_offset =
       stage_data_explicit(&context, &staging_arena, unit_square_indices,
                           sizeof(unit_square_indices), index_buffer.buffer, 0);
   flush_staging_arena(&context, &staging_arena);
@@ -119,9 +135,9 @@ int main() {
       create_descriptor_pool(context.device, &mvp_pool_size, 1, 1);
 
   UniformBuffer x_uniform_buffer =
-      create_uniform_buffer(&context, sizeof(float), x_descriptor_pool);
+      create_uniform_buffer(&context, sizeof(float));
   UniformBuffer mvp_uniform_buffer =
-      create_uniform_buffer(&context, sizeof(MVPUniform), mvp_descriptor_pool);
+      create_uniform_buffer(&context, sizeof(MVPUniform));
 
   // TODO cache, produce a single struct with size and source and other metadata
   VkShaderModule vertex_shader_module = create_shader_module(
@@ -159,12 +175,39 @@ int main() {
   instanced_quad_stages.vertex_shader = instanced_quad_vertex_shader_stage;
   instanced_quad_stages.fragment_shader = instanced_quad_fragment_shader_stage;
 
-  VkPipelineLayout x_pipeline_layout = create_pipeline_layout(
-      context.device, &x_uniform_buffer.descriptor_set_layout, 1);
-  VkPipelineLayout mvp_pipeline_layout = create_pipeline_layout(
-      context.device, &mvp_uniform_buffer.descriptor_set_layout, 1);
+  DescriptorSetBuilder x_set_builder = create_descriptor_set_builder(&context);
+  add_uniform_buffer_descriptor_set(&x_set_builder, &x_uniform_buffer, 0, 1,
+                                    VK_SHADER_STAGE_FRAGMENT_BIT, false);
+  VkDescriptorSet x_descriptor_set =
+      build_descriptor_set(&x_set_builder, x_descriptor_pool);
 
-  uint32_t instance_count = 6;
+  VkPipelineLayout x_pipeline_layout = create_pipeline_layout(
+      context.device, &x_set_builder.descriptor_set_layout, 1);
+
+  // VkWriteDescriptorSet write_descriptor_set;
+  // write_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  // write_descriptor_set.pNext = NULL;
+  // write_descriptor_set.dstSet = mvp_uniform_buffer.descriptor_set;
+  // write_descriptor_set.dstBinding = 1;
+  // write_descriptor_set.dstArrayElement = 0;
+  // write_descriptor_set.descriptorCount = 1;
+  // write_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  // write_descriptor_set.pImageInfo = &descriptor_image_info;
+  // write_descriptor_set.pBufferInfo = NULL;
+  // write_descriptor_set.pTexelBufferView = NULL;
+  // vkUpdateDescriptorSets(context.device, 1, &write_descriptor_set, 0, NULL);
+
+  DescriptorSetBuilder mvp_set_builder =
+      create_descriptor_set_builder(&context);
+  add_uniform_buffer_descriptor_set(&mvp_set_builder, &mvp_uniform_buffer, 0, 1,
+                                    VK_SHADER_STAGE_VERTEX_BIT, false);
+  VkDescriptorSet mvp_descriptor_set =
+      build_descriptor_set(&mvp_set_builder, mvp_descriptor_pool);
+
+  VkPipelineLayout mvp_pipeline_layout = create_pipeline_layout(
+      context.device, &mvp_set_builder.descriptor_set_layout, 1);
+
+  u32 instance_count = 6;
 
   VertexLayoutBuilder instance_vertex_layout_builder =
       create_vertex_layout_builder();
@@ -172,10 +215,14 @@ int main() {
                       VK_VERTEX_INPUT_RATE_VERTEX);
   push_vertex_binding(&instance_vertex_layout_builder, 1, 2 * sizeof(float),
                       VK_VERTEX_INPUT_RATE_INSTANCE);
+  // push_vertex_binding(&instance_vertex_layout_builder, 2, 2 * sizeof(float),
+  // VK_VERTEX_INPUT_RATE_INSTANCE);
   push_vertex_attribute(&instance_vertex_layout_builder, 0, 0,
                         VK_FORMAT_R32G32B32_SFLOAT, 0);
   push_vertex_attribute(&instance_vertex_layout_builder, 1, 1,
                         VK_FORMAT_R32G32_SFLOAT, 0);
+  // push_vertex_attribute(&instance_vertex_layout_builder, 2, 1,
+  // VK_FORMAT_R32G32_SFLOAT, 0);
 
   VkPipelineVertexInputStateCreateInfo instanced_quad_vertex_input_state =
       build_vertex_input_state(&instance_vertex_layout_builder);
@@ -241,11 +288,10 @@ int main() {
     // triangle
     render_mesh(command_buffer, 3, 1, triangle_graphics_pipeline,
                 triangle_offset, vertex_buffer.buffer, x_pipeline_layout,
-                x_uniform_buffer.descriptor_set);
+                x_descriptor_set);
     // square
     render_mesh(command_buffer, 6, 1, square_graphics_pipeline, square_offset,
-                vertex_buffer.buffer, x_pipeline_layout,
-                x_uniform_buffer.descriptor_set);
+                vertex_buffer.buffer, x_pipeline_layout, x_descriptor_set);
     // unit square
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       instanced_quad_graphics_pipeline);
@@ -260,8 +306,8 @@ int main() {
     vkCmdBindIndexBuffer(command_buffer, index_buffer.buffer, 0,
                          VK_INDEX_TYPE_UINT16);
     vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            mvp_pipeline_layout, 0, 1,
-                            &mvp_uniform_buffer.descriptor_set, 0, NULL);
+                            mvp_pipeline_layout, 0, 1, &mvp_descriptor_set, 0,
+                            NULL);
     // vkCmdDraw(command_buffer, 4, instance_count, 0, 0);
     vkCmdDrawIndexed(command_buffer, 6, instance_count, 0, 0, 0);
 
@@ -276,15 +322,25 @@ int main() {
 
   // cleanup
   vkDeviceWaitIdle(context.device);
+
+  vkDestroySampler(context.device, sampler, NULL);
+  destroy_vulkan_texture(context.device, &texture);
+
+  destroy_descriptor_set_builder(&x_set_builder);
+  destroy_descriptor_set_builder(&mvp_set_builder);
+
   vkDestroyPipelineLayout(context.device, x_pipeline_layout, NULL);
   vkDestroyPipelineLayout(context.device, mvp_pipeline_layout, NULL);
   vkDestroyPipeline(context.device, square_graphics_pipeline, NULL);
   vkDestroyPipeline(context.device, triangle_graphics_pipeline, NULL);
   vkDestroyPipeline(context.device, instanced_quad_graphics_pipeline, NULL);
+
   destroy_uniform_buffer(&context, &x_uniform_buffer);
   destroy_uniform_buffer(&context, &mvp_uniform_buffer);
+
   vkDestroyDescriptorPool(context.device, x_descriptor_pool, NULL);
   vkDestroyDescriptorPool(context.device, mvp_descriptor_pool, NULL);
+
   vkDestroyShaderModule(context.device, vertex_shader_module, NULL);
   vkDestroyShaderModule(context.device, triangle_fragment_shader_module, NULL);
   vkDestroyShaderModule(context.device, square_fragment_shader_module, NULL);
@@ -292,6 +348,7 @@ int main() {
                         NULL);
   vkDestroyShaderModule(context.device, instanced_quad_fragment_shader_module,
                         NULL);
+
   destroy_vulkan_buffer(&context, index_buffer);
   destroy_vulkan_buffer(&context, staging_arena.buffer);
   destroy_vulkan_buffer(&context, vertex_buffer);
