@@ -26,11 +26,61 @@
 #define MAX_DESCRIPTOR_BUFFER_INFOS (4)
 #define MAX_DESCRIPTOR_IMAGE_INFOS (4)
 
+inline const char *vk_result_string(VkResult result) {
+  switch (result) {
+  case VK_SUCCESS:
+    return "VK_SUCCESS";
+  case VK_NOT_READY:
+    return "VK_NOT_READY";
+  case VK_TIMEOUT:
+    return "VK_TIMEOUT";
+  case VK_EVENT_SET:
+    return "VK_EVENT_SET";
+  case VK_EVENT_RESET:
+    return "VK_EVENT_RESET";
+  case VK_INCOMPLETE:
+    return "VK_INCOMPLETE";
+  case VK_ERROR_OUT_OF_HOST_MEMORY:
+    return "VK_ERROR_OUT_OF_HOST_MEMORY";
+  case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+    return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+  case VK_ERROR_INITIALIZATION_FAILED:
+    return "VK_ERROR_INITIALIZATION_FAILED";
+  case VK_ERROR_DEVICE_LOST:
+    return "VK_ERROR_DEVICE_LOST";
+  case VK_ERROR_MEMORY_MAP_FAILED:
+    return "VK_ERROR_MEMORY_MAP_FAILED";
+  case VK_ERROR_LAYER_NOT_PRESENT:
+    return "VK_ERROR_LAYER_NOT_PRESENT";
+  case VK_ERROR_EXTENSION_NOT_PRESENT:
+    return "VK_ERROR_EXTENSION_NOT_PRESENT";
+  case VK_ERROR_FEATURE_NOT_PRESENT:
+    return "VK_ERROR_FEATURE_NOT_PRESENT";
+  case VK_ERROR_INCOMPATIBLE_DRIVER:
+    return "VK_ERROR_INCOMPATIBLE_DRIVER";
+  case VK_ERROR_TOO_MANY_OBJECTS:
+    return "VK_ERROR_TOO_MANY_OBJECTS";
+  case VK_ERROR_FORMAT_NOT_SUPPORTED:
+    return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+  case VK_ERROR_FRAGMENTED_POOL:
+    return "VK_ERROR_FRAGMENTED_POOL";
+  case VK_ERROR_UNKNOWN:
+    return "VK_ERROR_UNKNOWN";
+  default:
+    return "UNKNOWN_VK_RESULT";
+  }
+}
+
+// TODO adapt to print validation layer errors on failure
 #define VK_CHECK(result, fmt)                                                  \
   do {                                                                         \
     if ((result) != VK_SUCCESS) {                                              \
-      fprintf(stderr, "Vulkan error at %s:%d\n" fmt "\n", __FILE__, __LINE__); \
-      exit(1);                                                                 \
+      const char *type = vk_result_string(result);                             \
+      fprintf(stderr, "Vulkan error of type %s at %s:%d\n" fmt "\n", type,     \
+              __FILE__, __LINE__);                                             \
+      fflush(stderr);                                                          \
+      fflush(stdout);                                                          \
+      assert(0);                                                               \
     }                                                                          \
   } while (0)
 
@@ -363,5 +413,10 @@ void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
                                        u32 binding, u32 descriptor_count,
                                        VkShaderStageFlags stage_flags,
                                        bool dynamic);
+
+void add_texture_descriptor_set(DescriptorSetBuilder *builder,
+                                VulkanTexture *texture, VkSampler sampler,
+                                u32 binding, u32 descriptor_count,
+                                VkShaderStageFlags stage_flags);
 
 void destroy_descriptor_set_builder(DescriptorSetBuilder *builder);

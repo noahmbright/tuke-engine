@@ -1,0 +1,27 @@
+#version {{ VERSION }}
+
+{{ LOCATION 0 }} in vec3 a_pos;
+{{ LOCATION 1 }} in vec2 instance_offset;
+{{ LOCATION 2 }} in vec2 a_uv;
+
+{{ LOCATION 0 }} out vec2 uv;
+
+{{ SET_BINDING 0 0 }} uniform MVPUniform{
+    mat4 model;
+    mat4 view;
+    mat4 projection;
+} mvp;
+
+{{ SET_BINDING 0 1 }} uniform XUniform{
+    float x;
+} u_x;
+
+void main(){
+    //mat4 model_view = mvp.model * mvp.view;
+    //mat3 normal_matrix = transpose(inverse(mat3(model_view)));
+    //norm = normal_matrix * a_normal;
+    uv = a_uv;
+    vec3 pos = a_pos;
+    pos.x += u_x.x;
+    gl_Position = mvp.model * vec4(pos, 1.0) + vec4(instance_offset, 0.0, 0.0);
+}

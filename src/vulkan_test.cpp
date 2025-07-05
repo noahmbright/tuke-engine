@@ -41,16 +41,6 @@ int main() {
       load_vulkan_textures(&context, texture_names, num_textures);
   VkSampler sampler = create_sampler(context.device);
 
-  VkDescriptorSetLayoutBinding texture_descriptor_set_layout_binding =
-      create_descriptor_set_layout_binding(
-          0, VK_SHADER_STAGE_FRAGMENT_BIT,
-          VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1);
-
-  VkDescriptorImageInfo descriptor_image_info;
-  descriptor_image_info.sampler = sampler;
-  descriptor_image_info.imageView = texture.image_view;
-  descriptor_image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
   // clang-format off
   float triangle_vertices[] = {
       0.0f, -0.5f, 0.0f,  1.0f, 0.0f, 0.0f, 
@@ -67,11 +57,12 @@ int main() {
       0.67f, 0.67f, 0.0f, 0.0f, 0.0f, 1.0f,
   };
 
+  // TL, BL, BR, TR
   float unit_square_positions[] = {
-      -0.5f,  0.5f, 0.0f,
-      -0.5f, -0.5f, 0.0f,
-       0.5f, -0.5f, 0.0f,
-       0.5f,  0.5f, 0.0f,
+      -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 
+      -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+       0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+       0.5f,  0.5f, 0.0f, 1.0f, 1.0f
   };
 
   uint16_t unit_square_indices[] = {
@@ -116,23 +107,23 @@ int main() {
       stage_data_explicit(&context, &staging_arena, unit_square_indices,
                           sizeof(unit_square_indices), index_buffer.buffer, 0);
   flush_staging_arena(&context, &staging_arena);
-
-  (void)unit_square_position_offset;
   (void)unit_square_indices_offset;
 
   VkDescriptorPoolSize x_pool_size = {};
   x_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   x_pool_size.descriptorCount = 1;
 
-  VkDescriptorPoolSize mvp_pool_size = {};
-  mvp_pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  mvp_pool_size.descriptorCount = 1;
+  VkDescriptorPoolSize mvp_pool_sizes[2];
+  mvp_pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  mvp_pool_sizes[0].descriptorCount = 2;
+  mvp_pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  mvp_pool_sizes[1].descriptorCount = 2;
 
   // TODO manage pool ownership - can I use one pool for both descriptors?
   VkDescriptorPool x_descriptor_pool =
       create_descriptor_pool(context.device, &x_pool_size, 1, 1);
   VkDescriptorPool mvp_descriptor_pool =
-      create_descriptor_pool(context.device, &mvp_pool_size, 1, 1);
+      create_descriptor_pool(context.device, mvp_pool_sizes, 2, 2);
 
   UniformBuffer x_uniform_buffer =
       create_uniform_buffer(&context, sizeof(float));
@@ -165,6 +156,7 @@ int main() {
       create_shader_stage(instanced_quad_fragment_shader_module,
                           VK_SHADER_STAGE_FRAGMENT_BIT, "main");
 
+  // TODO I don't like this, this feels extra for little gain
   GraphicsPipelineStages triangle_stages;
   triangle_stages.vertex_shader = vertex_shader_stage;
   triangle_stages.fragment_shader = triangle_fragment_shader_stage;
@@ -184,23 +176,15 @@ int main() {
   VkPipelineLayout x_pipeline_layout = create_pipeline_layout(
       context.device, &x_set_builder.descriptor_set_layout, 1);
 
-  // VkWriteDescriptorSet write_descriptor_set;
-  // write_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  // write_descriptor_set.pNext = NULL;
-  // write_descriptor_set.dstSet = mvp_uniform_buffer.descriptor_set;
-  // write_descriptor_set.dstBinding = 1;
-  // write_descriptor_set.dstArrayElement = 0;
-  // write_descriptor_set.descriptorCount = 1;
-  // write_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  // write_descriptor_set.pImageInfo = &descriptor_image_info;
-  // write_descriptor_set.pBufferInfo = NULL;
-  // write_descriptor_set.pTexelBufferView = NULL;
-  // vkUpdateDescriptorSets(context.device, 1, &write_descriptor_set, 0, NULL);
-
   DescriptorSetBuilder mvp_set_builder =
       create_descriptor_set_builder(&context);
   add_uniform_buffer_descriptor_set(&mvp_set_builder, &mvp_uniform_buffer, 0, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(&mvp_set_builder, &x_uniform_buffer, 1, 1,
+                                    VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_texture_descriptor_set(&mvp_set_builder, &texture, sampler, 2, 1,
+                             VK_SHADER_STAGE_FRAGMENT_BIT);
+
   VkDescriptorSet mvp_descriptor_set =
       build_descriptor_set(&mvp_set_builder, mvp_descriptor_pool);
 
@@ -211,18 +195,16 @@ int main() {
 
   VertexLayoutBuilder instance_vertex_layout_builder =
       create_vertex_layout_builder();
-  push_vertex_binding(&instance_vertex_layout_builder, 0, 3 * sizeof(float),
+  push_vertex_binding(&instance_vertex_layout_builder, 0, 5 * sizeof(float),
                       VK_VERTEX_INPUT_RATE_VERTEX);
   push_vertex_binding(&instance_vertex_layout_builder, 1, 2 * sizeof(float),
                       VK_VERTEX_INPUT_RATE_INSTANCE);
-  // push_vertex_binding(&instance_vertex_layout_builder, 2, 2 * sizeof(float),
-  // VK_VERTEX_INPUT_RATE_INSTANCE);
   push_vertex_attribute(&instance_vertex_layout_builder, 0, 0,
                         VK_FORMAT_R32G32B32_SFLOAT, 0);
   push_vertex_attribute(&instance_vertex_layout_builder, 1, 1,
                         VK_FORMAT_R32G32_SFLOAT, 0);
-  // push_vertex_attribute(&instance_vertex_layout_builder, 2, 1,
-  // VK_FORMAT_R32G32_SFLOAT, 0);
+  push_vertex_attribute(&instance_vertex_layout_builder, 2, 0,
+                        VK_FORMAT_R32G32_SFLOAT, 3 * sizeof(float));
 
   VkPipelineVertexInputStateCreateInfo instanced_quad_vertex_input_state =
       build_vertex_input_state(&instance_vertex_layout_builder);

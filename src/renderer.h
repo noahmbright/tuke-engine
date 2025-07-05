@@ -61,7 +61,8 @@ enum VertexLayoutID {
   VERTEX_LAYOUT_POSITION_NORMAL,
   VERTEX_LAYOUT_POSITION_NORMAL_UV,
 
-  VERTEX_LAYOUT_COUNT
+  VERTEX_LAYOUT_COUNT,
+  VERTEX_LAYOUT_MANUAL
 };
 
 extern const void **active_vertex_layouts;

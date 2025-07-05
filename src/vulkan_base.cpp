@@ -2122,14 +2122,10 @@ VulkanTexture create_vulkan_texture_from_file(VulkanContext *context,
                              &image_view),
            "failed to vkCreateImageView");
 
-  vulkan_texture.image = image;
   vulkan_texture.device_memory = device_memory;
   vulkan_texture.width = stb_handle.width;
   vulkan_texture.height = stb_handle.height;
   vulkan_texture.image_view = image_view;
-
-  // TODO sampler?
-
   free_stb_handle(&stb_handle);
 
   return vulkan_texture;
@@ -2155,6 +2151,7 @@ VulkanTexture load_vulkan_textures(VulkanContext *context, const char **paths,
     max_size = (texture_size > max_size) ? texture_size : max_size;
   }
 
+  // TODO find a way to reuse staging buffers
   VulkanBuffer staging_buffer =
       create_buffer(context, BUFFER_TYPE_STAGING, max_size);
   void *texture_data;
@@ -2181,6 +2178,7 @@ void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture) {
   vkFreeMemory(device, vulkan_texture->device_memory, NULL);
 }
 
+// TODO give this any modularity at all
 VkSampler create_sampler(VkDevice device) {
 
   VkSamplerCreateInfo sampler_create_info;
@@ -2196,7 +2194,7 @@ VkSampler create_sampler(VkDevice device) {
   sampler_create_info.mipLodBias = 0.0f;
   sampler_create_info.anisotropyEnable = VK_FALSE;
   sampler_create_info.maxAnisotropy = 0.0f;
-  sampler_create_info.compareEnable = VK_TRUE;
+  sampler_create_info.compareEnable = VK_FALSE;
   sampler_create_info.compareOp = VK_COMPARE_OP_LESS;
   sampler_create_info.minLod = 1.0f;
   sampler_create_info.maxLod = 1.0f;
@@ -2233,6 +2231,8 @@ DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {
   return builder;
 };
 
+// this binding handle would describe which binding, array of uniform
+// size, and what shader stage the uniform is used in
 void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
                                        UniformBuffer *uniform_buffer,
                                        u32 binding, u32 descriptor_count,
@@ -2240,9 +2240,9 @@ void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
                                        bool dynamic) {
   assert(builder->write_descriptor_count < MAX_DESCRIPTOR_WRITES);
   assert(builder->buffer_info_count < MAX_DESCRIPTOR_BUFFER_INFOS);
+  assert(builder->binding_count < MAX_LAYOUT_BINDINGS);
 
-  // this binding handle would describe which binding, array of uniform
-  // size, and what shader stage the uniform is used in
+  assert(dynamic == false && "Dynamic uniform buffers not yet implemented");
   VkDescriptorType descriptor_type =
       dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
               : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -2257,6 +2257,7 @@ void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
   descriptor_buffer_info->buffer = uniform_buffer->vulkan_buffer.buffer;
   descriptor_buffer_info->offset = 0;                   // TODO?
   descriptor_buffer_info->range = uniform_buffer->size; // TODO?
+  builder->buffer_info_count++;
 
   VkWriteDescriptorSet *descriptor_write_info =
       &builder->descriptor_writes[builder->write_descriptor_count];
@@ -2266,13 +2267,52 @@ void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
   descriptor_write_info->dstBinding = binding;
   descriptor_write_info->dstArrayElement = 0;
   descriptor_write_info->descriptorCount = 1;
-  descriptor_write_info->descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  descriptor_write_info->descriptorType = descriptor_type;
   descriptor_write_info->pImageInfo = NULL;
   descriptor_write_info->pBufferInfo = descriptor_buffer_info;
   descriptor_write_info->pTexelBufferView = NULL;
-
   builder->write_descriptor_count++;
-  builder->buffer_info_count++;
+}
+
+// TODO extend to take descriptor_count as argument
+// check for proper transitions - still don't understand transitions
+void add_texture_descriptor_set(DescriptorSetBuilder *builder,
+                                VulkanTexture *texture, VkSampler sampler,
+                                u32 binding, u32 descriptor_count,
+                                VkShaderStageFlags stage_flags) {
+  assert(builder->write_descriptor_count < MAX_DESCRIPTOR_WRITES);
+  assert(builder->image_info_count < MAX_DESCRIPTOR_IMAGE_INFOS);
+  assert(builder->binding_count < MAX_LAYOUT_BINDINGS);
+
+  VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+
+  // TODO will I ever have an array of textures? When would descriptor_count
+  // not be 1?
+  builder->layout_bindings[builder->binding_count] =
+      create_descriptor_set_layout_binding(binding, stage_flags,
+                                           descriptor_type, descriptor_count);
+  builder->binding_count++;
+
+  VkDescriptorImageInfo *descriptor_image_info =
+      &builder->descriptor_image_infos[builder->image_info_count];
+  descriptor_image_info->sampler = sampler;
+  descriptor_image_info->imageView = texture->image_view;
+  descriptor_image_info->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  builder->image_info_count++;
+
+  VkWriteDescriptorSet *descriptor_write_info =
+      &builder->descriptor_writes[builder->write_descriptor_count];
+  descriptor_write_info->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  descriptor_write_info->pNext = NULL;
+  descriptor_write_info->dstSet = VK_NULL_HANDLE;
+  descriptor_write_info->dstBinding = binding;
+  descriptor_write_info->dstArrayElement = 0;
+  descriptor_write_info->descriptorCount = descriptor_count;
+  descriptor_write_info->descriptorType = descriptor_type;
+  descriptor_write_info->pImageInfo = descriptor_image_info;
+  descriptor_write_info->pBufferInfo = NULL;
+  descriptor_write_info->pTexelBufferView = NULL;
+  builder->write_descriptor_count++;
 }
 
 VkDescriptorSet build_descriptor_set(DescriptorSetBuilder *builder,
