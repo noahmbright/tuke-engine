@@ -1,6 +1,7 @@
 #include "common_shaders.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/glm.hpp"
+#include "hashmap.h"
 #include "renderer.h"
 #include "utils.h"
 #include "vulkan/vulkan_core.h"
@@ -130,42 +131,13 @@ int main() {
   UniformBuffer mvp_uniform_buffer =
       create_uniform_buffer(&context, sizeof(MVPUniform));
 
-  // TODO cache, produce a single struct with size and source and other metadata
-  VkShaderModule vertex_shader_module = create_shader_module(
-      context.device, simple_vert_spv, simple_vert_spv_size);
-  VkShaderModule instanced_quad_vertex_shader_module = create_shader_module(
-      context.device, instanced_quad_vert_spv, instanced_quad_vert_spv_size);
-  VkShaderModule triangle_fragment_shader_module = create_shader_module(
-      context.device, simple_frag_spv, simple_frag_spv_size);
-  VkShaderModule square_fragment_shader_module = create_shader_module(
-      context.device, square_frag_spv, square_frag_spv_size);
-  VkShaderModule instanced_quad_fragment_shader_module = create_shader_module(
-      context.device, instanced_quad_frag_spv, instanced_quad_frag_spv_size);
-
-  // TODO remove "main" boilerplate, see if I can go straight to
-  // GraphicsPipelineStages
-  ShaderStage vertex_shader_stage = create_shader_stage(
-      vertex_shader_module, VK_SHADER_STAGE_VERTEX_BIT, "main");
-  ShaderStage instanced_quad_vertex_shader_stage = create_shader_stage(
-      instanced_quad_vertex_shader_module, VK_SHADER_STAGE_VERTEX_BIT, "main");
-  ShaderStage triangle_fragment_shader_stage = create_shader_stage(
-      triangle_fragment_shader_module, VK_SHADER_STAGE_FRAGMENT_BIT, "main");
-  ShaderStage square_fragment_shader_stage = create_shader_stage(
-      square_fragment_shader_module, VK_SHADER_STAGE_FRAGMENT_BIT, "main");
-  ShaderStage instanced_quad_fragment_shader_stage =
-      create_shader_stage(instanced_quad_fragment_shader_module,
-                          VK_SHADER_STAGE_FRAGMENT_BIT, "main");
-
-  // TODO I don't like this, this feels extra for little gain
-  GraphicsPipelineStages triangle_stages;
-  triangle_stages.vertex_shader = vertex_shader_stage;
-  triangle_stages.fragment_shader = triangle_fragment_shader_stage;
-  GraphicsPipelineStages square_stages;
-  square_stages.vertex_shader = vertex_shader_stage;
-  square_stages.fragment_shader = square_fragment_shader_stage;
-  GraphicsPipelineStages instanced_quad_stages;
-  instanced_quad_stages.vertex_shader = instanced_quad_vertex_shader_stage;
-  instanced_quad_stages.fragment_shader = instanced_quad_fragment_shader_stage;
+  // VulkanShaderCache shader_cache = create_shader_cache(context.device);
+  VulkanShaderCache *shader_cache = context.shader_cache;
+  cache_shader_module(shader_cache, simple_vert_spv_spec);
+  cache_shader_module(shader_cache, simple_frag_spv_spec);
+  cache_shader_module(shader_cache, square_frag_spv_spec);
+  cache_shader_module(shader_cache, instanced_quad_frag_spv_spec);
+  cache_shader_module(shader_cache, instanced_quad_vert_spv_spec);
 
   DescriptorSetBuilder x_set_builder = create_descriptor_set_builder(&context);
   add_uniform_buffer_descriptor_set(&x_set_builder, &x_uniform_buffer, 0, 1,
@@ -213,23 +185,24 @@ int main() {
       get_common_vertex_input_state(&context, VERTEX_LAYOUT_POSITION_NORMAL);
 
   PipelineConfig triangle_pipeline_config =
-      create_default_graphics_pipeline_config(&context, triangle_stages,
-                                              &postion_normal_vertex_layout,
-                                              x_pipeline_layout);
+      create_default_graphics_pipeline_config(
+          &context, simple_vert_spv_spec.name, simple_frag_spv_spec.name,
+          &postion_normal_vertex_layout, x_pipeline_layout, shader_cache);
   VkPipeline triangle_graphics_pipeline = create_graphics_pipeline(
       context.device, &triangle_pipeline_config, context.pipeline_cache);
 
   PipelineConfig square_pipeline_config =
-      create_default_graphics_pipeline_config(&context, square_stages,
-                                              &postion_normal_vertex_layout,
-                                              x_pipeline_layout);
+      create_default_graphics_pipeline_config(
+          &context, simple_vert_spv_spec.name, square_frag_spv_spec.name,
+          &postion_normal_vertex_layout, x_pipeline_layout, shader_cache);
   VkPipeline square_graphics_pipeline = create_graphics_pipeline(
       context.device, &square_pipeline_config, context.pipeline_cache);
 
   PipelineConfig instanced_quad_pipeline_config =
       create_default_graphics_pipeline_config(
-          &context, instanced_quad_stages, &instanced_quad_vertex_input_state,
-          mvp_pipeline_layout);
+          &context, instanced_quad_vert_spv_spec.name,
+          instanced_quad_frag_spv_spec.name, &instanced_quad_vertex_input_state,
+          mvp_pipeline_layout, shader_cache);
   VkPipeline instanced_quad_graphics_pipeline = create_graphics_pipeline(
       context.device, &instanced_quad_pipeline_config, context.pipeline_cache);
 
@@ -323,13 +296,7 @@ int main() {
   vkDestroyDescriptorPool(context.device, x_descriptor_pool, NULL);
   vkDestroyDescriptorPool(context.device, mvp_descriptor_pool, NULL);
 
-  vkDestroyShaderModule(context.device, vertex_shader_module, NULL);
-  vkDestroyShaderModule(context.device, triangle_fragment_shader_module, NULL);
-  vkDestroyShaderModule(context.device, square_fragment_shader_module, NULL);
-  vkDestroyShaderModule(context.device, instanced_quad_vertex_shader_module,
-                        NULL);
-  vkDestroyShaderModule(context.device, instanced_quad_fragment_shader_module,
-                        NULL);
+  destroy_shader_cache(shader_cache);
 
   destroy_vulkan_buffer(&context, index_buffer);
   destroy_vulkan_buffer(&context, staging_arena.buffer);

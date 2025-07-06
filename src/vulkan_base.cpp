@@ -1,4 +1,5 @@
 #include "vulkan_base.h"
+#include "hashmap.h"
 #include "renderer.h"
 #include "tuke_engine.h"
 #include "utils.h"
@@ -55,6 +56,10 @@ void destroy_swapchain(VulkanContext *context) {
 
 void destroy_vulkan_context(VulkanContext *context) {
   vkDeviceWaitIdle(context->device);
+
+  destroy_shader_cache(context->shader_cache);
+  delete context->shader_cache;
+
   vkDestroyPipelineCache(context->device, context->pipeline_cache, NULL);
   vkDestroyCommandPool(context->device, context->transient_command_pool, NULL);
   vkDestroyCommandPool(context->device, context->graphics_command_pool, NULL);
@@ -934,12 +939,23 @@ get_common_vertex_input_state(VulkanContext *context,
 }
 
 PipelineConfig create_default_graphics_pipeline_config(
-    const VulkanContext *context, const GraphicsPipelineStages shader_stages,
+    const VulkanContext *context, const char *vertex_shader_name,
+    const char *fragment_shader_name,
     const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
-    VkPipelineLayout pipeline_layout) {
+    VkPipelineLayout pipeline_layout, VulkanShaderCache *shader_cache) {
+
   PipelineConfig pipeline_config;
-  pipeline_config.stages[0] = shader_stages.vertex_shader;
-  pipeline_config.stages[1] = shader_stages.fragment_shader;
+
+  const ShaderStage *vertex =
+      context->shader_cache->hash_map.find(vertex_shader_name);
+  const ShaderStage *fragment =
+      context->shader_cache->hash_map.find(fragment_shader_name);
+  assert(vertex && fragment);
+  printf("Found modules %s and %s. map size is %d\n", vertex_shader_name,
+         fragment_shader_name, shader_cache->hash_map.size);
+  pipeline_config.stages[0] = *vertex;
+  pipeline_config.stages[1] = *fragment;
+
   pipeline_config.stage_count = 2;
   pipeline_config.vertex_input_state_create_info = vertex_input_state;
   pipeline_config.render_pass = context->render_pass;
@@ -1047,6 +1063,14 @@ VulkanContext create_vulkan_context(const char *title) {
         vulkan_vertex_layouts[i].attribute_descriptions);
   }
 
+  context.shader_cache = create_shader_cache(context.device);
+
+  VK_CHECK(
+      vkWaitForFences(context.device, 1,
+                      &context.frame_sync_objects[context.current_frame_index]
+                           .in_flight_fence,
+                      VK_TRUE, UINT64_MAX),
+      "asdf");
   return context;
 }
 
@@ -1544,10 +1568,12 @@ VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
 }
 
 bool begin_frame(VulkanContext *context) {
-  vkWaitForFences(context->device, 1,
-                  &context->frame_sync_objects[context->current_frame_index]
-                       .in_flight_fence,
-                  VK_TRUE, UINT64_MAX);
+  VK_CHECK(
+      vkWaitForFences(context->device, 1,
+                      &context->frame_sync_objects[context->current_frame_index]
+                           .in_flight_fence,
+                      VK_TRUE, UINT64_MAX),
+      "begin_frame: failed to vkWaitForFences");
 
   vkResetFences(context->device, 1,
                 &context->frame_sync_objects[context->current_frame_index]
@@ -2338,4 +2364,53 @@ VkDescriptorSet build_descriptor_set(DescriptorSetBuilder *builder,
 void destroy_descriptor_set_builder(DescriptorSetBuilder *builder) {
   vkDestroyDescriptorSetLayout(builder->device, builder->descriptor_set_layout,
                                NULL);
+}
+
+VulkanShaderCache *create_shader_cache(VkDevice device) {
+  VulkanShaderCache *cache = new VulkanShaderCache;
+  cache->device = device;
+  return cache;
+}
+
+bool cache_shader_module(VulkanShaderCache *cache, ShaderSpec spec) {
+
+  u32 table_index = cache->hash_map.probe(spec.name);
+  if (cache->hash_map.key_values[table_index].occupancy == HASHMAP_OCCUPIED) {
+    fprintf(stderr,
+            "cache_shader_module: Attempting to overwrite shader module. "
+            "Attempting to cache %s, overwriting %s\n",
+            spec.name, cache->hash_map.key_values[table_index].key);
+    return false;
+  }
+
+  if (table_index == cache->hash_map.capacity) {
+    fprintf(stderr,
+            "cache_shader_module: probe returned table.capacity when hashing "
+            "\"%s\" - table full. table index: %d, capacity %d\n",
+            spec.name, table_index, cache->hash_map.capacity);
+    return false;
+  }
+
+  // shaderstage: VkShaderStageFlagBits
+  // shaderspec: VkShaderStageFlags
+  ShaderStage *stage = &cache->hash_map.key_values[table_index].value;
+  stage->module = create_shader_module(cache->device, spec.spv, spec.size);
+  stage->stage = spec.stage_flags;
+  // TODO add preprocessing to shader for specifying an entry point
+  stage->entry_point = "main";
+
+  cache->hash_map.key_values[table_index].key = spec.name;
+  cache->hash_map.key_values[table_index].occupancy = HASHMAP_OCCUPIED;
+  cache->hash_map.size++;
+
+  return true;
+}
+
+void destroy_shader_cache(VulkanShaderCache *cache) {
+  for (u32 i = 0; i < cache->hash_map.capacity; i++) {
+    if (cache->hash_map.key_values[i].occupancy == HASHMAP_OCCUPIED) {
+      vkDestroyShaderModule(cache->device,
+                            cache->hash_map.key_values[i].value.module, NULL);
+    }
+  }
 }

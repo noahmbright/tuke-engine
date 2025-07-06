@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hashmap.h"
 #include "renderer.h"
 #include "tuke_engine.h"
 #include "vulkan/vulkan_core.h"
@@ -122,6 +123,19 @@ struct SwapchainStorage {
   } as;
 };
 
+struct ShaderStage {
+  VkShaderModule module;
+  VkShaderStageFlagBits stage;
+  const char *entry_point;
+};
+
+using ShaderCacheMap = HashMap<const char *, ShaderStage, CStringHashFunctor,
+                               CStringEqualityFunctor>;
+struct VulkanShaderCache {
+  VkDevice device;
+  ShaderCacheMap hash_map;
+};
+
 struct VulkanContext {
   // needed most often
   GLFWwindow *window;
@@ -148,6 +162,12 @@ struct VulkanContext {
 
   VkPipelineCache pipeline_cache;
   VkPipelineVertexInputStateCreateInfo vertex_layouts[VERTEX_LAYOUT_COUNT];
+
+  // this cache is a templated type. the compiler freaks out if I put the
+  // data directly here. I need to use a pointer instead. I don't understand
+  // the fundamental issue. Something to do with constructors perhaps. Could
+  // be good to try and lump allocations for these into one.
+  VulkanShaderCache *shader_cache;
 
   // init
   VkInstance instance;
@@ -185,15 +205,11 @@ struct ViewportState {
 
 enum BlendMode { BLEND_MODE_OPAQUE, BLEND_MODE_ALPHA };
 
-struct ShaderStage {
-  VkShaderModule module;
-  VkShaderStageFlagBits stage;
-  const char *entry_point;
-};
-
-struct GraphicsPipelineStages {
-  ShaderStage vertex_shader;
-  ShaderStage fragment_shader;
+struct ShaderSpec {
+  const u32 *spv;
+  u32 size;
+  const char *name;
+  VkShaderStageFlagBits stage_flags;
 };
 
 struct PipelineConfig {
@@ -349,7 +365,7 @@ u32 stage_data_auto(const VulkanContext *context, StagingArena *arena,
 void flush_staging_arena(const VulkanContext *context, StagingArena *arena);
 ShaderStage create_shader_stage(VkShaderModule module,
                                 VkShaderStageFlagBits stage,
-                                const char *entry_point);
+                                const char *entry_point = "main");
 
 // TODO abstract over dynamic uniform buffers
 UniformBuffer create_uniform_buffer(const VulkanContext *context,
@@ -363,9 +379,10 @@ void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
                              u32 size);
 
 PipelineConfig create_default_graphics_pipeline_config(
-    const VulkanContext *context, const GraphicsPipelineStages shader_stages,
+    const VulkanContext *context, const char *vertex_shader_name,
+    const char *fragment_shader_name,
     const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
-    VkPipelineLayout pipeline_layout);
+    VkPipelineLayout pipeline_layout, VulkanShaderCache *shader_cache);
 
 VkPipelineVertexInputStateCreateInfo
 get_common_vertex_input_state(VulkanContext *context, VertexLayoutID layout_id);
@@ -420,3 +437,7 @@ void add_texture_descriptor_set(DescriptorSetBuilder *builder,
                                 VkShaderStageFlags stage_flags);
 
 void destroy_descriptor_set_builder(DescriptorSetBuilder *builder);
+
+VulkanShaderCache *create_shader_cache(VkDevice device);
+bool cache_shader_module(VulkanShaderCache *cache, ShaderSpec spec);
+void destroy_shader_cache(VulkanShaderCache *cache);

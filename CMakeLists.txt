@@ -25,6 +25,7 @@ file(GLOB_RECURSE SOURCE_FILES
 add_library(engine ${SOURCE_FILES})
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glfw)
+include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/src)
 include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/third_party/glfw/include)
 include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/third_party/include)
 include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/gen)
