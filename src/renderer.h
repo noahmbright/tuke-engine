@@ -1,15 +1,6 @@
 #pragma once
 
 // clang-format off
-const float square_vertices[] = {
-    -0.5f, 0.5f, 0.0f,
-    0.5f, -0.5f, 0.0f,
-    0.5f, 0.5f, 0.0f,
-
-    -0.5f, 0.5f, 0.0f,
-    -0.5f, -0.5f, 0.0f,
-    0.5f, -0.5f, 0.0f
-};
 
 const float cube_vertices[] = {
     -0.5f, -0.5f,  0.5f, 0.4, 0.0, 0.4,

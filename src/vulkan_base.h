@@ -194,7 +194,7 @@ struct VulkanBuffer {
 
 struct UniformBuffer {
   VulkanBuffer vulkan_buffer;
-  void *mapped;
+  u8 *mapped;
   u32 size;
 };
 
@@ -306,7 +306,7 @@ VulkanBuffer create_buffer_explicit(const VulkanContext *context,
 VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type,
                            VkDeviceSize size);
 void destroy_vulkan_buffer(const VulkanContext *context, VulkanBuffer buffer);
-void write_to_vulkan_buffer(VulkanContext *context, void *src_data,
+void write_to_vulkan_buffer(VulkanContext *context, const void *src_data,
                             VkDeviceSize size, VkDeviceSize offset,
                             VulkanBuffer vulkan_buffer);
 VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context);
@@ -318,10 +318,21 @@ VkShaderModule create_shader_module(VkDevice device, const u32 *code,
 VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
                                     VkPipelineCache pipeline_cache);
 
+VkPipeline create_default_graphics_pipeline(
+    const VulkanContext *context, const char *vertex_shader_name,
+    const char *fragment_shader_name,
+    const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
+    VkPipelineLayout pipeline_layout);
+
 bool begin_frame(VulkanContext *context);
 VkCommandBuffer begin_command_buffer(const VulkanContext *context);
-ViewportState create_viewport_state(VkExtent2D swapchain_extent,
-                                    VkOffset2D offset);
+
+ViewportState create_viewport_state_offset(VkExtent2D swapchain_extent,
+                                           VkOffset2D offset);
+
+ViewportState create_viewport_state_xy(VkExtent2D swapchain_extent, u32 x,
+                                       u32 y);
+
 void begin_render_pass(const VulkanContext *context,
                        VkCommandBuffer command_buffer, VkClearValue clear_value,
                        VkOffset2D offset);
@@ -354,35 +365,35 @@ create_descriptor_set_layout(VkDevice device,
 
 StagingArena create_staging_arena(const VulkanContext *context, u32 total_size);
 u32 stage_data_explicit(const VulkanContext *context, StagingArena *arena,
-                        void *data, u32 size, VkBuffer destination,
+                        const void *data, u32 size, VkBuffer destination,
                         u32 dst_offset);
 u32 stage_data_auto(const VulkanContext *context, StagingArena *arena,
-                    void *data, u32 size, VkBuffer destination);
+                    const void *data, u32 size, VkBuffer destination);
 
 #define STAGE_ARRAY(context, arena, array, destination)                        \
   (stage_data_auto(context, arena, array, sizeof(array), destination))
 
 void flush_staging_arena(const VulkanContext *context, StagingArena *arena);
+
 ShaderStage create_shader_stage(VkShaderModule module,
                                 VkShaderStageFlagBits stage,
                                 const char *entry_point = "main");
 
 // TODO abstract over dynamic uniform buffers
 UniformBuffer create_uniform_buffer(const VulkanContext *context,
-
                                     u32 buffer_size);
 
 void destroy_uniform_buffer(const VulkanContext *context,
                             UniformBuffer *uniform_buffer);
 
 void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
-                             u32 size);
+                             u32 offset, u32 size);
 
 PipelineConfig create_default_graphics_pipeline_config(
     const VulkanContext *context, const char *vertex_shader_name,
     const char *fragment_shader_name,
     const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
-    VkPipelineLayout pipeline_layout, VulkanShaderCache *shader_cache);
+    VkPipelineLayout pipeline_layout);
 
 VkPipelineVertexInputStateCreateInfo
 get_common_vertex_input_state(VulkanContext *context, VertexLayoutID layout_id);
@@ -427,7 +438,8 @@ VkDescriptorSet build_descriptor_set(DescriptorSetBuilder *builder,
 
 void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
                                        UniformBuffer *uniform_buffer,
-                                       u32 binding, u32 descriptor_count,
+                                       u32 offset, u32 range, u32 binding,
+                                       u32 descriptor_count,
                                        VkShaderStageFlags stage_flags,
                                        bool dynamic);
 

@@ -34,8 +34,7 @@ GLFWwindow *new_window(bool is_vulkan, const char *title, const int width,
   if (is_vulkan) {
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  } else {
-    // is opengl
+  } else { // is opengl
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
   }

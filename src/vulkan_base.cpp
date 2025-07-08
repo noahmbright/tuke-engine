@@ -942,7 +942,7 @@ PipelineConfig create_default_graphics_pipeline_config(
     const VulkanContext *context, const char *vertex_shader_name,
     const char *fragment_shader_name,
     const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
-    VkPipelineLayout pipeline_layout, VulkanShaderCache *shader_cache) {
+    VkPipelineLayout pipeline_layout) {
 
   PipelineConfig pipeline_config;
 
@@ -951,8 +951,6 @@ PipelineConfig create_default_graphics_pipeline_config(
   const ShaderStage *fragment =
       context->shader_cache->hash_map.find(fragment_shader_name);
   assert(vertex && fragment);
-  printf("Found modules %s and %s. map size is %d\n", vertex_shader_name,
-         fragment_shader_name, shader_cache->hash_map.size);
   pipeline_config.stages[0] = *vertex;
   pipeline_config.stages[1] = *fragment;
 
@@ -1187,7 +1185,7 @@ VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type,
   }
 }
 
-void write_to_vulkan_buffer(const VulkanContext *context, void *src_data,
+void write_to_vulkan_buffer(const VulkanContext *context, const void *src_data,
                             VkDeviceSize size, VkDeviceSize offset,
                             VulkanBuffer vulkan_buffer) {
   if (!(vulkan_buffer.memory_property_flags &
@@ -1301,8 +1299,8 @@ VkShaderModule create_shader_module(VkDevice device, const u32 *code,
   return module;
 }
 
-ViewportState create_viewport_state(VkExtent2D swapchain_extent,
-                                    VkOffset2D offset) {
+ViewportState create_viewport_state_offset(VkExtent2D swapchain_extent,
+                                           VkOffset2D offset) {
   ViewportState viewport_state;
 
   viewport_state.viewport.x = offset.x;
@@ -1317,6 +1315,14 @@ ViewportState create_viewport_state(VkExtent2D swapchain_extent,
   viewport_state.scissor.offset.y = offset.y;
 
   return viewport_state;
+}
+
+ViewportState create_viewport_state_xy(VkExtent2D swapchain_extent, u32 x,
+                                       u32 y) {
+  VkOffset2D offset;
+  offset.x = x;
+  offset.y = y;
+  return create_viewport_state_offset(swapchain_extent, offset);
 }
 
 VkPipelineInputAssemblyStateCreateInfo
@@ -1504,7 +1510,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
   offset.x = 0.0f;
   offset.y = 0.0f;
   ViewportState viewport_state =
-      create_viewport_state(config->swapchain_extent, offset);
+      create_viewport_state_offset(config->swapchain_extent, offset);
 
   VkPipelineViewportStateCreateInfo viewport_state_create_info;
   viewport_state_create_info.sType =
@@ -1565,6 +1571,20 @@ VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
                                      &graphics_pipeline),
            "create_graphics_pipeline: Failed to vkCreateGraphicsPipelines");
   return graphics_pipeline;
+}
+
+VkPipeline create_default_graphics_pipeline(
+    const VulkanContext *context, const char *vertex_shader_name,
+    const char *fragment_shader_name,
+    const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
+    VkPipelineLayout pipeline_layout) {
+
+  PipelineConfig config = create_default_graphics_pipeline_config(
+      context, vertex_shader_name, fragment_shader_name, vertex_input_state,
+      pipeline_layout);
+
+  return create_graphics_pipeline(context->device, &config,
+                                  context->pipeline_cache);
 }
 
 bool begin_frame(VulkanContext *context) {
@@ -1800,12 +1820,18 @@ StagingArena create_staging_arena(const VulkanContext *context,
 }
 
 // TODO alignment padding?
-// add handle with size, usage, offset, instead of just returning offset?
+// TODO add handle with size, usage, offset, instead of just returning offset?
+// TODO track destination offsets? would require assumptions about linear layout
+//
+// written_data_offset is the offset of the staged data in *data, i.e. the
+// src_offset when the staging buffer is the src
 u32 stage_data_explicit(const VulkanContext *context, StagingArena *arena,
-                        void *data, u32 size, VkBuffer destination,
+                        const void *data, u32 size, VkBuffer destination,
                         u32 dst_offset) {
+
   assert(arena->offset + size <= arena->total_size);
   assert(arena->num_copy_regions < MAX_COPY_REGIONS);
+
   u32 written_data_offset = arena->offset;
 
   VkBufferCopy copy_region;
@@ -1824,7 +1850,7 @@ u32 stage_data_explicit(const VulkanContext *context, StagingArena *arena,
 }
 
 u32 stage_data_auto(const VulkanContext *context, StagingArena *arena,
-                    void *data, u32 size, VkBuffer destination) {
+                    const void *data, u32 size, VkBuffer destination) {
   return stage_data_explicit(context, arena, data, size, destination,
                              arena->offset);
 }
@@ -1900,7 +1926,7 @@ UniformBuffer create_uniform_buffer_explicit(const VulkanContext *context,
   uniform_buffer.size = buffer_size;
 
   VK_CHECK(vkMapMemory(context->device, uniform_buffer.vulkan_buffer.memory, 0,
-                       buffer_size, 0, &uniform_buffer.mapped),
+                       buffer_size, 0, (void **)&uniform_buffer.mapped),
            "create_uniform_buffer_explicit: failed to vkMapMemory");
 
   return uniform_buffer;
@@ -1916,8 +1942,8 @@ void destroy_uniform_buffer(const VulkanContext *context,
 }
 
 void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
-                             u32 size) {
-  memcpy(uniform_buffer->mapped, data, size);
+                             u32 offset, u32 size) {
+  memcpy(uniform_buffer->mapped + offset, data, size);
 }
 
 VertexLayoutBuilder create_vertex_layout_builder() {
@@ -2261,7 +2287,8 @@ DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {
 // size, and what shader stage the uniform is used in
 void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
                                        UniformBuffer *uniform_buffer,
-                                       u32 binding, u32 descriptor_count,
+                                       u32 offset, u32 range, u32 binding,
+                                       u32 descriptor_count,
                                        VkShaderStageFlags stage_flags,
                                        bool dynamic) {
   assert(builder->write_descriptor_count < MAX_DESCRIPTOR_WRITES);
@@ -2281,8 +2308,8 @@ void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
   VkDescriptorBufferInfo *descriptor_buffer_info =
       &builder->descriptor_buffer_infos[builder->buffer_info_count];
   descriptor_buffer_info->buffer = uniform_buffer->vulkan_buffer.buffer;
-  descriptor_buffer_info->offset = 0;                   // TODO?
-  descriptor_buffer_info->range = uniform_buffer->size; // TODO?
+  descriptor_buffer_info->offset = offset;
+  descriptor_buffer_info->range = range;
   builder->buffer_info_count++;
 
   VkWriteDescriptorSet *descriptor_write_info =

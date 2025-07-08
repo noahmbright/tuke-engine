@@ -7,6 +7,8 @@
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
 
+// TODO get all opengl into an opengl file and use this for backend delegation
+
 void draw_cube(RenderData *render_data) {
   glUseProgram(render_data->program);
   glBindVertexArray(render_data->vao);
@@ -46,6 +48,18 @@ void draw_square(const RenderData *render_data) {
 }
 
 RenderData init_square(unsigned program) {
+  // clang-format off
+  const float square_vertices[] = {
+      -0.5f, 0.5f, 0.0f,
+      0.5f, -0.5f, 0.0f,
+      0.5f, 0.5f, 0.0f,
+
+      -0.5f, 0.5f, 0.0f,
+      -0.5f, -0.5f, 0.0f,
+      0.5f, -0.5f, 0.0f
+  };
+  // clang-format on
+
   unsigned vao;
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
