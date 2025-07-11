@@ -37,6 +37,13 @@ endif()
 
 link_libraries(engine glfw)
 
-add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
-
+#add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 add_executable(vulkan_test ${CMAKE_SOURCE_DIR}/app/vulkan_test/vulkan_test.cpp)
+
+
+file(GLOB_RECURSE PONG_SOURCE_FILES
+    ${CMAKE_SOURCE_DIR}/app/pong.cpp
+    ${CMAKE_SOURCE_DIR}/app/main.cpp
+)
+
+add_executable(pong ${PONG_SOURCE_FILES})

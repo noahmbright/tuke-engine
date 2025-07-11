@@ -2187,11 +2187,8 @@ VulkanTexture create_vulkan_texture_from_file(VulkanContext *context,
 // want to be able to refer to textures by name?
 // I could pass an array of structs containing a VulkanTexture and a path
 // Also could do hashing
-VulkanTexture load_vulkan_textures(VulkanContext *context, const char **paths,
-                                   u32 num_paths) {
-
-  // TODO
-  assert(num_paths == 1);
+void load_vulkan_textures(VulkanContext *context, const char **paths,
+                          u32 num_paths, VulkanTexture *out_textures) {
 
   u32 max_size = 0;
 
@@ -2203,7 +2200,7 @@ VulkanTexture load_vulkan_textures(VulkanContext *context, const char **paths,
     max_size = (texture_size > max_size) ? texture_size : max_size;
   }
 
-  // TODO find a way to reuse staging buffers
+  // TODO find a way to reuse another staging buffer, already allocated
   VulkanBuffer staging_buffer =
       create_buffer(context, BUFFER_TYPE_STAGING, max_size);
   void *texture_data;
@@ -2212,16 +2209,13 @@ VulkanTexture load_vulkan_textures(VulkanContext *context, const char **paths,
                        &texture_data),
            "load_vulkan_textures: failed to VkMapMemory");
 
-  VulkanTexture texture;
   for (u32 i = 0; i < num_paths; i++) {
-    texture = create_vulkan_texture_from_file(context, paths[i], staging_buffer,
-                                              texture_data);
+    out_textures[i] = create_vulkan_texture_from_file(
+        context, paths[i], staging_buffer, texture_data);
   }
 
   vkUnmapMemory(context->device, staging_buffer.memory);
   destroy_vulkan_buffer(context, staging_buffer);
-
-  return texture;
 }
 
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture) {
@@ -2439,5 +2433,46 @@ void destroy_shader_cache(VulkanShaderCache *cache) {
       vkDestroyShaderModule(cache->device,
                             cache->hash_map.key_values[i].value.module, NULL);
     }
+  }
+}
+
+void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call) {
+
+  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    render_call->graphics_pipeline);
+
+  // TODO when would these not be 0 and 0?
+  // TODO when would these not be 0 and 1?
+  u32 first_binding = 0;
+  vkCmdBindVertexBuffers(
+      command_buffer, first_binding, render_call->num_vertex_buffers,
+      render_call->vertex_buffers, render_call->vertex_buffer_offsets);
+
+  // TODO what are these?
+  u32 first_set = 0;
+  u32 descriptor_set_count = 1;
+  u32 dynamic_offset_count = 0;
+  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          render_call->pipeline_layout, first_set,
+                          descriptor_set_count, &render_call->descriptor_set,
+                          dynamic_offset_count, NULL);
+
+  u32 first_instance = 0;
+  i32 vertex_offset = 0; // TODO understand when this would be non zero
+  if (render_call->is_indexed) {
+
+    vkCmdBindIndexBuffer(command_buffer, render_call->index_buffer,
+                         render_call->index_buffer_offset,
+                         VK_INDEX_TYPE_UINT16);
+
+    u32 first_index = 0;
+    vkCmdDrawIndexed(command_buffer, render_call->num_indices,
+                     render_call->instance_count, first_index, vertex_offset,
+                     first_instance);
+  } else {
+
+    u32 first_vertex = 0;
+    vkCmdDraw(command_buffer, render_call->num_vertices,
+              render_call->instance_count, first_vertex, first_instance);
   }
 }

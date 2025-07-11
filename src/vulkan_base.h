@@ -296,6 +296,23 @@ struct VulkanTexture {
   VkImageView image_view;
 };
 
+struct RenderCall {
+  u32 num_vertices;
+  u32 instance_count;
+  VkPipeline graphics_pipeline;
+  VkPipelineLayout pipeline_layout;
+  VkDescriptorSet descriptor_set;
+
+  u32 num_vertex_buffers;
+  VkDeviceSize vertex_buffer_offsets[MAX_VERTEX_BINDINGS];
+  VkBuffer vertex_buffers[MAX_VERTEX_BINDINGS];
+
+  VkDeviceSize index_buffer_offset;
+  u32 num_indices;
+  VkBuffer index_buffer;
+  bool is_indexed;
+};
+
 extern const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT];
 
 VulkanContext create_vulkan_context(const char *title);
@@ -420,8 +437,8 @@ u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter,
 VulkanTexture create_vulkan_texture_from_file(VulkanContext *context,
                                               const char *path);
 
-VulkanTexture load_vulkan_textures(VulkanContext *context, const char **paths,
-                                   u32 num_paths);
+void load_vulkan_textures(VulkanContext *context, const char **paths,
+                          u32 num_paths, VulkanTexture *out_textures);
 
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
 
@@ -453,3 +470,5 @@ void destroy_descriptor_set_builder(DescriptorSetBuilder *builder);
 VulkanShaderCache *create_shader_cache(VkDevice device);
 bool cache_shader_module(VulkanShaderCache *cache, ShaderSpec spec);
 void destroy_shader_cache(VulkanShaderCache *cache);
+
+void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call);
