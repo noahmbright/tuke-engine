@@ -37,6 +37,18 @@ void init_buffers(State *state) {
   state->uniform_buffer = create_uniform_buffer(ctx, sizeof(MVPUniform));
 }
 
+void init_vertex_states(State *state) {
+
+  // anticipating binding 0 per vertex, position, uv, normal
+  // binding 1 per instance, vec3 position, float texture ID
+  state->vertex_states[VERTEX_STATE_POS_UV] = create_vertex_layout_builder();
+  VertexLayout *pos_uv = &state->vertex_states[VERTEX_STATE_POS_UV];
+  push_vertex_binding(pos_uv, 0, 5 * sizeof(f32), VK_VERTEX_INPUT_RATE_VERTEX);
+  push_vertex_attribute(pos_uv, 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0);
+  push_vertex_attribute(pos_uv, 1, 0, VK_FORMAT_R32G32_SFLOAT, 3 * sizeof(f32));
+  finalize_vertex_input_state(pos_uv);
+}
+
 State setup_state(const char *title) {
 
   State state;
@@ -63,16 +75,8 @@ State setup_state(const char *title) {
 
   cache_shader_module(ctx->shader_cache, paddle_vert_spv_spec);
   cache_shader_module(ctx->shader_cache, paddle_frag_spv_spec);
-  // anticipating binding 0 per vertex, position, uv, normal
-  // binding 1 per instance, vec3 position, float texture ID
-  state.vertex_builder = create_vertex_layout_builder();
-  push_vertex_binding(&state.vertex_builder, 0, 5 * sizeof(f32),
-                      VK_VERTEX_INPUT_RATE_VERTEX);
-  push_vertex_attribute(&state.vertex_builder, 0, 0, VK_FORMAT_R32G32B32_SFLOAT,
-                        0);
-  push_vertex_attribute(&state.vertex_builder, 1, 0, VK_FORMAT_R32G32_SFLOAT,
-                        3 * sizeof(f32));
-  state.vertex_input_state = build_vertex_input_state(&state.vertex_builder);
+
+  init_vertex_states(&state);
 
   state.set_builder = create_descriptor_set_builder(ctx);
   add_uniform_buffer_descriptor_set(&state.set_builder, &state.uniform_buffer,
@@ -89,7 +93,8 @@ State setup_state(const char *title) {
 
   state.pipeline = create_default_graphics_pipeline(
       ctx, paddle_vert_spv_spec.name, paddle_frag_spv_spec.name,
-      &state.vertex_input_state, state.pipeline_layout);
+      &state.vertex_states[VERTEX_STATE_POS_UV].vertex_input_state,
+      state.pipeline_layout);
 
   state.clear_value.color = {{0.0, 1.0, 0.0, 1.0}};
   state.viewport_state = create_viewport_state_xy(ctx->swapchain_extent, 0, 0);

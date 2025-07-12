@@ -31,9 +31,13 @@ const glm::vec3 arena_dimensions0{arena_dimensions_x0, arena_dimensions_y0,
 
 enum EntityIndex {
   ENTITY_LEFT_PADDLE = 0,
-  ENTITY_RIGHT_PADDLE = 1,
-  ENTITY_BALL = 2
+  ENTITY_RIGHT_PADDLE,
+  ENTITY_BALL,
+  ENTITY_BACKGROUND,
+  NUM_ENTITIES
 };
+
+enum VertexStateIndex { VERTEX_STATE_POS_UV, NUM_VERTEX_STATES };
 
 // clang-format off
 const f32 instance_data0[] = {
@@ -59,16 +63,15 @@ struct State {
   VulkanBuffer vertex_buffer;
   VulkanBuffer index_buffer;
   VkSampler sampler;
-  // TODO return a hanlde from set builder that stores everything that needs to
+  // TODO return a handle from set builder that stores everything that needs to
   // be long lived
-  VertexLayoutBuilder vertex_builder;
   DescriptorSetBuilder set_builder;
   VkDescriptorPool descriptor_pool;
   VkPipelineLayout pipeline_layout;
   VkPipeline pipeline;
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_set_layout;
-  VkPipelineVertexInputStateCreateInfo vertex_input_state;
+  VertexLayout vertex_states[NUM_VERTEX_STATES];
   VkClearValue clear_value;
   ViewportState viewport_state;
   RenderCall render_call;

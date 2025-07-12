@@ -1992,6 +1992,12 @@ build_vertex_input_state(VertexLayoutBuilder *builder) {
       builder->attribute_description_count, builder->attribute_descriptions);
 }
 
+void finalize_vertex_input_state(VertexLayoutBuilder *builder) {
+  builder->vertex_input_state = create_vertex_input_state(
+      builder->binding_description_count, builder->binding_descriptions,
+      builder->attribute_description_count, builder->attribute_descriptions);
+}
+
 // TODO format in the depth buffer chapter?
 void transition_image_layout(VulkanContext *context,
                              VulkanTexture vulkan_texture,

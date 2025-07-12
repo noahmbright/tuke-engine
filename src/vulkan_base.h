@@ -263,6 +263,11 @@ struct VulkanVertexLayout {
       attribute_descriptions[MAX_VERTEX_ATTRIBUTES];
 };
 
+// TODO consider rewriting into a VertexLayout
+// right now this is conceptualized as a builder, but all the state
+// needs to persist at least until pipeline creation time
+// I could conceptualize this as just the layout, and finalize it in
+// the end
 struct VertexLayoutBuilder {
   size_t binding_description_count;
   VkVertexInputBindingDescription binding_descriptions[MAX_VERTEX_BINDINGS];
@@ -270,7 +275,11 @@ struct VertexLayoutBuilder {
   size_t attribute_description_count;
   VkVertexInputAttributeDescription
       attribute_descriptions[MAX_VERTEX_ATTRIBUTES];
+
+  VkPipelineVertexInputStateCreateInfo vertex_input_state;
 };
+
+using VertexLayout = VertexLayoutBuilder;
 
 struct DescriptorSetBuilder {
   VkDevice device;
@@ -430,6 +439,7 @@ void push_vertex_attribute(VertexLayoutBuilder *builder, u32 location,
                            u32 binding, VkFormat format, u32 offset);
 VkPipelineVertexInputStateCreateInfo
 build_vertex_input_state(VertexLayoutBuilder *builder);
+void finalize_vertex_input_state(VertexLayoutBuilder *builder);
 
 u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter,
                      VkMemoryPropertyFlags properties);
