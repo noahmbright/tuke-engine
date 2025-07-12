@@ -84,11 +84,11 @@ int main() {
   add_uniform_buffer_descriptor_set(&x_set_builder, &x_uniform_buffer,
                                     sizeof(MVPUniform), sizeof(float), 0, 1,
                                     VK_SHADER_STAGE_FRAGMENT_BIT, false);
-  VkDescriptorSet x_descriptor_set =
+  DescriptorSetHandle x_descriptor =
       build_descriptor_set(&x_set_builder, descriptor_pool);
 
   VkPipelineLayout x_pipeline_layout = create_pipeline_layout(
-      context.device, &x_set_builder.descriptor_set_layout, 1);
+      context.device, &x_descriptor.descriptor_set_layout, 1);
 
   // instanced quad: the mvp uniform is set/binding 0/0, the float is 0/1
   DescriptorSetBuilder mvp_set_builder =
@@ -102,11 +102,11 @@ int main() {
   add_texture_descriptor_set(&mvp_set_builder, &textures[0], sampler, 2, 1,
                              VK_SHADER_STAGE_FRAGMENT_BIT);
 
-  VkDescriptorSet mvp_descriptor_set =
+  DescriptorSetHandle mvp_descriptor =
       build_descriptor_set(&mvp_set_builder, descriptor_pool);
 
   VkPipelineLayout mvp_pipeline_layout = create_pipeline_layout(
-      context.device, &mvp_set_builder.descriptor_set_layout, 1);
+      context.device, &mvp_descriptor.descriptor_set_layout, 1);
 
   VertexLayoutBuilder instance_vertex_layout_builder =
       create_vertex_layout_builder();
@@ -148,7 +148,7 @@ int main() {
   triangle_render_call.vertex_buffer_offsets[0] = triangle_offset;
   triangle_render_call.vertex_buffers[0] = vertex_buffer.buffer;
   triangle_render_call.pipeline_layout = x_pipeline_layout;
-  triangle_render_call.descriptor_set = x_descriptor_set;
+  triangle_render_call.descriptor_set = x_descriptor.descriptor_set;
   triangle_render_call.is_indexed = false;
 
   RenderCall square_render_call;
@@ -159,7 +159,7 @@ int main() {
   square_render_call.vertex_buffer_offsets[0] = square_offset;
   square_render_call.vertex_buffers[0] = vertex_buffer.buffer;
   square_render_call.pipeline_layout = x_pipeline_layout;
-  square_render_call.descriptor_set = x_descriptor_set;
+  square_render_call.descriptor_set = x_descriptor.descriptor_set;
   square_render_call.is_indexed = false;
 
   RenderCall instanced_render_call;
@@ -172,7 +172,7 @@ int main() {
   instanced_render_call.vertex_buffers[0] = vertex_buffer.buffer;
   instanced_render_call.vertex_buffers[1] = vertex_buffer.buffer;
   instanced_render_call.pipeline_layout = mvp_pipeline_layout;
-  instanced_render_call.descriptor_set = mvp_descriptor_set;
+  instanced_render_call.descriptor_set = mvp_descriptor.descriptor_set;
   instanced_render_call.index_buffer = index_buffer.buffer;
   instanced_render_call.index_buffer_offset = 0;
   instanced_render_call.is_indexed = true;
@@ -231,8 +231,8 @@ int main() {
   vkDestroySampler(context.device, sampler, NULL);
   destroy_vulkan_texture(context.device, &textures[0]);
 
-  destroy_descriptor_set_builder(&x_set_builder);
-  destroy_descriptor_set_builder(&mvp_set_builder);
+  destroy_descriptor_set_handle(context.device, &x_descriptor);
+  destroy_descriptor_set_handle(context.device, &mvp_descriptor);
 
   vkDestroyPipelineLayout(context.device, x_pipeline_layout, NULL);
   vkDestroyPipelineLayout(context.device, mvp_pipeline_layout, NULL);

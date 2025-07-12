@@ -52,9 +52,7 @@ void init_vertex_states(State *state) {
 State setup_state(const char *title) {
 
   State state;
-
   state.arena_dimensions = arena_dimensions0;
-
   state.context = create_vulkan_context(title);
   VulkanContext *ctx = &state.context;
 
@@ -69,7 +67,6 @@ State setup_state(const char *title) {
   mvp_pool_sizes[0].descriptorCount = 1;
   mvp_pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   mvp_pool_sizes[1].descriptorCount = 1;
-
   state.descriptor_pool = create_descriptor_pool(ctx->device, mvp_pool_sizes,
                                                  pool_size_count, max_sets);
 
@@ -78,18 +75,17 @@ State setup_state(const char *title) {
 
   init_vertex_states(&state);
 
-  state.set_builder = create_descriptor_set_builder(ctx);
-  add_uniform_buffer_descriptor_set(&state.set_builder, &state.uniform_buffer,
-                                    0, sizeof(MVPUniform), 0, 1,
+  DescriptorSetBuilder set_builder = create_descriptor_set_builder(ctx);
+  add_uniform_buffer_descriptor_set(&set_builder, &state.uniform_buffer, 0,
+                                    sizeof(MVPUniform), 0, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
-  add_texture_descriptor_set(&state.set_builder,
+  add_texture_descriptor_set(&set_builder,
                              &state.textures[TEXTURE_FIELD_BACKGROUND],
                              state.sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-  state.descriptor_set =
-      build_descriptor_set(&state.set_builder, state.descriptor_pool);
-  state.descriptor_set_layout = state.set_builder.descriptor_set_layout;
-  state.pipeline_layout =
-      create_pipeline_layout(ctx->device, &state.descriptor_set_layout, 1);
+  state.descriptor_set_handle =
+      build_descriptor_set(&set_builder, state.descriptor_pool);
+  state.pipeline_layout = create_pipeline_layout(
+      ctx->device, &state.descriptor_set_handle.descriptor_set_layout, 1);
 
   state.pipeline = create_default_graphics_pipeline(
       ctx, paddle_vert_spv_spec.name, paddle_frag_spv_spec.name,
@@ -102,7 +98,7 @@ State setup_state(const char *title) {
   state.render_call.instance_count = 1;
   state.render_call.graphics_pipeline = state.pipeline;
   state.render_call.pipeline_layout = state.pipeline_layout;
-  state.render_call.descriptor_set = state.descriptor_set;
+  state.render_call.descriptor_set = state.descriptor_set_handle.descriptor_set;
   state.render_call.num_vertex_buffers = 1;
   state.render_call.vertex_buffer_offsets[0] = 0;
   state.render_call.vertex_buffers[0] = state.vertex_buffer.buffer;
@@ -125,7 +121,7 @@ void destroy_state(State *state) {
     destroy_vulkan_texture(ctx->device, &state->textures[i]);
   }
 
-  destroy_descriptor_set_builder(&state->set_builder);
+  destroy_descriptor_set_handle(ctx->device, &state->descriptor_set_handle);
   vkDestroyPipelineLayout(ctx->device, state->pipeline_layout, NULL);
   vkDestroyPipeline(ctx->device, state->pipeline, NULL);
 

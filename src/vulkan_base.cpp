@@ -2264,7 +2264,7 @@ DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {
 
   DescriptorSetBuilder builder;
   builder.device = context->device;
-  builder.descriptor_set_layout = VK_NULL_HANDLE;
+  // builder.descriptor_set_layout = VK_NULL_HANDLE;
 
   builder.binding_count = 0;
   memset(builder.layout_bindings, 0, sizeof(builder.layout_bindings));
@@ -2366,16 +2366,18 @@ void add_texture_descriptor_set(DescriptorSetBuilder *builder,
   builder->write_descriptor_count++;
 }
 
-VkDescriptorSet build_descriptor_set(DescriptorSetBuilder *builder,
-                                     VkDescriptorPool descriptor_pool) {
-  builder->descriptor_set_layout = create_descriptor_set_layout(
+DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder,
+                                         VkDescriptorPool descriptor_pool) {
+  DescriptorSetHandle handle;
+
+  handle.descriptor_set_layout = create_descriptor_set_layout(
       builder->device, builder->layout_bindings, builder->binding_count);
 
-  VkDescriptorSet descriptor_set = create_descriptor_set(
-      builder->device, descriptor_pool, &builder->descriptor_set_layout);
+  handle.descriptor_set = create_descriptor_set(
+      builder->device, descriptor_pool, &handle.descriptor_set_layout);
 
   for (u32 i = 0; i < builder->write_descriptor_count; i++) {
-    builder->descriptor_writes[i].dstSet = descriptor_set;
+    builder->descriptor_writes[i].dstSet = handle.descriptor_set;
   }
 
   vkUpdateDescriptorSets(builder->device, builder->write_descriptor_count,
@@ -2383,12 +2385,12 @@ VkDescriptorSet build_descriptor_set(DescriptorSetBuilder *builder,
                          builder->copy_descriptor_count,
                          builder->descriptor_copies);
 
-  return descriptor_set;
+  return handle;
 }
 
-void destroy_descriptor_set_builder(DescriptorSetBuilder *builder) {
-  vkDestroyDescriptorSetLayout(builder->device, builder->descriptor_set_layout,
-                               NULL);
+void destroy_descriptor_set_handle(VkDevice device,
+                                   DescriptorSetHandle *handle) {
+  vkDestroyDescriptorSetLayout(device, handle->descriptor_set_layout, NULL);
 }
 
 VulkanShaderCache *create_shader_cache(VkDevice device) {

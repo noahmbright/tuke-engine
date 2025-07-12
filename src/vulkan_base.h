@@ -283,7 +283,6 @@ using VertexLayout = VertexLayoutBuilder;
 
 struct DescriptorSetBuilder {
   VkDevice device;
-  VkDescriptorSetLayout descriptor_set_layout;
   VkDescriptorSetLayoutBinding layout_bindings[MAX_LAYOUT_BINDINGS];
   u32 binding_count;
 
@@ -296,6 +295,11 @@ struct DescriptorSetBuilder {
   VkDescriptorBufferInfo descriptor_buffer_infos[MAX_DESCRIPTOR_BUFFER_INFOS];
   u32 image_info_count;
   VkDescriptorImageInfo descriptor_image_infos[MAX_DESCRIPTOR_IMAGE_INFOS];
+};
+
+struct DescriptorSetHandle {
+  VkDescriptorSet descriptor_set;
+  VkDescriptorSetLayout descriptor_set_layout;
 };
 
 struct VulkanTexture {
@@ -460,8 +464,8 @@ VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(
 
 DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context);
 
-VkDescriptorSet build_descriptor_set(DescriptorSetBuilder *builder,
-                                     VkDescriptorPool descriptor_pool);
+DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder,
+                                         VkDescriptorPool descriptor_pool);
 
 void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
                                        UniformBuffer *uniform_buffer,
@@ -475,7 +479,8 @@ void add_texture_descriptor_set(DescriptorSetBuilder *builder,
                                 u32 binding, u32 descriptor_count,
                                 VkShaderStageFlags stage_flags);
 
-void destroy_descriptor_set_builder(DescriptorSetBuilder *builder);
+void destroy_descriptor_set_handle(VkDevice device,
+                                   DescriptorSetHandle *handle);
 
 VulkanShaderCache *create_shader_cache(VkDevice device);
 bool cache_shader_module(VulkanShaderCache *cache, ShaderSpec spec);
