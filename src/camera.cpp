@@ -1,21 +1,22 @@
-#include <OpenGL/OpenGL.h>
-#include <glad/gl.h>
+#include <OpenGL/OpenGL.h> // TODO Remove
+#include <glad/gl.h>       // TODO Remove
+
+#include <GLFW/glfw3.h> // TODO Remove
 
 #include "camera.h"
+#include "tuke_engine.h"
 
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/trigonometric.hpp"
 
-#define CAMERA_MATRICES_INDEX 0
-
-static void scroll_callback(GLFWwindow *window, double xoffset,
-                            double yoffset) {
+// TODO decouple from window
+static void scroll_callback(GLFWwindow *window, f64 xoffset, f64 yoffset) {
   Camera *camera = (Camera *)glfwGetWindowUserPointer(window);
 
   (void)xoffset;
   (void)yoffset;
 
-  camera->fovy -= (float)yoffset;
+  camera->fovy -= (f32)yoffset;
   if (camera->fovy < 1.0f)
     camera->fovy = 1.0f;
 
@@ -23,33 +24,26 @@ static void scroll_callback(GLFWwindow *window, double xoffset,
     camera->fovy = 45.0f;
 }
 
-static void mouse_callback_3d(GLFWwindow *window, double xpos, double ypos) {
-  Camera *camera = (Camera *)glfwGetWindowUserPointer(window);
-
-  if (!camera) {
-    fprintf(stderr, "mouse_callback_3d: camera is null\n");
+void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
+  if (!camera->has_moused_yet) {
+    camera->has_moused_yet = true;
+    camera->last_mouse_x = xpos;
+    camera->last_mouse_y = ypos;
   }
 
-  static double last_mouse_x, last_mouse_y;
-  static bool has_moused_yet = false;
-  if (!has_moused_yet) {
-    has_moused_yet = true;
-    last_mouse_x = xpos;
-    last_mouse_y = ypos;
-  }
-
-  double dx = xpos - last_mouse_x;
-  double dy = ypos - last_mouse_y;
-  last_mouse_x = xpos;
-  last_mouse_y = ypos;
+  f64 dx = xpos - camera->last_mouse_x;
+  f64 dy = ypos - camera->last_mouse_y;
+  camera->last_mouse_x = xpos;
+  camera->last_mouse_y = ypos;
   camera->yaw += camera->mouse_sensitivity * dx;
   camera->pitch -= camera->mouse_sensitivity * dy;
 
-  if (camera->pitch > 1.57) {
-    camera->pitch = 1.57;
+  const f32 pi_over_2 = PI / 2.0f;
+  if (camera->pitch > pi_over_2) {
+    camera->pitch = pi_over_2;
   }
-  if (camera->pitch < -1.57) {
-    camera->pitch = -1.57;
+  if (camera->pitch < pi_over_2) {
+    camera->pitch = pi_over_2;
   }
 
   camera->direction.x = glm::cos(camera->pitch) * glm::cos(camera->yaw);
@@ -76,14 +70,14 @@ Camera new_camera(CameraType type, const glm::vec3 &pos,
 
   case CameraType::Camera3D:
   case CameraType::CameraFPS:
-    // FIXME FPS
+    // TODO FPS
 
-    float xy_magnitude =
+    f32 xy_magnitude =
         glm::length(glm::vec2{camera.direction.x, camera.direction.y});
-    float xz_magnitude =
+    f32 xz_magnitude =
         glm::length(glm::vec2{camera.direction.x, camera.direction.z});
 
-    const float tolerance = 1e-5;
+    const f32 tolerance = 1e-5;
     if (xy_magnitude < tolerance) {
       camera.yaw = -1.57;
     } else {
@@ -99,21 +93,22 @@ Camera new_camera(CameraType type, const glm::vec3 &pos,
     break;
   }
 
-  unsigned ubo;
-  glGenBuffers(1, &ubo);
-  glBindBuffer(GL_UNIFORM_BUFFER, ubo);
-  glBufferData(GL_UNIFORM_BUFFER, sizeof(CameraMatrices), nullptr,
-               GL_DYNAMIC_DRAW);
-  glBindBuffer(GL_UNIFORM_BUFFER, 0);
-  glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
-  camera.ubo = ubo;
+  // TODO where does this stuff go?
+  // unsigned ubo;
+  // glGenBuffers(1, &ubo);
+  // glBindBuffer(GL_UNIFORM_BUFFER, ubo);
+  // glBufferData(GL_UNIFORM_BUFFER, sizeof(CameraMatrices), nullptr,
+  //             GL_DYNAMIC_DRAW);
+  // glBindBuffer(GL_UNIFORM_BUFFER, 0);
+  // glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
+  // camera.ubo = ubo;
 
   return camera;
 }
 
 // expect movement direction contains the WASD/arrow key inputs in x and y,
 // and if the shift key is pressed, the w component will be 2, if not, 1
-void move_camera_2d(Camera *camera, float delta_t,
+void move_camera_2d(Camera *camera, f32 delta_t,
                     const glm::vec4 &movement_direction) {
 
   const glm::vec3 dir3{movement_direction.x, movement_direction.y,
@@ -125,35 +120,18 @@ void move_camera_2d(Camera *camera, float delta_t,
 // movement direction will have x and y components
 // y means move in camera->direction
 // x means move along camera->right
-void move_camera_3d(Camera *camera, float delta_t,
+void move_camera_3d(Camera *camera, f32 delta_t,
                     const glm::vec4 &movement_direction) {
 
-  float distance = camera->speed * delta_t * movement_direction.w;
+  f32 distance = camera->speed * delta_t * movement_direction.w;
 
   camera->position += distance * movement_direction.y * camera->direction;
   camera->position += distance * movement_direction.x * camera->right;
 }
 
-void move_camera(Camera *camera, float delta_t,
+void move_camera(Camera *camera, f32 delta_t,
                  const glm::vec4 &movement_direction) {
   camera->move_camera_function(camera, delta_t, movement_direction);
-}
-
-Camera new_camera_from_window(CameraType type, GLFWwindow *window,
-                              const glm::vec3 &pos, const glm::vec3 &direction,
-                              const glm::vec3 &up, const glm::vec3 &right) {
-
-  Camera camera = new_camera(type, pos, direction, up, right);
-  glfwSetWindowUserPointer(window, &camera);
-
-  if (camera.type == CameraType::Camera3D) {
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    glfwSetCursorPosCallback(window, mouse_callback_3d);
-  }
-
-  glfwSetScrollCallback(window, scroll_callback);
-
-  return camera;
 }
 
 glm::mat4 look_at_from_camera(const Camera *camera) {
@@ -162,15 +140,14 @@ glm::mat4 look_at_from_camera(const Camera *camera) {
 }
 
 glm::mat4 perspective_projection_from_camera(const Camera *camera,
-                                             int window_width,
-                                             int window_height) {
+                                             u32 window_width,
+                                             u32 window_height) {
   return glm::perspective(glm::radians(camera->fovy),
-                          float(window_width) / float(window_height), 0.1f,
-                          100.0f);
+                          f32(window_width) / f32(window_height), 0.1f, 100.0f);
 }
 
-CameraMatrices new_camera_matrices(const Camera *camera, int window_width,
-                                   int window_height) {
+CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width,
+                                   u32 window_height) {
   CameraMatrices camera_matrices;
   camera_matrices.view = look_at_from_camera(camera);
   camera_matrices.projection =

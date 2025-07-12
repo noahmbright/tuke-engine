@@ -2322,8 +2322,7 @@ void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
   builder->write_descriptor_count++;
 }
 
-// TODO extend to take descriptor_count as argument
-// check for proper transitions - still don't understand transitions
+// TODO check for proper transitions - still don't understand transitions
 void add_texture_descriptor_set(DescriptorSetBuilder *builder,
                                 VulkanTexture *texture, VkSampler sampler,
                                 u32 binding, u32 descriptor_count,
@@ -2334,8 +2333,6 @@ void add_texture_descriptor_set(DescriptorSetBuilder *builder,
 
   VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
-  // TODO will I ever have an array of textures? When would descriptor_count
-  // not be 1?
   builder->layout_bindings[builder->binding_count] =
       create_descriptor_set_layout_binding(binding, stage_flags,
                                            descriptor_type, descriptor_count);

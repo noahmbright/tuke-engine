@@ -26,7 +26,8 @@ const f32 aspect_ratio = 16.0f / 9.0f;
 const f32 arena_dimensions_x0 = 30.0f;
 const f32 arena_dimensions_y0 = arena_dimensions_x0 / aspect_ratio;
 const f32 x_offset0 = 0.05f * arena_dimensions_x0;
-const glm::vec2 arena_dimensions0{arena_dimensions_x0, arena_dimensions_y0};
+const glm::vec3 arena_dimensions0{arena_dimensions_x0, arena_dimensions_y0,
+                                  1.0f};
 
 enum EntityIndex {
   ENTITY_LEFT_PADDLE = 0,
@@ -47,7 +48,7 @@ const u32 indices_size = sizeof(unit_square_indices);
 const u32 instance_data_size = sizeof(instance_data0);
 const u32 total_size = paddle_vertices_size + indices_size + instance_data_size;
 
-enum TextureID { TEXTURE_GENERIC_GIRL, NUM_TEXTURES };
+enum TextureID { TEXTURE_GENERIC_GIRL, TEXTURE_FIELD_BACKGROUND, NUM_TEXTURES };
 
 struct State {
   VulkanContext context;
@@ -71,6 +72,8 @@ struct State {
   VkClearValue clear_value;
   ViewportState viewport_state;
   RenderCall render_call;
+
+  UniformBuffer uniform_buffer;
 };
 
 enum GameState {
@@ -83,6 +86,12 @@ struct Paddle {
   glm::vec3 position;
   glm::vec3 velocity;
   glm::vec3 size;
+};
+
+struct MVPUniform {
+  glm::mat4 model;
+  glm::mat4 view;
+  glm::mat4 projection;
 };
 
 State setup_state(const char *title);

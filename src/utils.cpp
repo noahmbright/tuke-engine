@@ -37,7 +37,8 @@ const char *read_file(const char *path, unsigned long *size) {
 STBHandle load_texture_metadata(const char *path) {
   STBHandle handle;
   if (!stbi_info(path, &handle.width, &handle.height, &handle.n_channels)) {
-    fprintf(stderr, "load_texture_metadata: Failed to load %s", path);
+    fprintf(stderr, "load_texture_metadata: Failed to load %s, for reason %s\n",
+            path, stbi_failure_reason());
   }
   handle.data = NULL;
   return handle;

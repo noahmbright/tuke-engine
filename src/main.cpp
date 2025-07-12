@@ -17,10 +17,9 @@
 
 int main() {
   GLFWwindow *window = new_window();
-  Camera camera =
-      new_camera_from_window(CameraType::Camera2D, window, {0, 0, 5});
+  Camera camera = new_camera(CameraType::Camera2D);
 
-  unsigned player_texture = load_texture("textures/generic_girl.jpg");
+  unsigned player_texture = load_texture_opengl("textures/generic_girl.jpg");
   unsigned player_program = link_shader_program("shaders/player_vertex.glsl",
                                                 "shaders/player_fragment.glsl");
 

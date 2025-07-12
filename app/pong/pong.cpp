@@ -3,7 +3,8 @@
 #include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
 
-static const char *texture_names[NUM_TEXTURES] = {"textures/generic_girl.jpg"};
+static const char *texture_names[NUM_TEXTURES] = {
+    "textures/generic_girl.jpg", "textures/pong/field_background.jpg"};
 
 void init_buffers(State *state) {
 
@@ -32,6 +33,8 @@ void init_buffers(State *state) {
 
   // TODO how to reuse this staging buffer?
   destroy_vulkan_buffer(ctx, staging_arena.buffer);
+
+  state->uniform_buffer = create_uniform_buffer(ctx, sizeof(MVPUniform));
 }
 
 State setup_state(const char *title) {
@@ -63,17 +66,21 @@ State setup_state(const char *title) {
   // anticipating binding 0 per vertex, position, uv, normal
   // binding 1 per instance, vec3 position, float texture ID
   state.vertex_builder = create_vertex_layout_builder();
-  push_vertex_binding(&state.vertex_builder, 0, 5 * sizeof(float),
+  push_vertex_binding(&state.vertex_builder, 0, 5 * sizeof(f32),
                       VK_VERTEX_INPUT_RATE_VERTEX);
   push_vertex_attribute(&state.vertex_builder, 0, 0, VK_FORMAT_R32G32B32_SFLOAT,
                         0);
   push_vertex_attribute(&state.vertex_builder, 1, 0, VK_FORMAT_R32G32_SFLOAT,
-                        0);
+                        3 * sizeof(f32));
   state.vertex_input_state = build_vertex_input_state(&state.vertex_builder);
 
   state.set_builder = create_descriptor_set_builder(ctx);
-  add_texture_descriptor_set(&state.set_builder, &state.textures[0],
-                             state.sampler, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+  add_uniform_buffer_descriptor_set(&state.set_builder, &state.uniform_buffer,
+                                    0, sizeof(MVPUniform), 0, 1,
+                                    VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_texture_descriptor_set(&state.set_builder,
+                             &state.textures[TEXTURE_FIELD_BACKGROUND],
+                             state.sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
   state.descriptor_set =
       build_descriptor_set(&state.set_builder, state.descriptor_pool);
   state.descriptor_set_layout = state.set_builder.descriptor_set_layout;
@@ -121,6 +128,7 @@ void destroy_state(State *state) {
 
   destroy_vulkan_buffer(ctx, state->vertex_buffer);
   destroy_vulkan_buffer(ctx, state->index_buffer);
+  destroy_uniform_buffer(ctx, &state->uniform_buffer);
 
   destroy_vulkan_context(ctx);
 }
