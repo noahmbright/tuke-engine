@@ -1022,6 +1022,7 @@ VulkanContext create_vulkan_context(const char *title) {
 
   create_frame_sync_objects(context.device, context.frame_sync_objects);
   context.current_frame = 0;
+  context.current_frame_index = 0;
 
   // boolean argument is is_transient command pool
   context.transient_command_pool = create_command_pool(

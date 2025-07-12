@@ -1,0 +1,11 @@
+#version {{ VERSION }}
+
+{{ LOCATION 0 }} in vec3 a_pos;
+{{ LOCATION 1 }} in vec2 a_uv;
+
+{{ LOCATION 0 }} out vec2 uv;
+
+void main(){
+    uv = a_uv;
+    gl_Position = vec4(a_pos, 1.0);
+}
