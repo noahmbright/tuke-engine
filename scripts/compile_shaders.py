@@ -7,6 +7,9 @@ import tempfile
 import argparse
 from pathlib import Path
 
+# TODO reorganize naming
+# TODO output a final struct at the end that I can cache all at once
+
 # wanted to try validating linkage at compile time, had this idea
 # but there doesn't seem to be a cli tool validating correct linkage 
 # keeping in case someone invents it
@@ -189,7 +192,7 @@ if __name__ == "__main__":
 
                         u32_words = [int.from_bytes(spirv[i:i+4], "little") for i in range(0, len(spirv), 4)]
                         shader_array_name = output_filename.replace(".", "_")
-                        
+
                         stage_flags = "VK_SHADER_STAGE_VERTEX_BIT"
                         if parts[1] == "frag":
                             stage_flags = "VK_SHADER_STAGE_FRAGMENT_BIT"
@@ -202,6 +205,8 @@ if __name__ == "__main__":
                         generated_header_handle.write(f"static const size_t {shader_array_name}_size = sizeof({shader_array_name});\n")
                         generated_header_handle.write(f"static constexpr const char* {shader_array_name}_name = \"{shader_array_name}\";\n")
 
+                        # need to output a constexpr const struct like this with the .initialization because
+                        # these assignments don't occur inside a function
                         generated_header_handle.write(f"constexpr const ShaderSpec {shader_array_name}_spec = {{\n")
                         generated_header_handle.write(f"\t.spv = {shader_array_name},\n")
                         generated_header_handle.write(f"\t.size = sizeof({shader_array_name}),\n")

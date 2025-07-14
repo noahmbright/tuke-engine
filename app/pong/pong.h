@@ -37,7 +37,11 @@ enum EntityIndex {
   NUM_ENTITIES
 };
 
-enum VertexStateIndex { VERTEX_STATE_POS_UV, NUM_VERTEX_STATES };
+enum VertexStateIndex {
+  VERTEX_STATE_POS_UV,
+  VERTEX_STATE_POS_UV_INSTANCE,
+  NUM_VERTEX_STATES
+};
 
 // clang-format off
 const f32 instance_data0[] = {
@@ -54,6 +58,12 @@ const u32 total_size = paddle_vertices_size + indices_size + instance_data_size;
 
 enum TextureID { TEXTURE_GENERIC_GIRL, TEXTURE_FIELD_BACKGROUND, NUM_TEXTURES };
 
+enum DescriptorHandleID {
+  DESCRIPTOR_HANDLE_BACKGROUND,
+  DESCRIPTOR_HANDLE_PADDLES_AND_BALL,
+  NUM_DESCRIPTOR_HANDLES
+};
+
 struct State {
   VulkanContext context;
 
@@ -63,7 +73,7 @@ struct State {
   VulkanBuffer vertex_buffer;
   VulkanBuffer index_buffer;
   VkSampler sampler;
-  DescriptorSetHandle descriptor_set_handle;
+  DescriptorSetHandle descriptor_set_handles[NUM_DESCRIPTOR_HANDLES];
   VkDescriptorPool descriptor_pool;
   VkPipelineLayout pipeline_layout;
   VkPipeline pipeline;

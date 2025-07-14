@@ -39,14 +39,52 @@ void init_buffers(State *state) {
 
 void init_vertex_states(State *state) {
 
-  // anticipating binding 0 per vertex, position, uv, normal
-  // binding 1 per instance, vec3 position, float texture ID
+  // binding 0, vertex rate, position, uv
   state->vertex_states[VERTEX_STATE_POS_UV] = create_vertex_layout_builder();
   VertexLayout *pos_uv = &state->vertex_states[VERTEX_STATE_POS_UV];
   push_vertex_binding(pos_uv, 0, 5 * sizeof(f32), VK_VERTEX_INPUT_RATE_VERTEX);
   push_vertex_attribute(pos_uv, 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0);
   push_vertex_attribute(pos_uv, 1, 0, VK_FORMAT_R32G32_SFLOAT, 3 * sizeof(f32));
   finalize_vertex_input_state(pos_uv);
+
+  // binding 0, vertex rate, position, uv
+  // binding 1, instance rate, vec3 position, float texture ID
+  state->vertex_states[VERTEX_STATE_POS_UV_INSTANCE] =
+      create_vertex_layout_builder();
+  VertexLayout *pos_uv_instance =
+      &state->vertex_states[VERTEX_STATE_POS_UV_INSTANCE];
+  push_vertex_binding(pos_uv_instance, 0, 5 * sizeof(f32),
+                      VK_VERTEX_INPUT_RATE_VERTEX);
+  push_vertex_attribute(pos_uv_instance, 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0);
+  push_vertex_attribute(pos_uv_instance, 1, 0, VK_FORMAT_R32G32_SFLOAT,
+                        3 * sizeof(f32));
+  finalize_vertex_input_state(pos_uv);
+}
+
+void init_descriptor_sets(State *state) {
+  VulkanContext *ctx = &state->context;
+
+  // background has global MVP, sampler
+  DescriptorSetBuilder background_builder = create_descriptor_set_builder(ctx);
+  add_uniform_buffer_descriptor_set(&background_builder, &state->uniform_buffer,
+                                    0, sizeof(MVPUniform), 0, 1,
+                                    VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_texture_descriptor_set(
+      &background_builder, &state->textures[TEXTURE_FIELD_BACKGROUND],
+      state->sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+  state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND] =
+      build_descriptor_set(&background_builder, state->descriptor_pool);
+
+  // paddles/ball have global MVP, array of textures?
+  DescriptorSetBuilder paddle_ball_builder = create_descriptor_set_builder(ctx);
+  add_uniform_buffer_descriptor_set(
+      &paddle_ball_builder, &state->uniform_buffer, 0, sizeof(MVPUniform), 0, 1,
+      VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_texture_descriptor_set(
+      &background_builder, &state->textures[TEXTURE_GENERIC_GIRL],
+      state->sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+  state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL] =
+      build_descriptor_set(&paddle_ball_builder, state->descriptor_pool);
 }
 
 State setup_state(const char *title) {
@@ -59,33 +97,35 @@ State setup_state(const char *title) {
   load_vulkan_textures(ctx, texture_names, NUM_TEXTURES, state.textures);
   init_buffers(&state);
 
+  // TODO this sampler never changes - look into wiring immutable samplers
   state.sampler = create_sampler(ctx->device);
-  u32 max_sets = 1;
+
+  // TODO will want to add some kind of accumulation of resources into
+  // python compiler
+  // pool sizes are not for individual resources, but places that a resource
+  // needs to bind
+  u32 max_sets = 2;
   u32 pool_size_count = 2;
   VkDescriptorPoolSize mvp_pool_sizes[2];
   mvp_pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  mvp_pool_sizes[0].descriptorCount = 1;
+  mvp_pool_sizes[0].descriptorCount = 2;
   mvp_pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  mvp_pool_sizes[1].descriptorCount = 1;
+  mvp_pool_sizes[1].descriptorCount = 2;
   state.descriptor_pool = create_descriptor_pool(ctx->device, mvp_pool_sizes,
                                                  pool_size_count, max_sets);
 
   cache_shader_module(ctx->shader_cache, paddle_vert_spv_spec);
   cache_shader_module(ctx->shader_cache, paddle_frag_spv_spec);
+  cache_shader_module(ctx->shader_cache, background_frag_spv_spec);
+  cache_shader_module(ctx->shader_cache, background_vert_spv_spec);
 
   init_vertex_states(&state);
+  init_descriptor_sets(&state);
 
-  DescriptorSetBuilder set_builder = create_descriptor_set_builder(ctx);
-  add_uniform_buffer_descriptor_set(&set_builder, &state.uniform_buffer, 0,
-                                    sizeof(MVPUniform), 0, 1,
-                                    VK_SHADER_STAGE_VERTEX_BIT, false);
-  add_texture_descriptor_set(&set_builder,
-                             &state.textures[TEXTURE_FIELD_BACKGROUND],
-                             state.sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
-  state.descriptor_set_handle =
-      build_descriptor_set(&set_builder, state.descriptor_pool);
+  DescriptorSetHandle *background_handle =
+      &state.descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND];
   state.pipeline_layout = create_pipeline_layout(
-      ctx->device, &state.descriptor_set_handle.descriptor_set_layout, 1);
+      ctx->device, &background_handle->descriptor_set_layout, 1);
 
   state.pipeline = create_default_graphics_pipeline(
       ctx, paddle_vert_spv_spec.name, paddle_frag_spv_spec.name,
@@ -98,7 +138,7 @@ State setup_state(const char *title) {
   state.render_call.instance_count = 1;
   state.render_call.graphics_pipeline = state.pipeline;
   state.render_call.pipeline_layout = state.pipeline_layout;
-  state.render_call.descriptor_set = state.descriptor_set_handle.descriptor_set;
+  state.render_call.descriptor_set = background_handle->descriptor_set;
   state.render_call.num_vertex_buffers = 1;
   state.render_call.vertex_buffer_offsets[0] = 0;
   state.render_call.vertex_buffers[0] = state.vertex_buffer.buffer;
@@ -121,7 +161,11 @@ void destroy_state(State *state) {
     destroy_vulkan_texture(ctx->device, &state->textures[i]);
   }
 
-  destroy_descriptor_set_handle(ctx->device, &state->descriptor_set_handle);
+  for (u32 i = 0; i < NUM_DESCRIPTOR_HANDLES; i++) {
+    destroy_descriptor_set_handle(ctx->device,
+                                  &state->descriptor_set_handles[i]);
+  }
+
   vkDestroyPipelineLayout(ctx->device, state->pipeline_layout, NULL);
   vkDestroyPipeline(ctx->device, state->pipeline, NULL);
 

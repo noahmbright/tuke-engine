@@ -72,11 +72,11 @@ int main() {
 
   // TODO output some const string pound defines or something for names, and
   // cache a list of names or something
-  cache_shader_module(context.shader_cache, simple_vert_spv_spec);
-  cache_shader_module(context.shader_cache, simple_frag_spv_spec);
-  cache_shader_module(context.shader_cache, square_frag_spv_spec);
-  cache_shader_module(context.shader_cache, instanced_quad_frag_spv_spec);
-  cache_shader_module(context.shader_cache, instanced_quad_vert_spv_spec);
+  u32 num_specs = 5;
+  const ShaderSpec *specs[] = {
+      &simple_vert_spv_spec, &simple_frag_spv_spec, &square_frag_spv_spec,
+      &instanced_quad_frag_spv_spec, &instanced_quad_vert_spv_spec};
+  cache_shader_modules(context.shader_cache, specs, num_specs);
 
   // the uniform buffer will contain the layout: mvp | x
   // for the simple.frag.in, x uniform is set/binding 0/0

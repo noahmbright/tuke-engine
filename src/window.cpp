@@ -1,4 +1,4 @@
-#include "glm/ext/quaternion_geometric.hpp"
+#include "glm/glm.hpp"
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"
 #include "window.h"
@@ -88,4 +88,21 @@ glm::vec4 get_window_movement_vector(GLFWwindow *window) {
 
   res.w = sprint_boost;
   return res;
+}
+
+glm::vec2 get_cursor_position(GLFWwindow *window) {
+  double xpos, ypos;
+  glfwGetCursorPos(window, &xpos, &ypos);
+  return {xpos, ypos};
+}
+
+// TODO array of pressed keys? press and release?
+bool is_left_clicking(GLFWwindow *window) {
+  int state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
+  return (state == GLFW_PRESS);
+}
+
+bool is_right_clicking(GLFWwindow *window) {
+  int state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT);
+  return (state == GLFW_PRESS);
 }

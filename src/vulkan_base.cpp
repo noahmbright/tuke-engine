@@ -1898,9 +1898,9 @@ ShaderStage create_shader_stage(VkShaderModule module,
 }
 
 // binding: the binding stipulated in the shader
-// stage_flags: the flags indicating what shader stages will this layout binding
+// stage_flags: the flags indicating what shader stages use this layout binding
 // descriptor_type: flags for uniform, sampler, storage, etc
-// descriptor_count: if the shader allocates an array of the uniform, how many
+// descriptor_count: if the shader allocates an array, the array size
 // TODO immutable samplers?
 VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(
     u32 binding, VkShaderStageFlags stage_flags,
@@ -2329,6 +2329,7 @@ void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
 }
 
 // TODO check for proper transitions - still don't understand transitions
+// TODO check how to pass immutable samplers through here
 void add_texture_descriptor_set(DescriptorSetBuilder *builder,
                                 VulkanTexture *texture, VkSampler sampler,
                                 u32 binding, u32 descriptor_count,
@@ -2338,7 +2339,6 @@ void add_texture_descriptor_set(DescriptorSetBuilder *builder,
   assert(builder->binding_count < MAX_LAYOUT_BINDINGS);
 
   VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-
   builder->layout_bindings[builder->binding_count] =
       create_descriptor_set_layout_binding(binding, stage_flags,
                                            descriptor_type, descriptor_count);
@@ -2430,6 +2430,16 @@ bool cache_shader_module(VulkanShaderCache *cache, ShaderSpec spec) {
   cache->hash_map.key_values[table_index].occupancy = HASHMAP_OCCUPIED;
   cache->hash_map.size++;
 
+  return true;
+}
+
+bool cache_shader_modules(VulkanShaderCache *cache, const ShaderSpec **specs,
+                          u32 num_specs) {
+  for (u32 i = 0; i < num_specs; i++) {
+    if (!cache_shader_module(cache, *specs[i])) {
+      return false;
+    }
+  }
   return true;
 }
 
