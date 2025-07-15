@@ -2,6 +2,7 @@
 #include "pong_shaders.h"
 #include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
+#include "window.h"
 
 static const char *texture_names[NUM_TEXTURES] = {
     "textures/generic_girl.jpg", "textures/pong/field_background.jpg"};
@@ -91,6 +92,8 @@ State setup_state(const char *title) {
 
   State state;
   state.arena_dimensions = arena_dimensions0;
+  init_inputs(&state.inputs);
+  state.game_mode = GAMEMODE_MAIN_MENU;
   state.context = create_vulkan_context(title);
   VulkanContext *ctx = &state.context;
 
@@ -200,4 +203,40 @@ void render(State *state) {
 
   ctx->current_frame++;
   ctx->current_frame_index = ctx->current_frame % MAX_FRAMES_IN_FLIGHT;
+}
+
+void process_inputs(State *state) {
+  Inputs *inputs = &state->inputs;
+  update_key_inputs_glfw(inputs, state->context.window);
+
+  switch (state->game_mode) {
+
+  case GAMEMODE_PAUSED: {
+    if (key_pressed(inputs, KEY_Q)) {
+      printf("unpausing\n");
+      state->game_mode = GAMEMODE_PLAYING;
+    }
+
+    break;
+  } // paused
+
+  case GAMEMODE_PLAYING: {
+    if (key_pressed(inputs, KEY_Q)) {
+      printf("pausing\n");
+      state->game_mode = GAMEMODE_PAUSED;
+    }
+
+    break;
+  } // playing
+
+  case GAMEMODE_MAIN_MENU: {
+    if (key_pressed(inputs, KEY_SPACEBAR)) {
+      printf("starting game\n");
+      state->game_mode = GAMEMODE_PLAYING;
+    }
+
+    break;
+  } // main_menu
+
+  } // switch(state->game_mode)
 }

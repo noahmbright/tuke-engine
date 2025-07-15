@@ -33,6 +33,7 @@ int main() {
     t_prev = t;
     (void)dt;
 
+    process_inputs(&state);
     render(&state);
   }
 

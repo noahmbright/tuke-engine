@@ -64,6 +64,12 @@ enum DescriptorHandleID {
   NUM_DESCRIPTOR_HANDLES
 };
 
+enum GameMode {
+  GAMEMODE_PAUSED,
+  GAMEMODE_PLAYING,
+  GAMEMODE_MAIN_MENU,
+};
+
 struct State {
   VulkanContext context;
 
@@ -83,12 +89,9 @@ struct State {
   RenderCall render_call;
 
   UniformBuffer uniform_buffer;
-};
 
-enum GameState {
-  GAMESTATE_PAUSED,
-  GAMESTATE_PLAYING,
-  GAMESTATE_MAIN_MENU,
+  Inputs inputs;
+  GameMode game_mode;
 };
 
 struct Paddle {
@@ -108,3 +111,4 @@ void destroy_state(State *state);
 
 void initialize_textures(u32 num_textures, VulkanTexture *out_textures);
 void render(State *state);
+void process_inputs(State *state);

@@ -6,6 +6,53 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// need to init in place, because inputs contains arrays that would be
+// stack allocated. the problem is when we go to point with the prev/cur
+// pointers to those stack allocated arrays
+void init_inputs(Inputs *inputs) {
+  for (u32 i = 0; i < NUM_KEYS; i++) {
+    inputs->key_inputs_array[0][i] = false;
+    inputs->key_inputs_array[1][i] = false;
+  }
+
+  inputs->key_inputs = inputs->key_inputs_array[0];
+  inputs->prev_key_inputs = inputs->key_inputs_array[1];
+}
+
+bool key_pressed(Inputs *inputs, Key key) {
+  return inputs->key_inputs[key] && !inputs->prev_key_inputs[key];
+}
+
+// update the inputs AND swap the pointers to the current frames inputs
+void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
+
+  const i32 key_to_glfw_key[] = {
+
+      [KEY_SPACEBAR] = GLFW_KEY_SPACE,
+      [KEY_W] = GLFW_KEY_W,
+      [KEY_A] = GLFW_KEY_A,
+      [KEY_S] = GLFW_KEY_S,
+      [KEY_D] = GLFW_KEY_D,
+
+      [KEY_LEFT_ARROW] = GLFW_KEY_LEFT,
+      [KEY_RIGHT_ARROW] = GLFW_KEY_RIGHT,
+      [KEY_UP_ARROW] = GLFW_KEY_UP,
+      [KEY_DOWN_ARROW] = GLFW_KEY_DOWN,
+
+      [KEY_Q] = GLFW_KEY_Q,
+      [KEY_ESCAPE] = GLFW_KEY_ESCAPE,
+  };
+
+  bool *temp = inputs->key_inputs;
+  inputs->key_inputs = inputs->prev_key_inputs;
+  inputs->prev_key_inputs = temp;
+
+  for (u32 i = 0; i < NUM_KEYS; i++) {
+    inputs->key_inputs[i] =
+        (glfwGetKey(window, key_to_glfw_key[i]) == GLFW_PRESS);
+  }
+}
+
 void error_callback(int error, const char *description) {
   (void)error;
   fprintf(stderr, "GLFW error callback:\n%s\n", description);
