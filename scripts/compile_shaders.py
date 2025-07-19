@@ -6,8 +6,135 @@ import subprocess
 import tempfile
 import argparse
 from pathlib import Path
+from enum import Enum, auto
 
-# TODO output a final struct at the end that I can cache all at once
+class TokenType(Enum):
+    POUND = auto()
+    DOUBLE_L_BRACE = auto()
+    DOUBLE_R_BRACE = auto()
+    L_BRACE = auto()
+    R_BRACE = auto()
+    L_PAREN = auto()
+    R_PAREN = auto()
+    L_BRACKET = auto()
+    R_BRACKET = auto()
+    SEMICOLON = auto()
+    COMMA = auto()
+    PERIOD = auto()
+    EQUALS = auto()
+
+    IN = auto()
+    OUT = auto()
+    VERSION = auto()
+    VOID = auto()
+    UNIFORM = auto()
+    SAMPLER2D = auto()
+
+    VEC2 = auto()
+    VEC3 = auto()
+    VEC4 = auto()
+    MAT2 = auto()
+    MAT3 = auto()
+    MAT4 = auto()
+
+    DIRECTIVE_VERSION = auto()
+    DIRECTIVE_LOCATION = auto()
+    DIRECTIVE_SET_BINDING = auto()
+
+    TEXT = auto()
+
+text_to_glsl_keyword = {
+    "in": TokenType.IN,
+    "out": TokenType.OUT,
+    "version": TokenType.VERSION,
+    "void": TokenType.VOID,
+    "uniform": TokenType.UNIFORM,
+    "sampler2D": TokenType.SAMPLER2D,
+
+    "vec2": TokenType.VEC2,
+    "vec3": TokenType.VEC3,
+    "vec4": TokenType.VEC4,
+    "mat2": TokenType.MAT2,
+    "mat3": TokenType.MAT3,
+    "mat4": TokenType.MAT4,
+
+    "VERSION": TokenType.DIRECTIVE_VERSION,
+    "LOCATION": TokenType.DIRECTIVE_LOCATION,
+    "SET_BINDING": TokenType.DIRECTIVE_SET_BINDING,
+}
+
+def lex_string(s):
+    tokens = []
+    i = 0
+    n = len(s)
+
+    def skip_whitespace():
+        nonlocal i 
+        while i < n and s[i] in " \t\n":
+            i += 1
+
+    def lex_text():
+        nonlocal i
+        start = i
+        while i < n and (s[i].isalnum() or s[i] == '_'):
+            i += 1
+        return s[start:i]
+
+
+    while i < n:
+        skip_whitespace()
+        if i >= n:
+            break
+
+        if s[i] == '#':
+            tokens.append(TokenType.POUND)
+            i += 1
+        elif s[i] == '{':
+            if i + 1 < n and s[i + 1] == '{':
+                tokens.append(TokenType.DOUBLE_L_BRACE)
+                i += 2
+            else:
+                tokens.append(TokenType.L_BRACE)
+                i += 1
+        elif s[i] == '}':
+            if i + 1 < n and s[i + 1] == '}':
+                tokens.append(TokenType.DOUBLE_R_BRACE)
+                i += 2
+            else:
+                tokens.append(TokenType.R_BRACE)
+                i += 1
+        elif s[i] == '(':
+            tokens.append(TokenType.L_PAREN)
+            i += 1
+        elif s[i] == ')':
+            tokens.append(TokenType.R_PAREN)
+            i += 1
+        elif s[i] == '[':
+            tokens.append(TokenType.L_BRACKET)
+            i += 1
+        elif s[i] == ']':
+            tokens.append(TokenType.R_BRACKET)
+            i += 1
+        elif s[i] == ';':
+            tokens.append(TokenType.SEMICOLON)
+            i += 1
+        elif s[i] == ',':
+            tokens.append(TokenType.COMMA)
+            i += 1
+        elif s[i] == '.':
+            tokens.append(TokenType.PERIOD)
+            i += 1
+        elif s[i] == '=':
+            tokens.append(TokenType.EQUALS)
+            i += 1
+        else:
+            text = lex_text()
+            if text in text_to_glsl_keyword:
+                tokens.append(text_to_glsl_keyword[text])
+            else:
+                tokens.append((token_type, text))
+
+    return tokens
 
 vulkan_backend = {
         "name": "vulkan",
