@@ -7,51 +7,38 @@ import tempfile
 import argparse
 from pathlib import Path
 
-# TODO reorganize naming
 # TODO output a final struct at the end that I can cache all at once
 
-# wanted to try validating linkage at compile time, had this idea
-# but there doesn't seem to be a cli tool validating correct linkage 
-# keeping in case someone invents it
-   # output_files_to_link = {}
-   # if parts[0] in output_files_to_link:
-   #     if output_filepath in output_files_to_link[parts[0]]:
-   #         print(f"repeat compilation of {output_filepath}")
-   #     else:
-   #         output_files_to_link[parts[0]].append(output_filepath) 
-   # else:
-   #     output_files_to_link[parts[0]] = [output_filepath]
-
-backends = [
-    {
+vulkan_backend = {
         "name": "vulkan",
         "VERSION": "450",
         "EXTENSION": "spv"
-    },
-    {
+    }
+
+opengl_backend = {
         "name": "opengl",
         "VERSION": "410 core",
         "EXTENSION": "glsl"
     }
-]
+
+file_stage_to_flag = {
+    "vert": "VK_SHADER_STAGE_VERTEX_BIT",
+    "frag": "VK_SHADER_STAGE_FRAGMENT_BIT",
+    "comp": "VK_SHADER_STAGE_COMPUTE_BIT",
+}
 
 def source_is_newer(source, target):
     if not target.exists():
         return True
     return source.stat().st_mtime > target.stat().st_mtime
 
-def check_dir_needs_regenerated(files, shader_gen_dir):
+# check if any of files are newer than header
+# files should be shader source files. if they are newer, return true as
+# a signal to recompile
+def check_dir_needs_regenerated(files, header):
     needs_regenerated = False
     for file in files:
-        source_file_basename = os.path.basename(file)
-        parts = validate_filename_and_get_parts(source_file_basename)
-        if parts is None:
-            continue
-
-        shader_stage = parts[1]
-        output_file_basename = parts[0] + "." + shader_stage
-        test_compiled_filepath = os.path.join(shader_gen_dir, output_file_basename + ".glsl")
-        if source_is_newer(Path(file), Path(test_compiled_filepath)):
+        if source_is_newer(Path(file), Path(header)):
             needs_regenerated = True
             break
     return needs_regenerated
@@ -59,12 +46,14 @@ def check_dir_needs_regenerated(files, shader_gen_dir):
 # expect name.{vert/frag/comp}.in
 def validate_filename_and_get_parts(filename):
     parts = filename.split(".")
-    if len(parts)!= 3 or not (parts[1] == "vert" or parts[1] == "frag" or parts[1] == "comp") or parts[2] != "in":
+    stage_is_valid = parts[1] in file_stage_to_flag  
+    if not (len(parts) == 3 and stage_is_valid and parts[2] == "in"):
         print("Expected filename of the form {{name}}.{{vert/frag/comp}}.{{in}}")
         print("\tNot compiling file: " + filename)
         return None
     return parts
 
+# returns a string with template-expanded glsl
 def compile_shader(filepath, backend):
     with open(filepath, 'r', encoding='utf-8') as f:
         contents = f.read()
@@ -93,21 +82,27 @@ def compile_shader(filepath, backend):
 
     return re.sub(r"\{\{\s*(.*?)\s*\}\}", replacer, contents)
 
-def compile_to_spirv(source_code, output_path, stage):
+# write source code to a temp file, compile that temp file into spv, and return array with bytecode
+def compile_to_spirv_and_get_bytes(source_code, stage):
     if args.dump_vulkan_source:
-        print(f"dumping source for {output_path}")
+        print(f"dumping source")
         print(source_code)
 
+    # write glsl to file
     with tempfile.NamedTemporaryFile(suffix=f".{stage}", delete=False, mode='w', encoding='utf-8') as tmp_file:
         tmp_file.write(source_code)
-        tmp_filename = tmp_file.name
+        glsl_path = tmp_file.name
+
+    # will need to read spv from other temp file
+    with tempfile.NamedTemporaryFile(suffix=f".{stage}", delete=False) as tmp_file:
+        spv_path = tmp_file.name
 
     try:
         result = subprocess.run([
             "glslangValidator",
             "-S", stage,
-            "-o", output_path,
-            "-V", tmp_filename
+            "-o", spv_path,
+            "-V", glsl_path
         ], capture_output=True, text=True)
 
         if result.returncode != 0:
@@ -115,11 +110,70 @@ def compile_to_spirv(source_code, output_path, stage):
             print(source_code)
             print(result.stdout)
             print(result.stderr)
-            return False
+            return None
         else:
-            return True
+            return get_spirv_bytes(spv_path)
     finally:
-        os.remove(tmp_filename)
+        os.remove(glsl_path)
+        os.remove(spv_path)
+
+# after writing the spirv bytecode to a file, read the file and return the bytecode
+# returns a bytes object, not a string
+# validates by requiring 4 bytes words
+def get_spirv_bytes(path):
+    with open(path, "rb") as spirv_f:
+        spirv = spirv_f.read()
+
+    if len(spirv) % 4 != 0:
+        print(f"\tThe length of {path} spirv is {len(spirv)}, not a multiple of 4")
+        print(f"\tNot writing {path} to c header")
+        return None
+
+    return spirv
+
+# stage is a string, "vert", etc. for opengl/vulkan flexibility
+class Shader:
+    def __init__(self, name, spirv, opengl_source, stage):
+        self.name = name
+        self.spirv = spirv
+        self.stage = stage
+        self.opengl_source = opengl_source
+
+def c_multiline_string_literal(s):
+    lines = s.splitlines()
+    quoted_lines = ['"' + line.replace('"', '\\"') + '"' for line in lines]
+    return "\n".join(quoted_lines)
+
+def generate_shader_header(shaders):
+    lines = []
+    lines.append("// Generated shader header, do not edit")
+    lines.append("#pragma once\n#include <stdint.h>\n#include <stddef.h>\n#include \"vulkan_base.h\"\n")
+
+    for shader in shaders:
+        u32_words = [int.from_bytes(shader.spirv[i:i+4], "little") for i in range(0, len(shader.spirv), 4)]
+        stage_flags = file_stage_to_flag[shader.stage]
+
+        lines.append(f"static const uint32_t {shader.name}[] = {{")
+        for i in range(0, len(u32_words), 4):
+            chunk = ", ".join(f"0x{w:08x}" for w in u32_words[i:i+4])
+            lines.append(f"    {chunk},")
+        lines.append("};\n")
+        lines.append(f"static const size_t {shader.name}_size = sizeof({shader.name});")
+        lines.append(f"static constexpr const char* {shader.name}_name = \"{shader.name}\";")
+
+        # need to output a constexpr const struct like this with the .initialization because
+        # these assignments don't occur inside a function
+        lines.append(f"constexpr const ShaderSpec {shader.name}_spec = {{")
+        lines.append(f"\t.spv = {shader.name},")
+        lines.append(f"\t.size = sizeof({shader.name}),")
+        lines.append(f"\t.name = {shader.name}_name,")
+        lines.append(f"\t.stage_flags = {stage_flags},")
+        lines.append("};\n")
+
+        c_string = c_multiline_string_literal(shader.opengl_source)
+        lines.append(f"static constexpr const char* {shader.name}_opengl_glsl = {c_string};\n")
+
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
@@ -128,6 +182,11 @@ if __name__ == "__main__":
         "--dump-vulkan-source",
         action="store_true",
         help="Print vulkan source when compiling to glsl 450"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Ignore timestamps and force compilation"
     )
     args = parser.parse_args()
 
@@ -147,12 +206,6 @@ if __name__ == "__main__":
     # for each directory in shaders/, if any shader has been updated since last compilation, recompile entire directory
     for subdir in shader_subdirectories:
         files = [os.path.abspath(os.path.join(subdir, f)) for f in os.listdir(subdir) if os.path.isfile(os.path.join(subdir, f))]
-        # shader gen dir is where the generated glsl goes
-        shader_gen_dir = os.path.join(subdir, "gen")
-        os.makedirs(shader_gen_dir, exist_ok=True)
-
-        if not check_dir_needs_regenerated(files, shader_gen_dir):
-            continue
 
         subdir_relative_path = str(Path(subdir).relative_to(shaders_dir)).replace("/", "_") 
         if subdir_relative_path == ".":
@@ -161,60 +214,32 @@ if __name__ == "__main__":
             subdir_relative_path += "_shaders.h"
         header_to_generate_path = header_gen_dir / subdir_relative_path
 
+        if not args.force:
+            if not check_dir_needs_regenerated(files, header_to_generate_path):
+                print(f"Nothing to compile for {header_to_generate_path}")
+                continue
+
+        shaders = []
+        for source_file in files:
+            # source_file is /full/path/to/name.stage.in
+            # source_file_basename is name.stage.in
+            source_file_basename = os.path.basename(source_file)
+            parts = validate_filename_and_get_parts(source_file_basename)
+            if parts is None:
+                continue
+
+            shader_stage = parts[1]
+            shader_name = parts[0] + "_" + shader_stage
+
+            opengl_glsl = compile_shader(source_file, opengl_backend)
+            vulkan_glsl = compile_shader(source_file, vulkan_backend)
+            spirv = compile_to_spirv_and_get_bytes(vulkan_glsl, shader_stage)
+            if spirv is None:
+                continue
+
+            shader = Shader(shader_name, spirv, opengl_glsl, shader_stage)
+            shaders.append(shader)
+
         with open(header_to_generate_path, 'w', encoding='utf-8') as generated_header_handle:
-            generated_header_handle.write("// Generated shader header, do not edit\n")
-            generated_header_handle.write("#pragma once\n#include <stdint.h>\n#include <stddef.h>\n#include \"vulkan_base.h\"\n\n")
-
-            for source_file in files:
-                source_file_basename = os.path.basename(source_file)
-                parts = validate_filename_and_get_parts(source_file_basename)
-                if parts is None:
-                    continue
-
-                shader_stage = parts[1]
-                output_file_basename = parts[0] + "." + shader_stage
-                output_file = os.path.join(shader_gen_dir, output_file_basename)
-
-                for backend in backends:
-                    new_shader_glsl_source = compile_shader(source_file, backend)
-                    output_filename = output_file_basename + "." + backend["EXTENSION"]
-                    output_filepath = os.path.join(shader_gen_dir, output_filename)
-
-                    if backend["name"] == "vulkan":
-                        compile_to_spirv(new_shader_glsl_source, output_filepath, shader_stage)
-
-                        with open(output_filepath, "rb") as spirv_f:
-                            spirv = spirv_f.read()
-                        if len(spirv) % 4 != 0:
-                            print(f"\tThe length of {output_filepath} is {len(spirv)}, not a multiple of 4")
-                            print(f"\tNot writing {output_filepath} to c header")
-                            continue
-
-                        u32_words = [int.from_bytes(spirv[i:i+4], "little") for i in range(0, len(spirv), 4)]
-                        shader_array_name = output_filename.replace(".", "_")
-
-                        stage_flags = "VK_SHADER_STAGE_VERTEX_BIT"
-                        if parts[1] == "frag":
-                            stage_flags = "VK_SHADER_STAGE_FRAGMENT_BIT"
-
-                        generated_header_handle.write(f"static const uint32_t {shader_array_name}[] = {{\n")
-                        for i in range(0, len(u32_words), 4):
-                            chunk = ", ".join(f"0x{w:08x}" for w in u32_words[i:i+4])
-                            generated_header_handle.write(f"    {chunk},\n")
-                        generated_header_handle.write("};\n")
-                        generated_header_handle.write(f"static const size_t {shader_array_name}_size = sizeof({shader_array_name});\n")
-                        generated_header_handle.write(f"static constexpr const char* {shader_array_name}_name = \"{shader_array_name}\";\n")
-
-                        # need to output a constexpr const struct like this with the .initialization because
-                        # these assignments don't occur inside a function
-                        generated_header_handle.write(f"constexpr const ShaderSpec {shader_array_name}_spec = {{\n")
-                        generated_header_handle.write(f"\t.spv = {shader_array_name},\n")
-                        generated_header_handle.write(f"\t.size = sizeof({shader_array_name}),\n")
-                        generated_header_handle.write(f"\t.name = {shader_array_name}_name,\n")
-                        generated_header_handle.write(f"\t.stage_flags = {stage_flags},\n")
-                        generated_header_handle.write("};\n\n")
-
-                    if backend["name"] == "opengl":
-                        with open(output_filepath, 'w', encoding='utf-8') as f:
-                            f.write(new_shader_glsl_source)
-
+           header_source = generate_shader_header(shaders)
+           generated_header_handle.write(header_source)
