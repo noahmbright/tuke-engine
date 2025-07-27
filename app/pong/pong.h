@@ -4,6 +4,8 @@
 #include "tuke_engine.h"
 #include "vulkan_base.h"
 
+#define MAT4_SIZE (sizeof(glm::mat4))
+
 // clang-format off
 // start with rectangles, TODO cube
 // TL, BL, BR, TR
@@ -37,12 +39,6 @@ enum EntityIndex {
   NUM_ENTITIES
 };
 
-enum VertexStateIndex {
-  VERTEX_STATE_POS_UV,
-  VERTEX_STATE_POS_UV_INSTANCE,
-  NUM_VERTEX_STATES
-};
-
 // clang-format off
 const f32 instance_data0[] = {
     -arena_dimensions_x0 + x_offset0, 0.0f, 0.0f, // left paddle
@@ -71,10 +67,11 @@ enum GameMode {
 };
 
 struct State {
-  VulkanContext context;
+  u32 right_score, left_score;
 
   glm::vec2 arena_dimensions;
 
+  VulkanContext context;
   VulkanTexture textures[NUM_TEXTURES];
   VulkanBuffer vertex_buffer;
   VulkanBuffer index_buffer;
@@ -83,7 +80,6 @@ struct State {
   VkDescriptorPool descriptor_pool;
   VkPipelineLayout pipeline_layout;
   VkPipeline pipeline;
-  VertexLayout vertex_states[NUM_VERTEX_STATES];
   VkClearValue clear_value;
   ViewportState viewport_state;
   RenderCall render_call;

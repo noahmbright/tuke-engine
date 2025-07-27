@@ -10,20 +10,29 @@ int main() {
   glm::vec3 camera_pos{0.0f, 0.0f, 30.0f};
   Camera camera = new_camera(CameraType::Camera2D, camera_pos);
 
-  MVPUniform mvp;
-  mvp.model = glm::scale(glm::mat4(1.0f), arena_dimensions0);
+  // TODO how to get model onto GPU? uniform? something else?
+  glm::mat4 arena_model = glm::scale(glm::mat4(1.0f), arena_dimensions0);
+
   // TODO make camera matrices only on camera movement
   // TODO buffer only on resize
-  // will need a callback? How to integrate with polling?
   // TODO when can I most efficiently multiply matrices together, view/proj?
   // When would that not be possible?
   int height, width;
   glfwGetFramebufferSize(ctx->window, &width, &height);
   const CameraMatrices camera_matrices =
       new_camera_matrices(&camera, width, height);
-  mvp.view = camera_matrices.view;
-  mvp.projection = camera_matrices.projection;
-  write_to_uniform_buffer(&state.uniform_buffer, &mvp, 0, sizeof(mvp));
+  glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
+
+  glm::mat4 player_paddle_model = glm::mat4(1.0f);
+
+  // TODO want a system for updating parts of a buffer by name
+  // uniform buffer structure: camera vp, background model, paddle model
+  write_to_uniform_buffer(&state.uniform_buffer, &camera_vp, 0 * MAT4_SIZE,
+                          MAT4_SIZE);
+  write_to_uniform_buffer(&state.uniform_buffer, &arena_model, 1 * MAT4_SIZE,
+                          MAT4_SIZE);
+  write_to_uniform_buffer(&state.uniform_buffer, &player_paddle_model,
+                          2 * MAT4_SIZE, MAT4_SIZE);
 
   f64 t_prev = glfwGetTime();
   while (!glfwWindowShouldClose(ctx->window)) {

@@ -7,6 +7,12 @@ import tempfile
 import argparse
 from pathlib import Path
 from enum import Enum, auto
+from dataclasses import dataclass
+from collections import defaultdict
+
+RED = "\033[31m"
+YELLOW = "\033[33m"
+RESET = "\033[0m"
 
 class TokenType(Enum):
     POUND = auto()
@@ -21,7 +27,14 @@ class TokenType(Enum):
     SEMICOLON = auto()
     COMMA = auto()
     PERIOD = auto()
+
     EQUALS = auto()
+    PLUS = auto()
+    PLUS_PLUS = auto()
+    MINUS = auto()
+    MINUS_MINUS = auto()
+    ASTERISK = auto()
+    SLASH = auto()
 
     IN = auto()
     OUT = auto()
@@ -30,6 +43,7 @@ class TokenType(Enum):
     UNIFORM = auto()
     SAMPLER2D = auto()
 
+    FLOAT = auto()
     VEC2 = auto()
     VEC3 = auto()
     VEC4 = auto()
@@ -40,8 +54,30 @@ class TokenType(Enum):
     DIRECTIVE_VERSION = auto()
     DIRECTIVE_LOCATION = auto()
     DIRECTIVE_SET_BINDING = auto()
+    RATE_VERTEX = auto()
+    RATE_INSTANCE = auto()
+    BINDING = auto()
+    OFFSET = auto()
+    TIGHTLY_PACKED = auto()
 
     TEXT = auto()
+
+directives = {
+    TokenType.DIRECTIVE_VERSION,
+    TokenType.DIRECTIVE_LOCATION,
+    TokenType.DIRECTIVE_SET_BINDING 
+}
+
+SIZE_OF_FLOAT = 4
+glsl_types_to_sizes = {
+    TokenType.FLOAT: 1 * SIZE_OF_FLOAT,
+    TokenType.VEC2: 2 * SIZE_OF_FLOAT,
+    TokenType.VEC3 : 3 * SIZE_OF_FLOAT,
+    TokenType.VEC4 : 4 * SIZE_OF_FLOAT,
+    TokenType.MAT2 : 2 * 2 * SIZE_OF_FLOAT,
+    TokenType.MAT3 : 3 * 3 * SIZE_OF_FLOAT,
+    TokenType.MAT4 : 4 * 4 * SIZE_OF_FLOAT,
+}
 
 text_to_glsl_keyword = {
     "in": TokenType.IN,
@@ -51,6 +87,7 @@ text_to_glsl_keyword = {
     "uniform": TokenType.UNIFORM,
     "sampler2D": TokenType.SAMPLER2D,
 
+    "float": TokenType.FLOAT,
     "vec2": TokenType.VEC2,
     "vec3": TokenType.VEC3,
     "vec4": TokenType.VEC4,
@@ -61,7 +98,18 @@ text_to_glsl_keyword = {
     "VERSION": TokenType.DIRECTIVE_VERSION,
     "LOCATION": TokenType.DIRECTIVE_LOCATION,
     "SET_BINDING": TokenType.DIRECTIVE_SET_BINDING,
+    "RATE_VERTEX": TokenType.RATE_VERTEX,
+    "RATE_INSTANCE": TokenType.RATE_INSTANCE,
+    "BINDING": TokenType.BINDING,
+    "OFFSET": TokenType.OFFSET,
+    "TIGHTLY_PACKED": TokenType.TIGHTLY_PACKED,
 }
+
+class Token():
+    def __init__(self, type, start, text=None):
+        self.type = type
+        self.start = start
+        self.text = text
 
 def lex_string(s):
     tokens = []
@@ -87,54 +135,408 @@ def lex_string(s):
             break
 
         if s[i] == '#':
-            tokens.append(TokenType.POUND)
+            tokens.append(Token(TokenType.POUND, i))
             i += 1
+
         elif s[i] == '{':
             if i + 1 < n and s[i + 1] == '{':
-                tokens.append(TokenType.DOUBLE_L_BRACE)
+                tokens.append(Token(TokenType.DOUBLE_L_BRACE, i))
                 i += 2
             else:
-                tokens.append(TokenType.L_BRACE)
+                tokens.append(Token(TokenType.L_BRACE, i))
                 i += 1
+
         elif s[i] == '}':
             if i + 1 < n and s[i + 1] == '}':
-                tokens.append(TokenType.DOUBLE_R_BRACE)
+                tokens.append(Token(TokenType.DOUBLE_R_BRACE, i))
                 i += 2
             else:
-                tokens.append(TokenType.R_BRACE)
+                tokens.append(Token(TokenType.R_BRACE, i))
                 i += 1
+
+        elif s[i] == '+':
+            if i + 1 < n and s[i + 1] == '+':
+                tokens.append(Token(TokenType.PLUS_PLUS, i))
+                i += 2
+            else:
+                tokens.append(Token(TokenType.PLUS, i))
+                i += 1
+
+        elif s[i] == '-':
+            if i + 1 < n and s[i + 1] == '-':
+                tokens.append(Token(TokenType.MINUS_MINUS, i))
+                i += 2
+            else:
+                tokens.append(Token(TokenType.MINUS, i))
+                i += 1
+
+        elif s[i] == '*':
+            tokens.append(Token(TokenType.ASTERISK, i))
+            i += 1
+        elif s[i] == '/':
+            tokens.append(Token(TokenType.SLASH, i))
+            i += 1
         elif s[i] == '(':
-            tokens.append(TokenType.L_PAREN)
+            tokens.append(Token(TokenType.L_PAREN, i))
             i += 1
         elif s[i] == ')':
-            tokens.append(TokenType.R_PAREN)
+            tokens.append(Token(TokenType.R_PAREN, i))
             i += 1
         elif s[i] == '[':
-            tokens.append(TokenType.L_BRACKET)
+            tokens.append(Token(TokenType.L_BRACKET, i))
             i += 1
         elif s[i] == ']':
-            tokens.append(TokenType.R_BRACKET)
+            tokens.append(Token(TokenType.R_BRACKET, i))
             i += 1
         elif s[i] == ';':
-            tokens.append(TokenType.SEMICOLON)
+            tokens.append(Token(TokenType.SEMICOLON, i))
             i += 1
         elif s[i] == ',':
-            tokens.append(TokenType.COMMA)
+            tokens.append(Token(TokenType.COMMA, i))
             i += 1
         elif s[i] == '.':
-            tokens.append(TokenType.PERIOD)
+            tokens.append(Token(TokenType.PERIOD, i))
             i += 1
         elif s[i] == '=':
-            tokens.append(TokenType.EQUALS)
+            tokens.append(Token(TokenType.EQUALS, i))
             i += 1
         else:
+            start = i
             text = lex_text()
             if text in text_to_glsl_keyword:
-                tokens.append(text_to_glsl_keyword[text])
+                tokens.append(Token(text_to_glsl_keyword[text], start))
             else:
-                tokens.append((token_type, text))
+                tokens.append(Token(TokenType.TEXT, start, text))
 
     return tokens
+
+# conceptualizing a vertex layout based on the location is asks for,
+# the input rate, and the data type it expects at that location
+# only supporting native glsl types, so using token types for
+# glsl type and rate
+@dataclass
+class VertexAttribute:
+    location: int
+    binding: int
+    glsl_type: TokenType
+    rate: TokenType
+    identifier: str
+    offset: int
+    is_tightly_packed: bool
+
+class SliceType(Enum):
+    GLSL_SOURCE = auto()
+    VERSION = auto()
+    LOCATION = auto()
+    SET_BINDING = auto()
+
+@dataclass
+class TemplateStringSlice:
+    start: int
+    end: int
+    type: SliceType
+
+@dataclass
+class SetBindingLayout:
+    set_id: int
+    binding: int
+    # TODO generalize
+    is_sampler: bool
+    size: int
+
+
+def parse_tokens(tokens, stage, parser_error_reporter):
+    i = 0
+    current_start = 0
+    n = len(tokens)
+    slices = []
+    locations = []
+    set_bindings = []
+
+    def parse_version_directive():
+        nonlocal i
+        nonlocal current_start
+
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.DIRECTIVE_VERSION, i, 
+                              "Expected DIRECTIVE_VERSION")
+        if not still_valid:
+            return
+        i += 1
+
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.DOUBLE_R_BRACE, i, 
+                              "Expected }} in VERSION directive")
+        if not still_valid:
+            return
+        i += 1
+
+        slices.append(TemplateStringSlice(current_start, tokens[i].start, SliceType.VERSION))
+        current_start = tokens[i].start
+
+    # {{ LOCATION N BINDING M RATE OFFSET (n | TIGHTLY_PACKED)}} (in | out) type identifier;
+    def parse_location_directive():
+        nonlocal i
+        nonlocal current_start
+        slice_type = SliceType.LOCATION
+
+        # LOCATION
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.DIRECTIVE_LOCATION, i, 
+                              "Expected DIRECTIVE_LOCATION")
+        if not still_valid:
+            return
+        i += 1
+
+        # N
+        (i, still_valid) = parser_error_reporter(tokens[i].text.isdigit(), i, 
+                              "Expected digit after LOCATION")
+        if not still_valid:
+            return
+        location = int(tokens[i].text)
+        i += 1
+
+        # (RATE)
+        is_vertex_stage = (stage == ShaderStage.VERTEX)
+        # in non vertex stages, only specify locations, no vertex layouts
+        if not is_vertex_stage:
+            (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.DOUBLE_R_BRACE, i, 
+                                  "In non-vertex shader LOCATION directive, not of form {{ LOCATION N }}")
+            if not still_valid:
+                return
+
+            slices.append(TemplateStringSlice(current_start, tokens[i].start, slice_type))
+            i += 1
+            return
+
+        # if in a vertex stage, can either be an out, handled here and returned early,
+        # or a fully layout, parsed after
+        if tokens[i].type == TokenType.DOUBLE_R_BRACE:
+            slices.append(TemplateStringSlice(current_start, tokens[i].start, slice_type))
+            i += 1
+            (i, still_valid) = parser_error_reporter(tokens[i].type != TokenType.IN, i, 
+                              "In vertex shader LOCATION directive of form {{ LOCATION N }} (not in), expected full vertex layout")
+            return
+
+        rate = None
+        offset = None
+        is_tightly_packed = None
+        # BINDING
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.BINDING, i, 
+                              "Expected BINDING after location")
+        if not still_valid:
+            return
+        i += 1
+
+        # binding id
+        (i, still_valid) = parser_error_reporter(tokens[i].text.isdigit(), i, 
+                              "Expected digit after BINDING")
+        if not still_valid:
+            return
+        binding = int(tokens[i].text)
+        i += 1
+
+        # rate
+        is_rate = (tokens[i].type == TokenType.RATE_VERTEX) or (tokens[i].type == TokenType.RATE_INSTANCE)
+        (i, still_valid) = parser_error_reporter(is_rate, i, 
+                              "After Binding ID, RATE expected")
+        if not still_valid:
+            return
+        rate = tokens[i].type
+        i += 1
+
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.OFFSET, i, 
+                              "Expected OFFSET after RATE in Location directive")
+        if not still_valid:
+            return
+        i += 1
+
+        is_tightly_packed = (tokens[i].type == TokenType.TIGHTLY_PACKED)
+        if is_tightly_packed:
+            offset = 0
+        else:
+            (i, still_valid) = parser_error_reporter(tokens[i].text.isdigit(), i, 
+                                  "Expected digit or TIGHTLY_PACKED after OFFSET")
+            if not still_valid:
+                return
+            offset = int(tokens[i].text)
+
+        i += 1
+
+
+        # }}
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.DOUBLE_R_BRACE, i, 
+                              "Expected }} after location directive")
+        if not still_valid:
+            return
+        i += 1
+        slices.append(TemplateStringSlice(current_start, tokens[i].start, slice_type))
+        current_start = tokens[i].start
+
+        # ( in | out )
+        is_in = (tokens[i].type == TokenType.IN)
+        is_out = (tokens[i].type == TokenType.OUT)
+        (i, still_valid) = parser_error_reporter(is_in or is_out, i, "Expected in or out after location directive")
+        if not still_valid:
+            return
+        is_vertex_layout = (tokens[i].type == TokenType.IN)
+        i += 1
+
+        # type
+        (i, still_valid) = parser_error_reporter(tokens[i].type in glsl_types_to_sizes, i,
+                              "Expected glsl type after in/out in location description")
+        if not still_valid:
+            return
+        glsl_type = tokens[i].type
+        i += 1
+
+        # identifier
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.TEXT, i,
+                              "Expected identifier after location")
+        if not still_valid:
+            return
+        identifier = tokens[i].text
+        i += 1
+
+        if is_in and stage == ShaderStage.VERTEX:
+            if offset is None or is_tightly_packed is None or rate is None:
+                none_fields = ""
+                if offset is None:
+                    none_fields += "offset"
+
+                if is_tightly_packed is None:
+                    if none_fields:
+                        none_fields += ", "
+                    none_fields += "is_tightly_packed"
+
+                if rate is None:
+                    if none_fields:
+                        none_fields += ", "
+                    none_fields += "rate"
+
+                conjugated_be = "are" if "," in none_fields else "is"
+                (i, still_valid) = parser_error_reporter(False, i,
+                                      f"Parsing in attribute in vertex shader, but {none_fields} {conjugated_be} None")
+                if not still_valid:
+                    return
+                i += 1
+
+            else:
+                locations.append(VertexAttribute(
+                    location, binding, glsl_type, rate, identifier, offset, is_tightly_packed)
+                                 )
+
+
+        # ;
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.SEMICOLON, i,
+                              "Expected ; at end of location line")
+        if not still_valid:
+            return
+        i += 1
+
+
+
+    # {{ SET_BINDING set binding }} uniform sampler2D identifier;
+    # or 
+    # {{ SET_BINDING set binding }} uniform identifier { (type identifier;)! } idenitifer;
+    def parse_set_binding_directive():
+        nonlocal i
+        nonlocal current_start
+
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.DIRECTIVE_SET_BINDING, i,
+                              "Expected SET_BINDING")
+        if not still_valid:
+            return
+        i += 1
+
+        # need to call this set_id bc set is a python datatype
+        (i, still_valid) = parser_error_reporter(tokens[i].text.isdigit(), i,
+                              "Expected set id digit after SET_BINDING")
+        if not still_valid:
+            return
+        set_id = int(tokens[i].text)
+        i += 1
+
+        # binding
+        (i, still_valid) = parser_error_reporter(tokens[i].text.isdigit(), i,
+                              "Expected binding id digit after SET_BINDING set_id")
+        if not still_valid:
+            return
+        binding = int(tokens[i].text)
+        i += 1
+
+        # }}
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.DOUBLE_R_BRACE, i,
+                              "Expected }} after SET_BINDING")
+        if not still_valid:
+            return
+        i += 1
+        slices.append(TemplateStringSlice(current_start, tokens[i].start, SliceType.SET_BINDING))
+        current_start = tokens[i].start
+
+        (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.UNIFORM, i,
+                              "Expected uniform after SET_BINDING directive")
+        if not still_valid:
+            return
+        i += 1
+
+        # don't think I need extra info here for samplers
+        # {{ ... }} uniform sampler2D identifier;
+        # {{ ... }} uniform identifier { ... } identifier;
+        is_sampler = (tokens[i].type == TokenType.SAMPLER2D)
+        i += 1
+
+        size = 0
+        if not is_sampler:
+            assert(tokens[i].type == TokenType.L_BRACE)
+            i += 1
+            while i < n and tokens[i].type != TokenType.R_BRACE:
+
+                (i, still_valid) = parser_error_reporter(tokens[i].type in glsl_types_to_sizes, i,
+                                      "Expected glsl type in uniform layout")
+                size += glsl_types_to_sizes[tokens[i].type]
+                if not still_valid:
+                    return
+                i += 1
+
+                (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.TEXT, i,
+                                      "Expected identifier after glsl type in uniform")
+                if not still_valid:
+                    return
+                i += 1
+                (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.SEMICOLON, i,
+                                      "Expected ; after identifier in uniform")
+                if not still_valid:
+                    return
+                i += 1
+
+        set_bindings.append(SetBindingLayout(set_id, binding, is_sampler, size))
+
+
+    while i < n:
+        if tokens[i].type != TokenType.DOUBLE_L_BRACE:
+            i += 1
+            continue
+
+        # skip {{
+        slices.append(TemplateStringSlice(current_start, tokens[i].start, SliceType.GLSL_SOURCE))
+        current_start = tokens[i].start
+        i += 1
+        if i >= n:
+            print("parse_tokens: EOF after {{")
+            exit(1)
+        if tokens[i].type not in directives:
+            print(f"parse_tokens: expected directive after {{{{, got {tokens[i].type}")
+            exit(1)
+
+        directive_type = tokens[i].type
+        if directive_type == TokenType.DIRECTIVE_LOCATION:
+            parse_location_directive()
+        elif directive_type == TokenType.DIRECTIVE_VERSION:
+            parse_version_directive()
+        elif directive_type == TokenType.DIRECTIVE_SET_BINDING:
+            parse_set_binding_directive()
+
+    slices.append(TemplateStringSlice(current_start, n, SliceType.GLSL_SOURCE))
+
+    return (slices, locations, set_bindings)
 
 vulkan_backend = {
         "name": "vulkan",
@@ -153,6 +555,291 @@ file_stage_to_flag = {
     "frag": "VK_SHADER_STAGE_FRAGMENT_BIT",
     "comp": "VK_SHADER_STAGE_COMPUTE_BIT",
 }
+
+
+class VulkanFormat(Enum):
+    VK_FORMAT_R32G32_SFLOAT = "VK_FORMAT_R32G32_SFLOAT" 
+    VK_FORMAT_R32G32B32_SFLOAT = "VK_FORMAT_R32G32B32_SFLOAT" 
+
+glsl_type_to_vulkan_format = {
+    TokenType.VEC2: VulkanFormat.VK_FORMAT_R32G32_SFLOAT,
+    TokenType.VEC3: VulkanFormat.VK_FORMAT_R32G32B32_SFLOAT 
+}
+
+vulkan_format_to_glsl_type = {
+    VulkanFormat.VK_FORMAT_R32G32_SFLOAT: "VEC2",
+    VulkanFormat.VK_FORMAT_R32G32B32_SFLOAT: "VEC3",
+}
+
+@dataclass
+class VulkanVertexAttribute:
+    location: int
+    binding: int
+    format: VulkanFormat
+    offset: int
+
+@dataclass
+class VulkanVertexBinding:
+    binding: int
+    stride: int
+    rate: TokenType
+
+@dataclass
+class VulkanVertexLayout:
+    attributes: list[VulkanVertexAttribute]
+    bindings: list[VulkanVertexBinding]
+
+@dataclass
+class VertexAttribute:
+    location: int
+    binding: int
+    glsl_type: TokenType
+    rate: TokenType
+    identifier: str
+    offset: int
+    is_tightly_packed: bool
+
+# vertex_layouts: list of VertexAttribute
+def generate_vertex_bindings_and_attributes(vertex_attributes):
+    if len(vertex_attributes) == 0:
+        return None
+
+    attributes = []
+    locations = set()
+    binding_id_to_stride_and_rate = {}
+    binding_offsets = defaultdict(int)
+
+    is_tightly_packed = vertex_attributes[0].is_tightly_packed
+
+    for attr in vertex_attributes:
+        if attr.is_tightly_packed != is_tightly_packed:
+            print(f"{RED}Vertex attributes inconsistent in packing{RESET}")
+            return None
+
+        if attr.location in locations:
+            print(f"{RED}Repeat location {attr.location}{RESET}")
+            return None
+        locations.add(attr.location)
+
+        format = glsl_type_to_vulkan_format[attr.glsl_type]
+        binding = attr.binding
+
+        size = glsl_types_to_sizes[attr.glsl_type]
+        offset = attr.offset
+        if is_tightly_packed:
+            offset = binding_offsets[binding]
+            binding_offsets[binding] += size
+
+        attribute = VulkanVertexAttribute(attr.location, binding, format, offset)
+
+        # am assuming that I will basically always pack my data tightly, and that
+        # stride will be the sum of the sizes of the types in that binding
+        if attr.binding not in binding_id_to_stride_and_rate:
+            binding_id_to_stride_and_rate[binding] = VulkanVertexBinding(binding, size, attr.rate)
+        else:
+            binding_id_to_stride_and_rate[attr.binding].stride += size
+            if binding_id_to_stride_and_rate[attr.binding].rate != attr.rate:
+                print(f"{RED}Vertex bindings inconsistent in rate{RESET}")
+                return None
+
+        attributes.append(attribute)
+
+    bindings = sorted(binding_id_to_stride_and_rate.values(), key=lambda b: b.binding)
+    attributes.sort(key=lambda x: (x.binding, x.location))
+    return VulkanVertexLayout(attributes, bindings)
+
+# global_vertex_layouts list  of VulkanVertexLayout
+def check_vertex_layout_present(global_vertex_layouts, new_vertex_layout):
+    # if new layout is the same as an existing layout, return true, and in the caller,
+    # don't add this new layout to the global vertex table
+    for existing_layout in global_vertex_layouts:
+        if len(new_vertex_layout.bindings) != len(existing_layout.bindings):
+            continue
+        if len(new_vertex_layout.attributes) != len(existing_layout.attributes):
+            continue
+
+        all_bindings_equal = True
+        for i in range(len(new_vertex_layout.bindings)):
+            if new_vertex_layout.bindings[i] != existing_layout.bindings[i]:
+                all_bindings_equal = False
+                break
+
+        all_attributes_equal = True
+        for i in range(len(new_vertex_layout.attributes)):
+            if new_vertex_layout.attributes[i] != existing_layout.attributes[i]:
+                all_attributes_equal = False
+                break
+
+        if all_attributes_equal and all_bindings_equal:
+            return True
+
+    return False
+
+
+# shader_stage is an enum
+def compile_shader_file(filepath, shader_stage, global_vertex_layouts):
+    with open(filepath, 'r', encoding='utf-8') as f:
+        contents = f.read()
+
+    tokens = lex_string(contents)
+
+    def parser_error_reporter(condition, token_idx, message):
+        if not condition:
+            print(f"{RED}Parser error in {filepath}{RESET}")
+            char_idx = tokens[token_idx].start
+            start = char_idx
+            end = char_idx
+
+            while start > 0 and contents[start] != '\n':
+                start -= 1
+            if contents[start] == '\n':
+                start += 1
+
+            while end < len(contents) and contents[end] != '\n':
+                end += 1
+
+            print(f"\t{contents[start:end]}")
+            print(message)
+
+            while token_idx < len(tokens) and tokens[token_idx].type != TokenType.DOUBLE_R_BRACE:
+                token_idx += 1
+            return (token_idx, False)
+
+        return (token_idx, True)
+
+
+    slices, vertex_layouts, set_bindings = parse_tokens(tokens, shader_stage, parser_error_reporter)
+    print(filepath)
+    #print(vertex_layouts)
+    if shader_stage == ShaderStage.VERTEX:
+        if len(vertex_layouts) == 0:
+            print(f"{YELLOW} Warning: Parsed vertex shader with no layouts {RESET}")
+        else:
+            vertex_layout = generate_vertex_bindings_and_attributes(vertex_layouts)
+            if not check_vertex_layout_present(global_vertex_layouts, vertex_layout):
+                global_vertex_layouts.append(vertex_layout)
+            #print(vertex_layout.bindings)
+            #print(vertex_layout.attributes)
+
+def compile_all_shaders(shaders):
+    global_vertex_layouts = []
+
+    for source_file, name, stage in shaders:
+        #opengl_glsl = compile_shader(source_file, opengl_backend)
+        #vulkan_glsl = compile_shader(source_file, vulkan_backend)
+        #spirv = compile_to_spirv_and_get_bytes(vulkan_glsl, shader_stage_string)
+        compile_shader_file(source_file, stage, global_vertex_layouts)
+        #if spirv is None:
+            #continue
+    print(global_vertex_layouts)
+    print(f"len layouts {len(global_vertex_layouts)}")
+    vertex_layout_code = vertex_layout_codegen(global_vertex_layouts)
+    return vertex_layout_code
+
+def vertex_layout_codegen(global_vertex_layouts):
+    enum_code = "enum GeneratedVertexLayoutID {\n"
+    enum_names = []
+
+    for vertex_layout in global_vertex_layouts:
+        attributes = vertex_layout.attributes
+        bindings = vertex_layout.bindings
+
+        unique_bindings_to_rates = {}
+        for binding in bindings:
+            if binding.binding in unique_bindings_to_rates:
+                if unique_bindings_to_rates[binding.binding] != binding.rate:
+                    print(f"{RED}Mismatch in rates for binding {binding.binding}{RESET}")
+                    return None
+            else:
+                unique_bindings_to_rates[binding.binding] = binding.rate
+
+        # the name is determined by the locations and uniqueness of bindings
+        # if there is only a single vertex binding, then skip marking all the bindings
+        only_one_vertex_rate_binding = False
+        enum_name = "VERTEX_LAYOUT"
+        if len(unique_bindings_to_rates) == 1:
+            for rate in unique_bindings_to_rates.values():
+                only_one_vertex_rate_binding =  (rate == TokenType.RATE_VERTEX)
+
+        only_vertex_rate_bindings = True
+        for rate in unique_bindings_to_rates.values():
+            if (rate == TokenType.RATE_INSTANCE):
+                only_vertex_rate_bindings = False
+
+        current_binding = None
+        for attribute in attributes:
+            if attribute.binding != current_binding:
+                if not only_one_vertex_rate_binding:
+                    enum_name += f"_BINDING{attribute.binding}"
+                if not only_vertex_rate_bindings:
+                    if unique_bindings_to_rates[attribute.binding] == TokenType.RATE_VERTEX:
+                        enum_name += f"_RATE_VERTEX"
+                    if unique_bindings_to_rates[attribute.binding] == TokenType.RATE_INSTANCE:
+                        enum_name += f"_RATE_INSTANCE"
+                current_binding = attribute.binding
+
+            enum_name += f"_{vulkan_format_to_glsl_type[attribute.format]}"
+
+        enum_names.append(enum_name)
+        enum_code += f"  {enum_name},\n"
+
+    enum_code += "  NUM_GENERATED_VERTEX_LAYOUTS\n};\n\n"
+
+    # VulkanVertexLayout(
+    #       attributes=[
+    #   VulkanVertexAttribute(location=0, binding=0, format=<VulkanFormat.R32G32B32_SFLOAT: 'VK_FORMAT_R32G32B32_SFLOAT'>, offset=0), 
+    #   VulkanVertexAttribute(location=1, binding=0, format=<VulkanFormat.R32G32_SFLOAT: 'VK_FORMAT_R32G32_SFLOAT'>, offset=12)], 
+    # bindings=[VulkanVertexBinding(binding=0, stride=20, rate=<TokenType.RATE_VERTEX: 36>)]
+    #)
+    array_code = "const VulkanVertexLayout generated_vertex_layouts[NUM_GENERATED_VERTEX_LAYOUTS] = {\n"
+    for i in range(len(global_vertex_layouts)):
+        vertex_layout = global_vertex_layouts[i]
+        attributes = vertex_layout.attributes
+        bindings = vertex_layout.bindings
+
+        code = f"  [{enum_names[i]}] = {{\n"
+        code += f"    .binding_count = {len(bindings)},\n"
+        code += f"    .bindings = {{\n"
+
+        for binding in bindings:
+            rate_string = ""
+            if binding.rate == TokenType.RATE_VERTEX:
+                rate_string = "VK_VERTEX_INPUT_RATE_VERTEX"
+            if binding.rate == TokenType.RATE_INSTANCE:
+                rate_string = "VK_VERTEX_INPUT_RATE_INSTANCE"
+
+            code += f"      {{ .binding = {binding.binding}, .stride = {binding.stride}, .input_rate = {rate_string} }},\n"
+
+        code += f"    }},\n"
+
+        code += f"    .attribute_count = {len(attributes)},\n"
+        code += f"    .attributes = {{\n"
+        for attribute in attributes:
+            code += f"      {{ .location = {attribute.location}, .binding = {attribute.binding}, .format = {attribute.format.value}, .offset = {attribute.offset} }},\n"
+        code += f"    }}\n"
+
+        code += f"  }},\n"
+        array_code += code
+
+    array_code += "};\n\n"
+
+# TODO separate header and implementation to make a truly global registry
+# need to get rid of the static qualifiers
+    registry_code = r"""static VertexLayout _vertex_layout_registry[NUM_GENERATED_VERTEX_LAYOUTS];
+inline void init_vertex_layout_registry(){
+  for(u32 i = 0; i < NUM_GENERATED_VERTEX_LAYOUTS; i++){
+    push_vertex_attributes_and_bindings_and_finalize(&_vertex_layout_registry[i], generated_vertex_layouts[i]);
+  }
+}
+
+static const VertexLayout *const vertex_layout_registry = _vertex_layout_registry;
+
+inline const VkPipelineVertexInputStateCreateInfo* get_vertex_layout(GeneratedVertexLayoutID id){
+  return &vertex_layout_registry[id].vertex_input_state;
+}
+"""
+
+    return enum_code + array_code + registry_code
 
 def source_is_newer(source, target):
     if not target.exists():
@@ -258,7 +945,17 @@ def get_spirv_bytes(path):
 
     return spirv
 
-# stage is a string, "vert", etc. for opengl/vulkan flexibility
+class ShaderStage(Enum):
+    VERTEX = auto()
+    FRAGMENT = auto()
+    COMPUTE = auto()
+
+string_to_shader_stage = {
+        "vert": ShaderStage.VERTEX,
+        "frag": ShaderStage.FRAGMENT,
+        "comp": ShaderStage.COMPUTE,
+}
+
 class Shader:
     def __init__(self, name, spirv, opengl_source, stage):
         self.name = name
@@ -315,13 +1012,30 @@ if __name__ == "__main__":
         action="store_true",
         help="Ignore timestamps and force compilation"
     )
+    parser.add_argument(
+        "--subdir",
+        type=str,
+        help="subdirectory of shaders/ to compile"
+    )
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.realpath(__file__))
     project_root = Path(os.path.abspath(os.path.join(script_dir, "..")))
-    shaders_dir = project_root / "shaders"
+    shaders_base_dir = project_root / "shaders"
+    generated_header_name = "compiled_shaders.h"
+
+    if args.subdir:
+        shaders_dir = shaders_base_dir / args.subdir
+        if not shaders_dir.exists() or not shaders_dir.is_dir():
+            print(f"Error: subdirectory '{args.subdir}' does not exist in 'shaders/'")
+            sys.exit(1)
+        generated_header_name = f"{args.subdir}_compiled_shaders.h"
+    else:
+        shaders_dir = shaders_base_dir
+
     # header gen dir is where the generated C code goes, for use in the engine
     header_gen_dir = project_root / "gen"
+    header_to_generate_path = header_gen_dir / generated_header_name
 
     if not os.path.isdir(shaders_dir):
         print(f"Error: Could not find shaders directory at '{shaders_dir}'")
@@ -330,23 +1044,18 @@ if __name__ == "__main__":
     shader_subdirectories = [x[0] for x in os.walk(shaders_dir) if os.path.basename(x[0]) != "gen"]
     os.makedirs(header_gen_dir, exist_ok=True)
 
-    # for each directory in shaders/, if any shader has been updated since last compilation, recompile entire directory
+    # using a monolithic single output header for all shaders
+    shaders_to_compile = []
+    global_vertex_layouts = {}
     for subdir in shader_subdirectories:
         files = [os.path.abspath(os.path.join(subdir, f)) for f in os.listdir(subdir) if os.path.isfile(os.path.join(subdir, f))]
 
-        subdir_relative_path = str(Path(subdir).relative_to(shaders_dir)).replace("/", "_") 
-        if subdir_relative_path == ".":
-            subdir_relative_path = "shaders.h"
-        else:
-            subdir_relative_path += "_shaders.h"
-        header_to_generate_path = header_gen_dir / subdir_relative_path
+        # TODO will always recompile all shaders right now
+        #if not args.force:
+            #if not check_dir_needs_regenerated(files, header_to_generate_path):
+                #print(f"Nothing to compile for {header_to_generate_path}")
+                #continue
 
-        if not args.force:
-            if not check_dir_needs_regenerated(files, header_to_generate_path):
-                print(f"Nothing to compile for {header_to_generate_path}")
-                continue
-
-        shaders = []
         for source_file in files:
             # source_file is /full/path/to/name.stage.in
             # source_file_basename is name.stage.in
@@ -355,18 +1064,21 @@ if __name__ == "__main__":
             if parts is None:
                 continue
 
-            shader_stage = parts[1]
-            shader_name = parts[0] + "_" + shader_stage
+            shader_stage_string = parts[1]
+            shader_name = parts[0] + "_" + shader_stage_string
+            shader_stage = string_to_shader_stage[shader_stage_string]
 
-            opengl_glsl = compile_shader(source_file, opengl_backend)
-            vulkan_glsl = compile_shader(source_file, vulkan_backend)
-            spirv = compile_to_spirv_and_get_bytes(vulkan_glsl, shader_stage)
-            if spirv is None:
-                continue
+            #shader = Shader(shader_name, spirv, opengl_glsl, shader_stage)
+            shaders_to_compile.append((source_file, shader_name, shader_stage))
 
-            shader = Shader(shader_name, spirv, opengl_glsl, shader_stage)
-            shaders.append(shader)
+            #shaders.append(shader)
 
-        with open(header_to_generate_path, 'w', encoding='utf-8') as generated_header_handle:
-           header_source = generate_shader_header(shaders)
-           generated_header_handle.write(header_source)
+    with open(header_to_generate_path, 'w', encoding='utf-8') as generated_header_handle:
+        #header_source = generate_shader_header(shaders_to_compile)
+        generated_header_handle.write("// Generated shader header, do not edit")
+        generated_header_handle.write("#pragma once\n#include <stdint.h>\n#include <stddef.h>\n#include \"vulkan_base.h\"\n")
+        header_source = compile_all_shaders(shaders_to_compile)
+        # TODO the linker doesn't like defining the arrays in the header, and I should
+        # separate this out into a c file too one day
+        generated_header_handle.write(header_source)
+

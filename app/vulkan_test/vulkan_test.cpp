@@ -1,10 +1,9 @@
 #include "vulkan_test.h"
 #include "common_shaders.h"
+#include "compiled_shaders.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/glm.hpp"
-#include "hashmap.h"
 #include "utils.h"
-#include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
 
 struct MVPUniform {
@@ -15,8 +14,7 @@ struct MVPUniform {
 
 int main() {
   VulkanContext context = create_vulkan_context("Tuke");
-
-  u32 instance_count = 6;
+  init_vertex_layout_registry();
 
   const u32 num_textures = 1;
   const char *texture_names[num_textures] = {"textures/generic_girl.jpg"};
@@ -73,9 +71,9 @@ int main() {
   // TODO output some const string pound defines or something for names, and
   // cache a list of names or something
   u32 num_specs = 5;
-  const ShaderSpec *specs[] = {
-      &simple_vert_spv_spec, &simple_frag_spv_spec, &square_frag_spv_spec,
-      &instanced_quad_frag_spv_spec, &instanced_quad_vert_spv_spec};
+  const ShaderSpec *specs[] = {&simple_vert_spec, &simple_frag_spec,
+                               &square_frag_spec, &instanced_quad_frag_spec,
+                               &instanced_quad_vert_spec};
   cache_shader_modules(context.shader_cache, specs, num_specs);
 
   // the uniform buffer will contain the layout: mvp | x
@@ -108,37 +106,24 @@ int main() {
   VkPipelineLayout mvp_pipeline_layout = create_pipeline_layout(
       context.device, &mvp_descriptor.descriptor_set_layout, 1);
 
-  VertexLayoutBuilder instance_vertex_layout_builder =
-      create_vertex_layout_builder();
-  push_vertex_binding(&instance_vertex_layout_builder, 0, 5 * sizeof(float),
-                      VK_VERTEX_INPUT_RATE_VERTEX);
-  push_vertex_binding(&instance_vertex_layout_builder, 1, 2 * sizeof(float),
-                      VK_VERTEX_INPUT_RATE_INSTANCE);
-  push_vertex_attribute(&instance_vertex_layout_builder, 0, 0,
-                        VK_FORMAT_R32G32B32_SFLOAT, 0);
-  push_vertex_attribute(&instance_vertex_layout_builder, 1, 1,
-                        VK_FORMAT_R32G32_SFLOAT, 0);
-  push_vertex_attribute(&instance_vertex_layout_builder, 2, 0,
-                        VK_FORMAT_R32G32_SFLOAT, 3 * sizeof(float));
+  const VkPipelineVertexInputStateCreateInfo
+      *instanced_quad_vertex_input_state = get_vertex_layout(
+          VERTEX_LAYOUT_BINDING0_RATE_VERTEX_VEC3_VEC2_BINDING1_RATE_INSTANCE_VEC2);
 
-  VkPipelineVertexInputStateCreateInfo instanced_quad_vertex_input_state =
-      build_vertex_input_state(&instance_vertex_layout_builder);
-
-  VkPipelineVertexInputStateCreateInfo postion_normal_vertex_layout =
-      get_common_vertex_input_state(&context, VERTEX_LAYOUT_POSITION_NORMAL);
+  const VkPipelineVertexInputStateCreateInfo *postion_normal_vertex_layout =
+      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3);
 
   VkPipeline triangle_pipeline = create_default_graphics_pipeline(
-      &context, simple_vert_spv_spec.name, simple_frag_spv_spec.name,
-      &postion_normal_vertex_layout, x_pipeline_layout);
+      &context, simple_vert_spec.name, simple_frag_spec.name,
+      postion_normal_vertex_layout, x_pipeline_layout);
 
   VkPipeline square_pipeline = create_default_graphics_pipeline(
-      &context, simple_vert_spv_spec.name, square_frag_spv_spec.name,
-      &postion_normal_vertex_layout, x_pipeline_layout);
+      &context, simple_vert_spec.name, square_frag_spec.name,
+      postion_normal_vertex_layout, x_pipeline_layout);
 
   VkPipeline instanced_quad_pipeline = create_default_graphics_pipeline(
-      &context, instanced_quad_vert_spv_spec.name,
-      instanced_quad_frag_spv_spec.name, &instanced_quad_vertex_input_state,
-      mvp_pipeline_layout);
+      &context, instanced_quad_vert_spec.name, instanced_quad_frag_spec.name,
+      instanced_quad_vertex_input_state, mvp_pipeline_layout);
 
   RenderCall triangle_render_call;
   triangle_render_call.num_vertices = 3;
@@ -162,6 +147,7 @@ int main() {
   square_render_call.descriptor_set = x_descriptor.descriptor_set;
   square_render_call.is_indexed = false;
 
+  u32 instance_count = 6;
   RenderCall instanced_render_call;
   instanced_render_call.num_indices = 6;
   instanced_render_call.instance_count = instance_count;
@@ -193,8 +179,7 @@ int main() {
     float sint = sinf(t);
     float x = fabs(sint);
 
-    mvp.model = glm::mat4(1.0f);
-    mvp.model = glm::scale(mvp.model, glm::vec3(0.5f));
+    mvp.model = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
     mvp.model = glm::rotate(mvp.model, sint, glm::vec3(0.0f, 0.0f, 1.0f));
 
     if (!begin_frame(&context)) {
@@ -202,9 +187,8 @@ int main() {
       continue;
     }
 
-    write_to_uniform_buffer(&x_uniform_buffer, &mvp, 0, sizeof(MVPUniform));
-    write_to_uniform_buffer(&x_uniform_buffer, &x, sizeof(MVPUniform),
-                            sizeof(x));
+    write_to_uniform_buffer(&x_uniform_buffer, &mvp, 0, sizeof(mvp));
+    write_to_uniform_buffer(&x_uniform_buffer, &x, sizeof(mvp), sizeof(x));
 
     VkCommandBuffer command_buffer = begin_command_buffer(&context);
     begin_render_pass(&context, command_buffer, clear_value,

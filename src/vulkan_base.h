@@ -161,7 +161,6 @@ struct VulkanContext {
   VkCommandBuffer compute_command_buffers[NUM_SWAPCHAIN_IMAGES];
 
   VkPipelineCache pipeline_cache;
-  VkPipelineVertexInputStateCreateInfo vertex_layouts[VERTEX_LAYOUT_COUNT];
 
   // this cache is a templated type. the compiler freaks out if I put the
   // data directly here. I need to use a pointer instead. I don't understand
@@ -215,7 +214,7 @@ struct ShaderSpec {
 struct PipelineConfig {
   // pipeline create info
   ShaderStage stages[MAX_SHADER_STAGE_COUNT];
-  size_t stage_count;
+  u32 stage_count;
   const VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info;
   VkRenderPass render_pass;
   VkPipelineLayout pipeline_layout;
@@ -254,13 +253,25 @@ struct StagingArena {
   u32 offset;
 };
 
-struct VulkanVertexLayout {
-  size_t binding_description_count;
-  VkVertexInputBindingDescription binding_descriptions[MAX_VERTEX_BINDINGS];
+struct VulkanVertexBinding {
+  u32 binding;
+  u32 stride;
+  VkVertexInputRate input_rate;
+};
 
-  size_t attribute_description_count;
-  VkVertexInputAttributeDescription
-      attribute_descriptions[MAX_VERTEX_ATTRIBUTES];
+struct VulkanVertexAttribute {
+  u32 location;
+  u32 binding;
+  VkFormat format;
+  u32 offset;
+};
+
+struct VulkanVertexLayout {
+  u32 binding_count;
+  VulkanVertexBinding bindings[MAX_VERTEX_BINDINGS];
+
+  u32 attribute_count;
+  VulkanVertexAttribute attributes[MAX_VERTEX_ATTRIBUTES];
 };
 
 // TODO consider rewriting into a VertexLayout
@@ -269,13 +280,14 @@ struct VulkanVertexLayout {
 // I could conceptualize this as just the layout, and finalize it in
 // the end
 struct VertexLayoutBuilder {
-  size_t binding_description_count;
+  u32 binding_description_count;
   VkVertexInputBindingDescription binding_descriptions[MAX_VERTEX_BINDINGS];
 
-  size_t attribute_description_count;
+  u32 attribute_description_count;
   VkVertexInputAttributeDescription
       attribute_descriptions[MAX_VERTEX_ATTRIBUTES];
 
+  // vertex_input_state is the finalized state, used in pipeline creation
   VkPipelineVertexInputStateCreateInfo vertex_input_state;
 };
 
@@ -326,8 +338,6 @@ struct RenderCall {
   bool is_indexed;
 };
 
-extern const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT];
-
 VulkanContext create_vulkan_context(const char *title);
 void destroy_vulkan_context(VulkanContext *);
 VulkanBuffer create_buffer_explicit(const VulkanContext *context,
@@ -343,7 +353,7 @@ VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context);
 void end_single_use_command_buffer(const VulkanContext *context,
                                    VkCommandBuffer command_buffer);
 VkShaderModule create_shader_module(VkDevice device, const u32 *code,
-                                    size_t code_size);
+                                    u32 code_size);
 
 VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
                                     VkPipelineCache pipeline_cache);
@@ -425,9 +435,6 @@ PipelineConfig create_default_graphics_pipeline_config(
     const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
     VkPipelineLayout pipeline_layout);
 
-VkPipelineVertexInputStateCreateInfo
-get_common_vertex_input_state(VulkanContext *context, VertexLayoutID layout_id);
-
 VkVertexInputBindingDescription
 create_instanced_vertex_binding_description(u32 binding, u32 stride);
 VkVertexInputAttributeDescription
@@ -437,12 +444,17 @@ VkVertexInputBindingDescription create_vertex_binding_description(u32 binding,
                                                                   u32 stride);
 
 VertexLayoutBuilder create_vertex_layout_builder();
+
+// stride in a binding is bytes separating vertex/instance data
 void push_vertex_binding(VertexLayoutBuilder *builder, u32 binding, u32 stride,
                          VkVertexInputRate input_rate);
+
 void push_vertex_attribute(VertexLayoutBuilder *builder, u32 location,
                            u32 binding, VkFormat format, u32 offset);
 VkPipelineVertexInputStateCreateInfo
 build_vertex_input_state(VertexLayoutBuilder *builder);
+void push_vertex_attributes_and_bindings_and_finalize(
+    VertexLayoutBuilder *builder, const VulkanVertexLayout layout);
 void finalize_vertex_input_state(VertexLayoutBuilder *builder);
 
 u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter,

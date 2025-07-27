@@ -1,4 +1,5 @@
 #include "pong.h"
+#include "compiled_shaders.h"
 #include "pong_shaders.h"
 #include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
@@ -35,65 +36,62 @@ void init_buffers(State *state) {
   // TODO how to reuse this staging buffer?
   destroy_vulkan_buffer(ctx, staging_arena.buffer);
 
-  state->uniform_buffer = create_uniform_buffer(ctx, sizeof(MVPUniform));
+  state->uniform_buffer = create_uniform_buffer(ctx, 3 * MAT4_SIZE);
 }
 
-void init_vertex_states(State *state) {
-
-  // binding 0, vertex rate, position, uv
-  state->vertex_states[VERTEX_STATE_POS_UV] = create_vertex_layout_builder();
-  VertexLayout *pos_uv = &state->vertex_states[VERTEX_STATE_POS_UV];
-  push_vertex_binding(pos_uv, 0, 5 * sizeof(f32), VK_VERTEX_INPUT_RATE_VERTEX);
-  push_vertex_attribute(pos_uv, 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0);
-  push_vertex_attribute(pos_uv, 1, 0, VK_FORMAT_R32G32_SFLOAT, 3 * sizeof(f32));
-  finalize_vertex_input_state(pos_uv);
-
-  // binding 0, vertex rate, position, uv
-  // binding 1, instance rate, vec3 position, float texture ID
-  state->vertex_states[VERTEX_STATE_POS_UV_INSTANCE] =
-      create_vertex_layout_builder();
-  VertexLayout *pos_uv_instance =
-      &state->vertex_states[VERTEX_STATE_POS_UV_INSTANCE];
-  push_vertex_binding(pos_uv_instance, 0, 5 * sizeof(f32),
-                      VK_VERTEX_INPUT_RATE_VERTEX);
-  push_vertex_attribute(pos_uv_instance, 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0);
-  push_vertex_attribute(pos_uv_instance, 1, 0, VK_FORMAT_R32G32_SFLOAT,
-                        3 * sizeof(f32));
-  finalize_vertex_input_state(pos_uv);
-}
-
+// currently, global VP is premultiplied proj * view
 void init_descriptor_sets(State *state) {
   VulkanContext *ctx = &state->context;
 
-  // background has global MVP, sampler
+  // TODO background vs arena, in game vs overlay
+  // background has global VP, sampler, background model
   DescriptorSetBuilder background_builder = create_descriptor_set_builder(ctx);
+  // global vp
   add_uniform_buffer_descriptor_set(&background_builder, &state->uniform_buffer,
-                                    0, sizeof(MVPUniform), 0, 1,
+                                    0, MAT4_SIZE, 0, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
+
+  // background model
+  add_uniform_buffer_descriptor_set(&background_builder, &state->uniform_buffer,
+                                    MAT4_SIZE, MAT4_SIZE, 1, 1,
+                                    VK_SHADER_STAGE_VERTEX_BIT, false);
+
   add_texture_descriptor_set(
       &background_builder, &state->textures[TEXTURE_FIELD_BACKGROUND],
-      state->sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+      state->sampler, 2, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND] =
       build_descriptor_set(&background_builder, state->descriptor_pool);
 
-  // paddles/ball have global MVP, array of textures?
+  // paddles/ball have global VP, array of textures?
   DescriptorSetBuilder paddle_ball_builder = create_descriptor_set_builder(ctx);
+  // global vp
+  add_uniform_buffer_descriptor_set(&paddle_ball_builder,
+                                    &state->uniform_buffer, 0, MAT4_SIZE, 0, 1,
+                                    VK_SHADER_STAGE_VERTEX_BIT, false);
+
+  // position transform
   add_uniform_buffer_descriptor_set(
-      &paddle_ball_builder, &state->uniform_buffer, 0, sizeof(MVPUniform), 0, 1,
-      VK_SHADER_STAGE_VERTEX_BIT, false);
+      &paddle_ball_builder, &state->uniform_buffer, 2 * MAT4_SIZE, MAT4_SIZE, 1,
+      1, VK_SHADER_STAGE_VERTEX_BIT, false);
+
   add_texture_descriptor_set(
-      &background_builder, &state->textures[TEXTURE_GENERIC_GIRL],
-      state->sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+      &paddle_ball_builder, &state->textures[TEXTURE_GENERIC_GIRL],
+      state->sampler, 2, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL] =
       build_descriptor_set(&paddle_ball_builder, state->descriptor_pool);
 }
 
 State setup_state(const char *title) {
+  init_vertex_layout_registry();
 
   State state;
   state.arena_dimensions = arena_dimensions0;
   init_inputs(&state.inputs);
   state.game_mode = GAMEMODE_MAIN_MENU;
+  state.left_score = state.right_score = 0;
+
   state.context = create_vulkan_context(title);
   VulkanContext *ctx = &state.context;
 
@@ -107,22 +105,21 @@ State setup_state(const char *title) {
   // python compiler
   // pool sizes are not for individual resources, but places that a resource
   // needs to bind
-  u32 max_sets = 2;
-  u32 pool_size_count = 2;
-  VkDescriptorPoolSize mvp_pool_sizes[2];
+  const u32 max_sets = 3;
+  const u32 pool_size_count = 2;
+  VkDescriptorPoolSize mvp_pool_sizes[pool_size_count];
   mvp_pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  mvp_pool_sizes[0].descriptorCount = 2;
+  mvp_pool_sizes[0].descriptorCount = 3;
   mvp_pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   mvp_pool_sizes[1].descriptorCount = 2;
   state.descriptor_pool = create_descriptor_pool(ctx->device, mvp_pool_sizes,
                                                  pool_size_count, max_sets);
 
-  cache_shader_module(ctx->shader_cache, paddle_vert_spv_spec);
-  cache_shader_module(ctx->shader_cache, paddle_frag_spv_spec);
-  cache_shader_module(ctx->shader_cache, background_frag_spv_spec);
-  cache_shader_module(ctx->shader_cache, background_vert_spv_spec);
+  cache_shader_module(ctx->shader_cache, paddle_vert_spec);
+  cache_shader_module(ctx->shader_cache, paddle_frag_spec);
+  cache_shader_module(ctx->shader_cache, background_frag_spec);
+  cache_shader_module(ctx->shader_cache, background_vert_spec);
 
-  init_vertex_states(&state);
   init_descriptor_sets(&state);
 
   DescriptorSetHandle *background_handle =
@@ -131,9 +128,8 @@ State setup_state(const char *title) {
       ctx->device, &background_handle->descriptor_set_layout, 1);
 
   state.pipeline = create_default_graphics_pipeline(
-      ctx, paddle_vert_spv_spec.name, paddle_frag_spv_spec.name,
-      &state.vertex_states[VERTEX_STATE_POS_UV].vertex_input_state,
-      state.pipeline_layout);
+      ctx, background_vert_spec.name, background_frag_spec.name,
+      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2), state.pipeline_layout);
 
   state.clear_value.color = {{0.0, 1.0, 0.0, 1.0}};
   state.viewport_state = create_viewport_state_xy(ctx->swapchain_extent, 0, 0);
@@ -212,7 +208,7 @@ void process_inputs(State *state) {
   switch (state->game_mode) {
 
   case GAMEMODE_PAUSED: {
-    if (key_pressed(inputs, KEY_Q)) {
+    if (key_pressed(inputs, INPUT_KEY_Q)) {
       printf("unpausing\n");
       state->game_mode = GAMEMODE_PLAYING;
     }
@@ -221,7 +217,7 @@ void process_inputs(State *state) {
   } // paused
 
   case GAMEMODE_PLAYING: {
-    if (key_pressed(inputs, KEY_Q)) {
+    if (key_pressed(inputs, INPUT_KEY_Q)) {
       printf("pausing\n");
       state->game_mode = GAMEMODE_PAUSED;
     }
@@ -230,7 +226,7 @@ void process_inputs(State *state) {
   } // playing
 
   case GAMEMODE_MAIN_MENU: {
-    if (key_pressed(inputs, KEY_SPACEBAR)) {
+    if (key_pressed(inputs, INPUT_KEY_SPACEBAR)) {
       printf("starting game\n");
       state->game_mode = GAMEMODE_PLAYING;
     }

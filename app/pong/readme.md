@@ -11,6 +11,7 @@ Skill checks:
 * Cubemaps/skybox
 * Lights falling on paddles
 * Text rendering for menus and scores
+* Render queue
 
 Expandable scope – adding effects (particles, trails, distortions, bloom) tests:
 * Dynamic uniform updates
@@ -47,3 +48,5 @@ Particles
 * Chromatic aberration
 * Procedural background (raymarching or noise-based fragment shader)
 * Basic audio integration – lightweight library like miniaudio to test sound pipeline
+
+

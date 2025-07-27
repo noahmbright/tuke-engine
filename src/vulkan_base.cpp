@@ -71,7 +71,7 @@ void destroy_vulkan_context(VulkanContext *context) {
   }
 
   // sync primitives
-  for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+  for (i32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
     vkDestroySemaphore(context->device,
                        context->frame_sync_objects[i].image_available_semaphore,
                        NULL);
@@ -284,14 +284,14 @@ queue_family_indices_from_physical_device(VkPhysicalDevice physical_device,
   vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count,
                                            NULL);
 
-  const int MAX_QUEUE_FAMILIES = 16;
+  const i32 MAX_QUEUE_FAMILIES = 16;
   VkQueueFamilyProperties queue_families[MAX_QUEUE_FAMILIES];
   vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count,
                                            queue_families);
 
-  int graphics_family = -1;
-  int present_family = -1;
-  int compute_family = -1;
+  i32 graphics_family = -1;
+  i32 present_family = -1;
+  i32 compute_family = -1;
 
   if (queue_family_count > MAX_QUEUE_FAMILIES) {
     printf("is_suitable_physical_device: MAX_QUEUE_FAMILIES is %d but "
@@ -393,7 +393,7 @@ u32 get_unique_queue_infos(QueueFamilyIndices queue_family_indices,
       continue;
     }
 
-    float queue_priority = 1.0f;
+    f32 queue_priority = 1.0f;
     // https://registry.khronos.org/vulkan/specs/latest/man/html/VkDeviceQueueCreateInfo.html
     VkDeviceQueueCreateInfo device_queue_create_info;
     device_queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -485,7 +485,7 @@ VkSurfaceFormatKHR get_surface_format(VkPhysicalDevice physical_device,
 VkExtent2D get_swapchain_extent(GLFWwindow *window,
                                 VkSurfaceCapabilitiesKHR surface_capabilities) {
   VkExtent2D extent;
-  int window_width, window_height;
+  i32 window_width, window_height;
   glfwGetFramebufferSize(window, &window_width, &window_height);
   if (surface_capabilities.currentExtent.width != UINT32_MAX) {
     extent = surface_capabilities.currentExtent;
@@ -892,52 +892,6 @@ create_vertex_attribute_description(u32 location, u32 binding, VkFormat format,
   return description;
 }
 
-const VulkanVertexLayout vulkan_vertex_layouts[VERTEX_LAYOUT_COUNT] = {
-    [VERTEX_LAYOUT_POSITION] = {.attribute_description_count = 1,
-                                .attribute_descriptions[0] =
-                                    create_vertex_attribute_description(
-                                        0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0),
-
-                                .binding_description_count = 1,
-                                .binding_descriptions[0] =
-                                    create_vertex_binding_description(
-                                        0, 3 * sizeof(float))},
-
-    [VERTEX_LAYOUT_POSITION_NORMAL] =
-        {
-            .attribute_description_count = 2,
-            .attribute_descriptions[0] = create_vertex_attribute_description(
-                0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0),
-            .attribute_descriptions[1] = create_vertex_attribute_description(
-                1, 0, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(float)),
-
-            .binding_description_count = 1,
-            .binding_descriptions[0] =
-                create_vertex_binding_description(0, 6 * sizeof(float)),
-        },
-
-    [VERTEX_LAYOUT_POSITION_NORMAL_UV] =
-        {.attribute_description_count = 3,
-         .attribute_descriptions[0] = create_vertex_attribute_description(
-             0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0),
-         .attribute_descriptions[1] = create_vertex_attribute_description(
-             1, 0, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(float)),
-         .attribute_descriptions[2] = create_vertex_attribute_description(
-             2, 0, VK_FORMAT_R32G32_SFLOAT, 6 * sizeof(float)),
-
-         .binding_description_count = 1,
-         .binding_descriptions[0] = {.binding = 0,
-                                     .stride = 8 * sizeof(float),
-                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}},
-};
-
-VkPipelineVertexInputStateCreateInfo
-get_common_vertex_input_state(VulkanContext *context,
-                              VertexLayoutID layout_id) {
-  assert(layout_id >= 0 && layout_id <= VERTEX_LAYOUT_MANUAL);
-  return context->vertex_layouts[layout_id];
-}
-
 PipelineConfig create_default_graphics_pipeline_config(
     const VulkanContext *context, const char *vertex_shader_name,
     const char *fragment_shader_name,
@@ -1053,15 +1007,6 @@ VulkanContext create_vulkan_context(const char *title) {
                            context.compute_command_buffers);
 
   context.pipeline_cache = create_pipeline_cache(context.device);
-
-  for (int i = 0; i < VERTEX_LAYOUT_COUNT; i++) {
-    context.vertex_layouts[i] = create_vertex_input_state(
-        vulkan_vertex_layouts[i].binding_description_count,
-        vulkan_vertex_layouts[i].binding_descriptions,
-        vulkan_vertex_layouts[i].attribute_description_count,
-        vulkan_vertex_layouts[i].attribute_descriptions);
-  }
-
   context.shader_cache = create_shader_cache(context.device);
 
   VK_CHECK(
@@ -1285,7 +1230,7 @@ void end_single_use_command_buffer(const VulkanContext *context,
 }
 
 VkShaderModule create_shader_module(VkDevice device, const u32 *code,
-                                    size_t code_size) {
+                                    u32 code_size) {
   VkShaderModuleCreateInfo shader_module_create_info;
   shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
   shader_module_create_info.pNext = NULL;
@@ -1306,8 +1251,8 @@ ViewportState create_viewport_state_offset(VkExtent2D swapchain_extent,
 
   viewport_state.viewport.x = offset.x;
   viewport_state.viewport.y = offset.y;
-  viewport_state.viewport.width = (float)swapchain_extent.width;
-  viewport_state.viewport.height = (float)swapchain_extent.height;
+  viewport_state.viewport.width = (f32)swapchain_extent.width;
+  viewport_state.viewport.height = (f32)swapchain_extent.height;
   viewport_state.viewport.minDepth = 0.0f;
   viewport_state.viewport.maxDepth = 1.0f;
 
@@ -1451,7 +1396,7 @@ VkPipelineColorBlendStateCreateInfo create_color_blend_state(
   color_blend_state_create_info.logicOp = VK_LOGIC_OP_COPY;
   color_blend_state_create_info.attachmentCount = num_color_blend_attachments;
   color_blend_state_create_info.pAttachments = color_blend_attachment_states;
-  float blend_constants[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  f32 blend_constants[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   memcpy(color_blend_state_create_info.blendConstants, blend_constants,
          sizeof(blend_constants));
   return color_blend_state_create_info;
@@ -1983,6 +1928,33 @@ void push_vertex_attribute(VertexLayoutBuilder *builder, u32 location,
   description->offset = offset;
 
   builder->attribute_description_count++;
+}
+
+void push_vertex_attributes_and_bindings_and_finalize(
+    VertexLayoutBuilder *builder, const VulkanVertexLayout layout) {
+
+  assert(builder->attribute_description_count == 0);
+  assert(builder->binding_description_count == 0);
+
+  u32 num_attributes = layout.attribute_count;
+  u32 num_bindings = layout.binding_count;
+  assert(num_attributes < MAX_VERTEX_ATTRIBUTES);
+  assert(num_bindings < MAX_VERTEX_BINDINGS);
+
+  const VulkanVertexAttribute *attributes = layout.attributes;
+  for (u32 i = 0; i < num_attributes; i++) {
+    push_vertex_attribute(builder, attributes[i].location,
+                          attributes[i].binding, attributes[i].format,
+                          attributes[i].offset);
+  }
+
+  const VulkanVertexBinding *bindings = layout.bindings;
+  for (u32 i = 0; i < num_bindings; i++) {
+    push_vertex_binding(builder, bindings[i].binding, bindings[i].stride,
+                        bindings[i].input_rate);
+  }
+
+  finalize_vertex_input_state(builder);
 }
 
 VkPipelineVertexInputStateCreateInfo
