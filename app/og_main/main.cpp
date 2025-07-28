@@ -59,10 +59,7 @@ int main() {
 
     double t_current = glfwGetTime();
     double delta_t = t_current - t_prev;
-
-    glm::vec4 movement_direction = get_window_movement_vector(window);
-    move_camera(&camera, delta_t, movement_direction);
-    update_player_position(&player, delta_t, movement_direction);
+    (void)delta_t;
 
     int height, width;
     glfwGetFramebufferSize(window, &width, &height);

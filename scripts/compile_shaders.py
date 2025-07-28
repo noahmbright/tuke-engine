@@ -224,17 +224,12 @@ class VertexAttribute:
     offset: int
     is_tightly_packed: bool
 
-class SliceType(Enum):
-    GLSL_SOURCE = auto()
-    VERSION = auto()
-    LOCATION = auto()
-    SET_BINDING = auto()
-
 @dataclass
 class TemplateStringSlice:
     start: int
     end: int
-    type: SliceType
+    vulkan_replacement: str
+    opengl_replacement: str
 
 @dataclass
 class SetBindingLayout:
@@ -269,14 +264,13 @@ def parse_tokens(tokens, stage, parser_error_reporter):
             return
         i += 1
 
-        slices.append(TemplateStringSlice(current_start, tokens[i].start, SliceType.VERSION))
+        slices.append(TemplateStringSlice(current_start, tokens[i].start, vulkan_version_string(), opengl_version_string()))
         current_start = tokens[i].start
 
     # {{ LOCATION N BINDING M RATE OFFSET (n | TIGHTLY_PACKED)}} (in | out) type identifier;
     def parse_location_directive():
         nonlocal i
         nonlocal current_start
-        slice_type = SliceType.LOCATION
 
         # LOCATION
         (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.DIRECTIVE_LOCATION, i, 
@@ -302,15 +296,15 @@ def parse_tokens(tokens, stage, parser_error_reporter):
             if not still_valid:
                 return
 
-            slices.append(TemplateStringSlice(current_start, tokens[i].start, slice_type))
             i += 1
+            slices.append(TemplateStringSlice(current_start, tokens[i].start, vulkan_location_string(location), opengl_location_string()))
             return
 
         # if in a vertex stage, can either be an out, handled here and returned early,
         # or a fully layout, parsed after
         if tokens[i].type == TokenType.DOUBLE_R_BRACE:
-            slices.append(TemplateStringSlice(current_start, tokens[i].start, slice_type))
             i += 1
+            slices.append(TemplateStringSlice(current_start, tokens[i].start, vulkan_location_string(location), opengl_location_string()))
             (i, still_valid) = parser_error_reporter(tokens[i].type != TokenType.IN, i, 
                               "In vertex shader LOCATION directive of form {{ LOCATION N }} (not in), expected full vertex layout")
             return
@@ -367,7 +361,7 @@ def parse_tokens(tokens, stage, parser_error_reporter):
         if not still_valid:
             return
         i += 1
-        slices.append(TemplateStringSlice(current_start, tokens[i].start, slice_type))
+        slices.append(TemplateStringSlice(current_start, tokens[i].start, vulkan_location_string(location), opengl_location_string()))
         current_start = tokens[i].start
 
         # ( in | out )
@@ -468,7 +462,7 @@ def parse_tokens(tokens, stage, parser_error_reporter):
         if not still_valid:
             return
         i += 1
-        slices.append(TemplateStringSlice(current_start, tokens[i].start, SliceType.SET_BINDING))
+        slices.append(TemplateStringSlice(current_start, tokens[i].start, vulkan_set_binding_string(set_id, binding), opengl_set_binding_string()))
         current_start = tokens[i].start
 
         (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.UNIFORM, i,
@@ -515,8 +509,7 @@ def parse_tokens(tokens, stage, parser_error_reporter):
             i += 1
             continue
 
-        # skip {{
-        slices.append(TemplateStringSlice(current_start, tokens[i].start, SliceType.GLSL_SOURCE))
+        # skip {{, and track where it started. Only record slices we need to replace
         current_start = tokens[i].start
         i += 1
         if i >= n:
@@ -534,28 +527,28 @@ def parse_tokens(tokens, stage, parser_error_reporter):
         elif directive_type == TokenType.DIRECTIVE_SET_BINDING:
             parse_set_binding_directive()
 
-    slices.append(TemplateStringSlice(current_start, n, SliceType.GLSL_SOURCE))
-
     return (slices, locations, set_bindings)
 
-vulkan_backend = {
-        "name": "vulkan",
-        "VERSION": "450",
-        "EXTENSION": "spv"
-    }
+def vulkan_version_string():
+    return "450\n"
 
-opengl_backend = {
-        "name": "opengl",
-        "VERSION": "410 core",
-        "EXTENSION": "glsl"
-    }
+def opengl_version_string():
+    return "410 core\n"
 
-file_stage_to_flag = {
-    "vert": "VK_SHADER_STAGE_VERTEX_BIT",
-    "frag": "VK_SHADER_STAGE_FRAGMENT_BIT",
-    "comp": "VK_SHADER_STAGE_COMPUTE_BIT",
-}
+def vulkan_location_string(location):
+    assert(location is not None)
+    return f"layout(location = {location}) "
 
+def opengl_location_string():
+    return ""
+
+def vulkan_set_binding_string(set_id, binding):
+    assert(set_id is not None)
+    assert(binding is not None)
+    return f"layout(set = {set_id}, binding = {binding}) "
+
+def opengl_set_binding_string():
+    return ""
 
 class VulkanFormat(Enum):
     VK_FORMAT_R32G32_SFLOAT = "VK_FORMAT_R32G32_SFLOAT" 
@@ -677,6 +670,10 @@ def check_vertex_layout_present(global_vertex_layouts, new_vertex_layout):
 
 
 # shader_stage is an enum
+# entry point into parser, gets slices where replacements need to happen,
+# populates global_vertex_layouts, TODO populate a descriptor set table
+# handles vertex descriptions through a side effect, returns strings 
+# opengl/vulkan source
 def compile_shader_file(filepath, shader_stage, global_vertex_layouts):
     with open(filepath, 'r', encoding='utf-8') as f:
         contents = f.read()
@@ -707,10 +704,8 @@ def compile_shader_file(filepath, shader_stage, global_vertex_layouts):
 
         return (token_idx, True)
 
-
     slices, vertex_layouts, set_bindings = parse_tokens(tokens, shader_stage, parser_error_reporter)
-    print(filepath)
-    #print(vertex_layouts)
+
     if shader_stage == ShaderStage.VERTEX:
         if len(vertex_layouts) == 0:
             print(f"{YELLOW} Warning: Parsed vertex shader with no layouts {RESET}")
@@ -718,23 +713,44 @@ def compile_shader_file(filepath, shader_stage, global_vertex_layouts):
             vertex_layout = generate_vertex_bindings_and_attributes(vertex_layouts)
             if not check_vertex_layout_present(global_vertex_layouts, vertex_layout):
                 global_vertex_layouts.append(vertex_layout)
-            #print(vertex_layout.bindings)
-            #print(vertex_layout.attributes)
+
+    vulkan_source = ""
+    opengl_source = ""
+    current_start = 0
+    for slice in slices:
+        debug_slice = contents[slice.start:slice.end]
+        assert slice.vulkan_replacement is not None, f"Missing Vulkan replacement at {filepath} {slice.start}:{slice.end},\n\t {debug_slice}"
+        assert slice.opengl_replacement is not None, f"Missing OpenGL replacement at {filepath} {slice.start}:{slice.end},\n\t {debug_slice}"
+        # append the glsl source from the end of the last directive up to the start of this one
+        vulkan_source += contents[current_start:slice.start]
+        opengl_source += contents[current_start:slice.start]
+        current_start = slice.end 
+
+        vulkan_source += slice.vulkan_replacement
+        opengl_source += slice.opengl_replacement
+
+    vulkan_source += contents[current_start:]
+    opengl_source += contents[current_start:]
+
+    return (vulkan_source, opengl_source)
 
 def compile_all_shaders(shaders):
     global_vertex_layouts = []
+    code = ""
+
+    code += "// Generated shader header, do not edit\n"
+    code += "#pragma once\n#include <stdint.h>\n#include <stddef.h>\n#include \"vulkan_base.h\"\n\n"
 
     for source_file, name, stage in shaders:
-        #opengl_glsl = compile_shader(source_file, opengl_backend)
-        #vulkan_glsl = compile_shader(source_file, vulkan_backend)
-        #spirv = compile_to_spirv_and_get_bytes(vulkan_glsl, shader_stage_string)
-        compile_shader_file(source_file, stage, global_vertex_layouts)
-        #if spirv is None:
-            #continue
-    print(global_vertex_layouts)
-    print(f"len layouts {len(global_vertex_layouts)}")
-    vertex_layout_code = vertex_layout_codegen(global_vertex_layouts)
-    return vertex_layout_code
+        vulkan_source, opengl_source = compile_shader_file(source_file, stage, global_vertex_layouts)
+        spirv = compile_to_spirv_and_get_bytes(vulkan_source, stage)
+        shader = Shader(name, spirv, stage, opengl_source)
+        code += shader_spec_codegen(shader)
+
+
+    code += '\n\n'
+    code += vertex_layout_codegen(global_vertex_layouts)
+    return code
 
 def vertex_layout_codegen(global_vertex_layouts):
     enum_code = "enum GeneratedVertexLayoutID {\n"
@@ -785,12 +801,6 @@ def vertex_layout_codegen(global_vertex_layouts):
 
     enum_code += "  NUM_GENERATED_VERTEX_LAYOUTS\n};\n\n"
 
-    # VulkanVertexLayout(
-    #       attributes=[
-    #   VulkanVertexAttribute(location=0, binding=0, format=<VulkanFormat.R32G32B32_SFLOAT: 'VK_FORMAT_R32G32B32_SFLOAT'>, offset=0), 
-    #   VulkanVertexAttribute(location=1, binding=0, format=<VulkanFormat.R32G32_SFLOAT: 'VK_FORMAT_R32G32_SFLOAT'>, offset=12)], 
-    # bindings=[VulkanVertexBinding(binding=0, stride=20, rate=<TokenType.RATE_VERTEX: 36>)]
-    #)
     array_code = "const VulkanVertexLayout generated_vertex_layouts[NUM_GENERATED_VERTEX_LAYOUTS] = {\n"
     for i in range(len(global_vertex_layouts)):
         vertex_layout = global_vertex_layouts[i]
@@ -860,41 +870,12 @@ def check_dir_needs_regenerated(files, header):
 # expect name.{vert/frag/comp}.in
 def validate_filename_and_get_parts(filename):
     parts = filename.split(".")
-    stage_is_valid = parts[1] in file_stage_to_flag  
+    stage_is_valid = parts[1] in string_to_shader_stage  
     if not (len(parts) == 3 and stage_is_valid and parts[2] == "in"):
         print("Expected filename of the form {{name}}.{{vert/frag/comp}}.{{in}}")
         print("\tNot compiling file: " + filename)
         return None
     return parts
-
-# returns a string with template-expanded glsl
-def compile_shader(filepath, backend):
-    with open(filepath, 'r', encoding='utf-8') as f:
-        contents = f.read()
-
-    is_vulkan = (backend["name"] == "vulkan")
-
-    def replacer(match):
-        tokens = match.group(1).split()
-        directive = tokens[0]
-
-        if directive == "LOCATION":
-            if is_vulkan:
-                return f"layout(location = {tokens[1]}) "
-            return ""
-
-        if directive == "SET_BINDING":
-            if is_vulkan:
-                return f"layout(set = {tokens[1]}, binding = {tokens[2]}) "
-            return ""
-
-        if directive in backend:
-            return backend[directive]
-        else:
-            print(f"Failed to find key {directive} in backend {backend}")
-            return match.group(0)
-
-    return re.sub(r"\{\{\s*(.*?)\s*\}\}", replacer, contents)
 
 # write source code to a temp file, compile that temp file into spv, and return array with bytecode
 def compile_to_spirv_and_get_bytes(source_code, stage):
@@ -903,18 +884,18 @@ def compile_to_spirv_and_get_bytes(source_code, stage):
         print(source_code)
 
     # write glsl to file
-    with tempfile.NamedTemporaryFile(suffix=f".{stage}", delete=False, mode='w', encoding='utf-8') as tmp_file:
+    with tempfile.NamedTemporaryFile(suffix=f".{stage.value}", delete=False, mode='w', encoding='utf-8') as tmp_file:
         tmp_file.write(source_code)
         glsl_path = tmp_file.name
 
     # will need to read spv from other temp file
-    with tempfile.NamedTemporaryFile(suffix=f".{stage}", delete=False) as tmp_file:
+    with tempfile.NamedTemporaryFile(suffix=f".{stage.value}", delete=False) as tmp_file:
         spv_path = tmp_file.name
 
     try:
         result = subprocess.run([
             "glslangValidator",
-            "-S", stage,
+            "-S", stage.value,
             "-o", spv_path,
             "-V", glsl_path
         ], capture_output=True, text=True)
@@ -946,56 +927,60 @@ def get_spirv_bytes(path):
     return spirv
 
 class ShaderStage(Enum):
-    VERTEX = auto()
-    FRAGMENT = auto()
-    COMPUTE = auto()
+    VERTEX = "vert"
+    FRAGMENT = "frag"
+    COMPUTE = "comp"
 
 string_to_shader_stage = {
-        "vert": ShaderStage.VERTEX,
-        "frag": ShaderStage.FRAGMENT,
-        "comp": ShaderStage.COMPUTE,
+    "vert": ShaderStage.VERTEX,
+    "frag": ShaderStage.FRAGMENT,
+    "comp": ShaderStage.COMPUTE,
 }
 
+file_stage_to_flag = {
+    ShaderStage.VERTEX: "VK_SHADER_STAGE_VERTEX_BIT",
+    ShaderStage.FRAGMENT: "VK_SHADER_STAGE_FRAGMENT_BIT",
+    ShaderStage.COMPUTE: "VK_SHADER_STAGE_COMPUTE_BIT",
+}
+
+@dataclass
 class Shader:
-    def __init__(self, name, spirv, opengl_source, stage):
-        self.name = name
-        self.spirv = spirv
-        self.stage = stage
-        self.opengl_source = opengl_source
+    name: str
+    spirv: bytes
+    stage: ShaderStage
+    opengl_source: str
 
 def c_multiline_string_literal(s):
     lines = s.splitlines()
     quoted_lines = ['"' + line.replace('"', '\\"') + '"' for line in lines]
     return "\n".join(quoted_lines)
 
-def generate_shader_header(shaders):
+# shader: Shader
+def shader_spec_codegen(shader):
     lines = []
-    lines.append("// Generated shader header, do not edit")
-    lines.append("#pragma once\n#include <stdint.h>\n#include <stddef.h>\n#include \"vulkan_base.h\"\n")
 
-    for shader in shaders:
-        u32_words = [int.from_bytes(shader.spirv[i:i+4], "little") for i in range(0, len(shader.spirv), 4)]
-        stage_flags = file_stage_to_flag[shader.stage]
+    u32_words = [int.from_bytes(shader.spirv[i:i+4], "little") for i in range(0, len(shader.spirv), 4)]
+    stage_flags = file_stage_to_flag[shader.stage]
 
-        lines.append(f"static const uint32_t {shader.name}[] = {{")
-        for i in range(0, len(u32_words), 4):
-            chunk = ", ".join(f"0x{w:08x}" for w in u32_words[i:i+4])
-            lines.append(f"    {chunk},")
-        lines.append("};\n")
-        lines.append(f"static const size_t {shader.name}_size = sizeof({shader.name});")
-        lines.append(f"static constexpr const char* {shader.name}_name = \"{shader.name}\";")
+    lines.append(f"static const uint32_t {shader.name}[] = {{")
+    for i in range(0, len(u32_words), 4):
+        chunk = ", ".join(f"0x{w:08x}" for w in u32_words[i:i+4])
+        lines.append(f"    {chunk},")
+    lines.append("};\n")
+    lines.append(f"static const size_t {shader.name}_size = sizeof({shader.name});")
+    lines.append(f"static constexpr const char* {shader.name}_name = \"{shader.name}\";")
 
-        # need to output a constexpr const struct like this with the .initialization because
-        # these assignments don't occur inside a function
-        lines.append(f"constexpr const ShaderSpec {shader.name}_spec = {{")
-        lines.append(f"\t.spv = {shader.name},")
-        lines.append(f"\t.size = sizeof({shader.name}),")
-        lines.append(f"\t.name = {shader.name}_name,")
-        lines.append(f"\t.stage_flags = {stage_flags},")
-        lines.append("};\n")
+    # need to output a constexpr const struct like this with the .initialization because
+    # these assignments don't occur inside a function, thank you C++
+    lines.append(f"constexpr const ShaderSpec {shader.name}_spec = {{")
+    lines.append(f"  .spv = {shader.name},")
+    lines.append(f"  .size = sizeof({shader.name}),")
+    lines.append(f"  .name = {shader.name}_name,")
+    lines.append(f"  .stage_flags = {stage_flags},")
+    lines.append("};\n")
 
-        c_string = c_multiline_string_literal(shader.opengl_source)
-        lines.append(f"static constexpr const char* {shader.name}_opengl_glsl = {c_string};\n")
+    c_string = c_multiline_string_literal(shader.opengl_source)
+    lines.append(f"static constexpr const char* {shader.name}_opengl_glsl = {c_string};\n")
 
     return "\n".join(lines)
 
@@ -1071,12 +1056,7 @@ if __name__ == "__main__":
             #shader = Shader(shader_name, spirv, opengl_glsl, shader_stage)
             shaders_to_compile.append((source_file, shader_name, shader_stage))
 
-            #shaders.append(shader)
-
     with open(header_to_generate_path, 'w', encoding='utf-8') as generated_header_handle:
-        #header_source = generate_shader_header(shaders_to_compile)
-        generated_header_handle.write("// Generated shader header, do not edit")
-        generated_header_handle.write("#pragma once\n#include <stdint.h>\n#include <stddef.h>\n#include \"vulkan_base.h\"\n")
         header_source = compile_all_shaders(shaders_to_compile)
         # TODO the linker doesn't like defining the arrays in the header, and I should
         # separate this out into a c file too one day

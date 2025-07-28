@@ -1,5 +1,4 @@
 #include "vulkan_test.h"
-#include "common_shaders.h"
 #include "compiled_shaders.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/glm.hpp"

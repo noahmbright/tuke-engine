@@ -1,6 +1,5 @@
 #include "pong.h"
 #include "compiled_shaders.h"
-#include "pong_shaders.h"
 #include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
 #include "window.h"
