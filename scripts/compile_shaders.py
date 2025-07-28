@@ -856,17 +856,6 @@ def source_is_newer(source, target):
         return True
     return source.stat().st_mtime > target.stat().st_mtime
 
-# check if any of files are newer than header
-# files should be shader source files. if they are newer, return true as
-# a signal to recompile
-def check_dir_needs_regenerated(files, header):
-    needs_regenerated = False
-    for file in files:
-        if source_is_newer(Path(file), Path(header)):
-            needs_regenerated = True
-            break
-    return needs_regenerated
-
 # expect name.{vert/frag/comp}.in
 def validate_filename_and_get_parts(filename):
     parts = filename.split(".")
@@ -1032,16 +1021,14 @@ if __name__ == "__main__":
     # using a monolithic single output header for all shaders
     shaders_to_compile = []
     global_vertex_layouts = {}
+    should_recompile = False
     for subdir in shader_subdirectories:
         files = [os.path.abspath(os.path.join(subdir, f)) for f in os.listdir(subdir) if os.path.isfile(os.path.join(subdir, f))]
 
-        # TODO will always recompile all shaders right now
-        #if not args.force:
-            #if not check_dir_needs_regenerated(files, header_to_generate_path):
-                #print(f"Nothing to compile for {header_to_generate_path}")
-                #continue
-
         for source_file in files:
+            if source_is_newer(Path(source_file), Path(header_to_generate_path)):
+                should_recompile = True
+
             # source_file is /full/path/to/name.stage.in
             # source_file_basename is name.stage.in
             source_file_basename = os.path.basename(source_file)
@@ -1056,9 +1043,12 @@ if __name__ == "__main__":
             #shader = Shader(shader_name, spirv, opengl_glsl, shader_stage)
             shaders_to_compile.append((source_file, shader_name, shader_stage))
 
-    with open(header_to_generate_path, 'w', encoding='utf-8') as generated_header_handle:
-        header_source = compile_all_shaders(shaders_to_compile)
-        # TODO the linker doesn't like defining the arrays in the header, and I should
-        # separate this out into a c file too one day
-        generated_header_handle.write(header_source)
+    if should_recompile:
+        with open(header_to_generate_path, 'w', encoding='utf-8') as generated_header_handle:
+            header_source = compile_all_shaders(shaders_to_compile)
+            # TODO the linker doesn't like defining the arrays in the header, and I should
+            # separate this out into a c file too one day
+            generated_header_handle.write(header_source)
+    else:
+        print(f"compile_shaders.py: Nothing to be done for {generated_header_name}")
 
