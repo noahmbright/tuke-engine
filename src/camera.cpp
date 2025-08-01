@@ -1,6 +1,3 @@
-#include <OpenGL/OpenGL.h> // TODO Remove
-#include <glad/gl.h>       // TODO Remove
-
 #include <GLFW/glfw3.h> // TODO Remove
 
 #include "camera.h"
@@ -10,19 +7,19 @@
 #include "glm/trigonometric.hpp"
 
 // TODO decouple from window
-static void scroll_callback(GLFWwindow *window, f64 xoffset, f64 yoffset) {
-  Camera *camera = (Camera *)glfwGetWindowUserPointer(window);
-
-  (void)xoffset;
-  (void)yoffset;
-
-  camera->fovy -= (f32)yoffset;
-  if (camera->fovy < 1.0f)
-    camera->fovy = 1.0f;
-
-  if (camera->fovy > 45.0f)
-    camera->fovy = 45.0f;
-}
+// static void scroll_callback(GLFWwindow *window, f64 xoffset, f64 yoffset) {
+//  Camera *camera = (Camera *)glfwGetWindowUserPointer(window);
+//
+//  (void)xoffset;
+//  (void)yoffset;
+//
+//  camera->fovy -= (f32)yoffset;
+//  if (camera->fovy < 1.0f)
+//    camera->fovy = 1.0f;
+//
+//  if (camera->fovy > 45.0f)
+//    camera->fovy = 45.0f;
+//}
 
 void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
   if (!camera->has_moused_yet) {
@@ -142,8 +139,11 @@ glm::mat4 look_at_from_camera(const Camera *camera) {
 glm::mat4 perspective_projection_from_camera(const Camera *camera,
                                              u32 window_width,
                                              u32 window_height) {
-  return glm::perspective(glm::radians(camera->fovy),
-                          f32(window_width) / f32(window_height), 0.1f, 100.0f);
+  glm::mat4 proj =
+      glm::perspective(glm::radians(camera->fovy),
+                       f32(window_width) / f32(window_height), 0.1f, 100.0f);
+  proj[1][1] *= -1.0f * camera->y_needs_inverted;
+  return proj;
 }
 
 CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width,
@@ -154,21 +154,23 @@ CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width,
       perspective_projection_from_camera(camera, window_width, window_height);
   return camera_matrices;
 }
-void buffer_camera_matrices_to_gl_uniform_buffer(
-    const CameraMatrices *camera_matrices) {
 
-  CameraMatrices *uniform_buffer_range_ptr = (CameraMatrices *)glMapBufferRange(
-      GL_UNIFORM_BUFFER, 0, sizeof(CameraMatrices),
-      GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-
-  if (uniform_buffer_range_ptr) {
-    *uniform_buffer_range_ptr = *camera_matrices;
-    glUnmapBuffer(GL_UNIFORM_BUFFER);
-  }
-#if 1
-  else {
-    fprintf(stderr, "buffer_camera_matrices_to_gl_uniform_buffer: failed to "
-                    "get uniform_buffer_range_ptr\n");
-  }
-#endif
-}
+// void buffer_camera_matrices_to_gl_uniform_buffer(
+//     const CameraMatrices *camera_matrices) {
+//
+//   CameraMatrices *uniform_buffer_range_ptr = (CameraMatrices
+//   *)glMapBufferRange(
+//       GL_UNIFORM_BUFFER, 0, sizeof(CameraMatrices),
+//       GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+//
+//   if (uniform_buffer_range_ptr) {
+//     *uniform_buffer_range_ptr = *camera_matrices;
+//     glUnmapBuffer(GL_UNIFORM_BUFFER);
+//   }
+// #if 1
+//   else {
+//     fprintf(stderr, "buffer_camera_matrices_to_gl_uniform_buffer: failed to "
+//                     "get uniform_buffer_range_ptr\n");
+//   }
+// #endif
+//}

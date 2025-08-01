@@ -27,6 +27,7 @@ struct Camera {
 
   f32 last_mouse_x, last_mouse_y;
   bool has_moused_yet;
+  bool y_needs_inverted;
 };
 
 struct CameraMatrices {
@@ -52,5 +53,5 @@ glm::mat4 perspective_projection_from_camera(const Camera *camera,
 CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width,
                                    u32 window_height);
 
-void buffer_camera_matrices_to_gl_uniform_buffer(
-    const CameraMatrices *camera_matrices);
+// void buffer_camera_matrices_to_gl_uniform_buffer(
+// const CameraMatrices *camera_matrices);

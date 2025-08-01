@@ -659,6 +659,7 @@ SwapchainStorage create_swapchain_storage(VkDevice device,
 
 VkAttachmentDescription make_color_attachment(VkFormat format) {
   VkAttachmentDescription color_attachment;
+  color_attachment.flags = 0;
   color_attachment.format = format;
   color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
   color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -1765,10 +1766,6 @@ StagingArena create_staging_arena(const VulkanContext *context,
   return staging_arena;
 }
 
-// TODO alignment padding?
-// TODO add handle with size, usage, offset, instead of just returning offset?
-// TODO track destination offsets? would require assumptions about linear layout
-//
 // written_data_offset is the offset of the staged data in *data, i.e. the
 // src_offset when the staging buffer is the src
 u32 stage_data_explicit(const VulkanContext *context, StagingArena *arena,

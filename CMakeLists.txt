@@ -2,48 +2,24 @@ cmake_minimum_required(VERSION 3.20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(game_engine)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 23)
 
 find_package(Vulkan REQUIRED)
 
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_CXX_STANDARD 23)
-add_compile_options(-g -Wall -Wextra -Wpedantic -Fsanitize=address)
-
-file(GLOB_RECURSE SOURCE_FILES
-    ${CMAKE_SOURCE_DIR}/src/gl.c
-    ${CMAKE_SOURCE_DIR}/src/shaders.cpp
-    ${CMAKE_SOURCE_DIR}/src/camera.cpp
-    ${CMAKE_SOURCE_DIR}/src/tilemap.cpp
-    ${CMAKE_SOURCE_DIR}/src/renderer.cpp
-    ${CMAKE_SOURCE_DIR}/src/window.cpp
-    ${CMAKE_SOURCE_DIR}/src/player.cpp
-    ${CMAKE_SOURCE_DIR}/src/vulkan_base.cpp
-    ${CMAKE_SOURCE_DIR}/src/stb_image.cpp
-    ${CMAKE_SOURCE_DIR}/src/utils.cpp
-)
-
-add_library(engine ${SOURCE_FILES})
-
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glfw)
-include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/src)
-include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/third_party/glfw/include)
-include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/third_party/include)
-include_directories(engine PRIVATE ${CMAKE_SOURCE_DIR}/gen)
-
-if(Vulkan_FOUND)
-    include_directories(engine PRIVATE ${Vulkan_INCLUDE_DIRS})
-    target_link_libraries(engine PRIVATE Vulkan::Vulkan) 
-endif()
-
-link_libraries(engine glfw)
+add_subdirectory(${CMAKE_SOURCE_DIR}/src)
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/app/og_main/main.cpp)
+target_link_libraries(${PROJECT_NAME} PRIVATE engine)
 
 add_executable(vulkan_test ${CMAKE_SOURCE_DIR}/app/vulkan_test/vulkan_test.cpp)
-
+target_link_libraries(vulkan_test PRIVATE engine)
 
 file(GLOB_RECURSE PONG_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/app/pong/pong.cpp
     ${CMAKE_SOURCE_DIR}/app/pong/main.cpp
 )
+
 add_executable(pong ${PONG_SOURCE_FILES})
+target_link_libraries(pong PRIVATE engine)
