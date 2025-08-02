@@ -17,7 +17,7 @@
 
 int main() {
   GLFWwindow *window = new_window();
-  Camera camera = new_camera(CameraType::Camera2D);
+  // Camera camera = new_camera(CameraType::Camera2D);
 
   unsigned player_texture = load_texture_opengl("textures/generic_girl.jpg");
   unsigned player_program = link_shader_program("shaders/player_vertex.glsl",
@@ -65,9 +65,9 @@ int main() {
     glfwGetFramebufferSize(window, &width, &height);
     glViewport(0, 0, width, height);
 
-    const CameraMatrices camera_matrices =
-        new_camera_matrices(&camera, width, height);
-    buffer_camera_matrices_to_gl_uniform_buffer(&camera_matrices);
+    // const CameraMatrices camera_matrices =
+    // new_camera_matrices(&camera, width, height);
+    // buffer_camera_matrices_to_gl_uniform_buffer(&camera_matrices);
 
     const glm::mat4 player_model = model_from_player(&player);
     const glm::mat4 tilemap_model = glm::mat4(1.0);

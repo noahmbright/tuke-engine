@@ -741,15 +741,23 @@ def compile_all_shaders(shaders):
     code += "// Generated shader header, do not edit\n"
     code += "#pragma once\n#include <stdint.h>\n#include <stddef.h>\n#include \"vulkan_base.h\"\n\n"
 
+    shader_spec_array_code = f"const u32 num_generated_specs = {len(shaders)};\n"
+    # TODO put in .cpp when separating header and cpp
+    shader_spec_array_code += "static const ShaderSpec* generated_shader_specs[] = {\n"
+
     for source_file, name, stage in shaders:
         vulkan_source, opengl_source = compile_shader_file(source_file, stage, global_vertex_layouts)
         spirv = compile_to_spirv_and_get_bytes(vulkan_source, stage)
         shader = Shader(name, spirv, stage, opengl_source)
         code += shader_spec_codegen(shader)
-
+        shader_spec_array_code += f"  &{name}_spec,\n"
 
     code += '\n\n'
     code += vertex_layout_codegen(global_vertex_layouts)
+
+    code += '\n\n'
+    shader_spec_array_code += "\n};\n"
+    code += shader_spec_array_code
     return code
 
 def vertex_layout_codegen(global_vertex_layouts):

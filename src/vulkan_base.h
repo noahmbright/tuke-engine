@@ -27,6 +27,8 @@
 #define MAX_DESCRIPTOR_BUFFER_INFOS (4)
 #define MAX_DESCRIPTOR_IMAGE_INFOS (4)
 
+#define MAX_BUFFER_UPLOADS (32)
+
 inline const char *vk_result_string(VkResult result) {
   switch (result) {
   case VK_SUCCESS:
@@ -338,6 +340,27 @@ struct RenderCall {
   bool is_indexed;
 };
 
+struct BufferHandle {
+  u64 offset;
+  u64 size;
+  BufferType buffer_type;
+  void *data;
+};
+
+struct BufferUploadQueue {
+  u64 vertex_buffer_offset;
+  u64 index_buffer_offset;
+  BufferHandle slices[MAX_BUFFER_UPLOADS];
+  u32 num_slices;
+};
+
+struct BufferManager {
+  VulkanContext *context;
+  VulkanBuffer vertex_buffer;
+  VulkanBuffer index_buffer;
+  StagingArena staging_arena;
+};
+
 VulkanContext create_vulkan_context(const char *title);
 void destroy_vulkan_context(VulkanContext *);
 VulkanBuffer create_buffer_explicit(const VulkanContext *context,
@@ -501,3 +524,17 @@ bool cache_shader_modules(VulkanShaderCache *cache, const ShaderSpec **specs,
 void destroy_shader_cache(VulkanShaderCache *cache);
 
 void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call);
+
+BufferUploadQueue new_buffer_upload_queue();
+const BufferHandle *upload_data(BufferUploadQueue *queue,
+                                BufferType buffer_type, void *data, u64 size);
+BufferManager flush_buffers(VulkanContext *context, BufferUploadQueue *queue);
+void destroy_buffer_manager(BufferManager *buffer_manager);
+
+// these macros are specifically for arrays, e.g., f32 array[], with the [];
+// will fail on pointers to arrays of data
+#define UPLOAD_VERTEX_ARRAY(queue, array)                                      \
+  (upload_data(&queue, BUFFER_TYPE_VERTEX, (void *)array, sizeof(array)))
+
+#define UPLOAD_INDEX_ARRAY(queue, array)                                       \
+  (upload_data(&queue, BUFFER_TYPE_INDEX, (void *)array, sizeof(array)))

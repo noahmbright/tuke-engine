@@ -15,43 +15,25 @@ int main() {
   VulkanContext context = create_vulkan_context("Tuke");
   init_vertex_layout_registry();
 
-  const u32 num_textures = 1;
-  const char *texture_names[num_textures] = {"textures/generic_girl.jpg"};
-  VulkanTexture textures[num_textures];
-  load_vulkan_textures(&context, texture_names, num_textures, textures);
+  VulkanTexture textures[NUM_TEXTURES];
+  load_vulkan_textures(&context, texture_names, NUM_TEXTURES, textures);
   VkSampler sampler = create_sampler(context.device);
 
-  // TODO find a way to stage all of these in a single call
-  // TODO find a way to store offsets
-  u32 triangle_size = sizeof(triangle_vertices);
-  u32 square_size = sizeof(square_vertices);
-  u32 unit_square_positions_size = sizeof(unit_square_positions);
-  u32 unit_square_indices_size = sizeof(unit_square_indices);
-  u32 quad_positions_size = sizeof(quad_positions);
-  u32 total_size = triangle_size + square_size + unit_square_positions_size +
-                   quad_positions_size + sizeof(unit_square_indices);
+  BufferUploadQueue buffer_upload_queue = new_buffer_upload_queue();
+  const BufferHandle *triangle_vertices_slice =
+      UPLOAD_VERTEX_ARRAY(buffer_upload_queue, triangle_vertices);
+  const BufferHandle *square_slice =
+      UPLOAD_VERTEX_ARRAY(buffer_upload_queue, square_vertices);
+  const BufferHandle *unit_square_position_slice =
+      UPLOAD_VERTEX_ARRAY(buffer_upload_queue, unit_square_positions);
+  const BufferHandle *quad_position_slice =
+      UPLOAD_VERTEX_ARRAY(buffer_upload_queue, quad_positions);
+  const BufferHandle *unit_square_indices_slice =
+      UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
 
-  VulkanBuffer vertex_buffer =
-      create_buffer(&context, BUFFER_TYPE_VERTEX, total_size);
-  VulkanBuffer index_buffer =
-      create_buffer(&context, BUFFER_TYPE_INDEX, unit_square_indices_size);
-
-  // TODO clean up buffering to several destinations
-  StagingArena staging_arena = create_staging_arena(&context, total_size);
-  u32 triangle_offset = STAGE_ARRAY(&context, &staging_arena, triangle_vertices,
-                                    vertex_buffer.buffer);
-  u32 square_offset = STAGE_ARRAY(&context, &staging_arena, square_vertices,
-                                  vertex_buffer.buffer);
-  u32 unit_square_position_offset = STAGE_ARRAY(
-      &context, &staging_arena, unit_square_positions, vertex_buffer.buffer);
-  u32 quad_positions_offset = STAGE_ARRAY(&context, &staging_arena,
-                                          quad_positions, vertex_buffer.buffer);
-
-  u32 unit_square_indices_offset =
-      stage_data_explicit(&context, &staging_arena, unit_square_indices,
-                          sizeof(unit_square_indices), index_buffer.buffer, 0);
-  flush_staging_arena(&context, &staging_arena);
-  (void)unit_square_indices_offset;
+  BufferManager buffer_manager = flush_buffers(&context, &buffer_upload_queue);
+  VulkanBuffer *vertex_buffer = &buffer_manager.vertex_buffer;
+  VulkanBuffer *index_buffer = &buffer_manager.index_buffer;
 
   // TODO eventually will want an abstraction over pools, potentially using
   // shader reflection data
@@ -67,13 +49,8 @@ int main() {
   UniformBuffer x_uniform_buffer =
       create_uniform_buffer(&context, sizeof(float) + sizeof(MVPUniform));
 
-  // TODO output some const string pound defines or something for names, and
-  // cache a list of names or something
-  u32 num_specs = 5;
-  const ShaderSpec *specs[] = {&simple_vert_spec, &simple_frag_spec,
-                               &square_frag_spec, &instanced_quad_frag_spec,
-                               &instanced_quad_vert_spec};
-  cache_shader_modules(context.shader_cache, specs, num_specs);
+  cache_shader_modules(context.shader_cache, generated_shader_specs,
+                       num_generated_specs);
 
   // the uniform buffer will contain the layout: mvp | x
   // for the simple.frag.in, x uniform is set/binding 0/0
@@ -96,7 +73,7 @@ int main() {
   add_uniform_buffer_descriptor_set(&mvp_set_builder, &x_uniform_buffer,
                                     sizeof(MVPUniform), sizeof(float), 1, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
-  add_texture_descriptor_set(&mvp_set_builder, &textures[0], sampler, 2, 1,
+  add_texture_descriptor_set(&mvp_set_builder, &textures[2], sampler, 2, 1,
                              VK_SHADER_STAGE_FRAGMENT_BIT);
 
   DescriptorSetHandle mvp_descriptor =
@@ -129,8 +106,9 @@ int main() {
   triangle_render_call.instance_count = 1;
   triangle_render_call.graphics_pipeline = triangle_pipeline;
   triangle_render_call.num_vertex_buffers = 1;
-  triangle_render_call.vertex_buffer_offsets[0] = triangle_offset;
-  triangle_render_call.vertex_buffers[0] = vertex_buffer.buffer;
+  triangle_render_call.vertex_buffer_offsets[0] =
+      triangle_vertices_slice->offset;
+  triangle_render_call.vertex_buffers[0] = vertex_buffer->buffer;
   triangle_render_call.pipeline_layout = x_pipeline_layout;
   triangle_render_call.descriptor_set = x_descriptor.descriptor_set;
   triangle_render_call.is_indexed = false;
@@ -140,8 +118,8 @@ int main() {
   square_render_call.instance_count = 1;
   square_render_call.graphics_pipeline = square_pipeline;
   square_render_call.num_vertex_buffers = 1;
-  square_render_call.vertex_buffer_offsets[0] = square_offset;
-  square_render_call.vertex_buffers[0] = vertex_buffer.buffer;
+  square_render_call.vertex_buffer_offsets[0] = square_slice->offset;
+  square_render_call.vertex_buffers[0] = vertex_buffer->buffer;
   square_render_call.pipeline_layout = x_pipeline_layout;
   square_render_call.descriptor_set = x_descriptor.descriptor_set;
   square_render_call.is_indexed = false;
@@ -152,13 +130,14 @@ int main() {
   instanced_render_call.instance_count = instance_count;
   instanced_render_call.graphics_pipeline = instanced_quad_pipeline;
   instanced_render_call.num_vertex_buffers = 2;
-  instanced_render_call.vertex_buffer_offsets[0] = unit_square_position_offset;
-  instanced_render_call.vertex_buffer_offsets[1] = quad_positions_offset;
-  instanced_render_call.vertex_buffers[0] = vertex_buffer.buffer;
-  instanced_render_call.vertex_buffers[1] = vertex_buffer.buffer;
+  instanced_render_call.vertex_buffer_offsets[0] =
+      unit_square_position_slice->offset;
+  instanced_render_call.vertex_buffer_offsets[1] = quad_position_slice->offset;
+  instanced_render_call.vertex_buffers[0] = vertex_buffer->buffer;
+  instanced_render_call.vertex_buffers[1] = vertex_buffer->buffer;
   instanced_render_call.pipeline_layout = mvp_pipeline_layout;
   instanced_render_call.descriptor_set = mvp_descriptor.descriptor_set;
-  instanced_render_call.index_buffer = index_buffer.buffer;
+  instanced_render_call.index_buffer = index_buffer->buffer;
   instanced_render_call.index_buffer_offset = 0;
   instanced_render_call.is_indexed = true;
 
@@ -212,7 +191,9 @@ int main() {
   vkDeviceWaitIdle(context.device);
 
   vkDestroySampler(context.device, sampler, NULL);
-  destroy_vulkan_texture(context.device, &textures[0]);
+  for (u32 i = 0; i < NUM_TEXTURES; i++) {
+    destroy_vulkan_texture(context.device, &textures[i]);
+  }
 
   destroy_descriptor_set_handle(context.device, &x_descriptor);
   destroy_descriptor_set_handle(context.device, &mvp_descriptor);
@@ -227,9 +208,7 @@ int main() {
 
   vkDestroyDescriptorPool(context.device, descriptor_pool, NULL);
 
-  destroy_vulkan_buffer(&context, index_buffer);
-  destroy_vulkan_buffer(&context, staging_arena.buffer);
-  destroy_vulkan_buffer(&context, vertex_buffer);
+  destroy_buffer_manager(&buffer_manager);
   destroy_vulkan_context(&context);
   return 0;
 }

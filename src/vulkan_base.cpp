@@ -2461,3 +2461,88 @@ void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call) {
               render_call->instance_count, first_vertex, first_instance);
   }
 }
+
+BufferUploadQueue new_buffer_upload_queue() {
+  BufferUploadQueue queue;
+
+  queue.vertex_buffer_offset = 0;
+  queue.index_buffer_offset = 0;
+  memset(queue.slices, 0, sizeof(queue.slices));
+  queue.num_slices = 0;
+
+  return queue;
+}
+
+const BufferHandle *upload_data(BufferUploadQueue *queue,
+                                BufferType buffer_type, void *data, u64 size) {
+
+  assert(queue->num_slices < MAX_BUFFER_UPLOADS);
+
+  BufferHandle *handle = &queue->slices[queue->num_slices];
+
+  u64 offset = -1;
+  switch (buffer_type) {
+  case BUFFER_TYPE_INDEX:
+    offset = queue->index_buffer_offset;
+    queue->index_buffer_offset += size;
+    break;
+  case BUFFER_TYPE_VERTEX:
+    offset = queue->vertex_buffer_offset;
+    queue->vertex_buffer_offset += size;
+    break;
+  default:
+    assert(false);
+  }
+
+  handle->offset = offset;
+  handle->size = size;
+  handle->buffer_type = buffer_type;
+  handle->data = data;
+  ++queue->num_slices;
+
+  return handle;
+}
+
+BufferManager flush_buffers(VulkanContext *context, BufferUploadQueue *queue) {
+
+  BufferManager manager;
+  manager.context = context;
+  manager.vertex_buffer =
+      create_buffer(context, BUFFER_TYPE_VERTEX, queue->vertex_buffer_offset);
+
+  manager.index_buffer =
+      create_buffer(context, BUFFER_TYPE_INDEX, queue->index_buffer_offset);
+
+  u64 total_size = queue->vertex_buffer_offset + queue->index_buffer_offset;
+  manager.staging_arena = create_staging_arena(context, total_size);
+
+  for (u32 i = 0; i < queue->num_slices; i++) {
+
+    const BufferHandle handle = queue->slices[i];
+    VkBuffer destination;
+    switch (handle.buffer_type) {
+    case BUFFER_TYPE_INDEX:
+      destination = manager.index_buffer.buffer;
+      break;
+    case BUFFER_TYPE_VERTEX:
+      destination = manager.vertex_buffer.buffer;
+      break;
+    default:
+      assert(false);
+    }
+
+    stage_data_explicit(context, &manager.staging_arena, handle.data,
+                        handle.size, destination, handle.offset);
+  }
+
+  flush_staging_arena(context, &manager.staging_arena);
+
+  return manager;
+}
+
+void destroy_buffer_manager(BufferManager *buffer_manager) {
+  VulkanContext *ctx = buffer_manager->context;
+  destroy_vulkan_buffer(ctx, buffer_manager->vertex_buffer);
+  destroy_vulkan_buffer(ctx, buffer_manager->index_buffer);
+  destroy_vulkan_buffer(ctx, buffer_manager->staging_arena.buffer);
+}
