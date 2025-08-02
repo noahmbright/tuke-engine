@@ -2368,50 +2368,6 @@ VulkanShaderCache *create_shader_cache(VkDevice device) {
   return cache;
 }
 
-bool cache_shader_module(VulkanShaderCache *cache, ShaderSpec spec) {
-
-  u32 table_index = cache->hash_map.probe(spec.name);
-  if (cache->hash_map.key_values[table_index].occupancy == HASHMAP_OCCUPIED) {
-    fprintf(stderr,
-            "cache_shader_module: Attempting to overwrite shader module. "
-            "Attempting to cache %s, overwriting %s\n",
-            spec.name, cache->hash_map.key_values[table_index].key);
-    return false;
-  }
-
-  if (table_index == cache->hash_map.capacity) {
-    fprintf(stderr,
-            "cache_shader_module: probe returned table.capacity when hashing "
-            "\"%s\" - table full. table index: %d, capacity %d\n",
-            spec.name, table_index, cache->hash_map.capacity);
-    return false;
-  }
-
-  // shaderstage: VkShaderStageFlagBits
-  // shaderspec: VkShaderStageFlags
-  ShaderStage *stage = &cache->hash_map.key_values[table_index].value;
-  stage->module = create_shader_module(cache->device, spec.spv, spec.size);
-  stage->stage = spec.stage_flags;
-  // TODO add preprocessing to shader for specifying an entry point
-  stage->entry_point = "main";
-
-  cache->hash_map.key_values[table_index].key = spec.name;
-  cache->hash_map.key_values[table_index].occupancy = HASHMAP_OCCUPIED;
-  cache->hash_map.size++;
-
-  return true;
-}
-
-bool cache_shader_modules(VulkanShaderCache *cache, const ShaderSpec **specs,
-                          u32 num_specs) {
-  for (u32 i = 0; i < num_specs; i++) {
-    if (!cache_shader_module(cache, *specs[i])) {
-      return false;
-    }
-  }
-  return true;
-}
-
 void destroy_shader_cache(VulkanShaderCache *cache) {
   for (u32 i = 0; i < cache->hash_map.capacity; i++) {
     if (cache->hash_map.key_values[i].occupancy == HASHMAP_OCCUPIED) {

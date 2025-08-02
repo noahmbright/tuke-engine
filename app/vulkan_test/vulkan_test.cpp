@@ -37,14 +37,14 @@ int main() {
 
   // TODO eventually will want an abstraction over pools, potentially using
   // shader reflection data
-  VkDescriptorPoolSize mvp_pool_sizes[2];
-  mvp_pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  mvp_pool_sizes[0].descriptorCount = 3;
-  mvp_pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  mvp_pool_sizes[1].descriptorCount = 1;
+  VkDescriptorPoolSize pool_sizes[2];
+  pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  pool_sizes[0].descriptorCount = 3;
+  pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  pool_sizes[1].descriptorCount = 1;
 
   VkDescriptorPool descriptor_pool =
-      create_descriptor_pool(context.device, mvp_pool_sizes, 2, 3);
+      create_descriptor_pool(context.device, pool_sizes, 2, 3);
 
   UniformBuffer x_uniform_buffer =
       create_uniform_buffer(&context, sizeof(float) + sizeof(MVPUniform));
@@ -82,24 +82,18 @@ int main() {
   VkPipelineLayout mvp_pipeline_layout = create_pipeline_layout(
       context.device, &mvp_descriptor.descriptor_set_layout, 1);
 
-  const VkPipelineVertexInputStateCreateInfo
-      *instanced_quad_vertex_input_state = get_vertex_layout(
-          VERTEX_LAYOUT_BINDING0_RATE_VERTEX_VEC3_VEC2_BINDING1_RATE_INSTANCE_VEC2);
-
-  const VkPipelineVertexInputStateCreateInfo *postion_normal_vertex_layout =
-      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3);
-
   VkPipeline triangle_pipeline = create_default_graphics_pipeline(
       &context, simple_vert_spec.name, simple_frag_spec.name,
-      postion_normal_vertex_layout, x_pipeline_layout);
+      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3), x_pipeline_layout);
 
   VkPipeline square_pipeline = create_default_graphics_pipeline(
       &context, simple_vert_spec.name, square_frag_spec.name,
-      postion_normal_vertex_layout, x_pipeline_layout);
+      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3), x_pipeline_layout);
 
   VkPipeline instanced_quad_pipeline = create_default_graphics_pipeline(
       &context, instanced_quad_vert_spec.name, instanced_quad_frag_spec.name,
-      instanced_quad_vertex_input_state, mvp_pipeline_layout);
+      get_vertex_layout(instanced_quad_vert_spec.vertex_layout_id),
+      mvp_pipeline_layout);
 
   RenderCall triangle_render_call;
   triangle_render_call.num_vertices = 3;

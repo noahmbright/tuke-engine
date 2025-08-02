@@ -231,11 +231,15 @@ class TemplateStringSlice:
     vulkan_replacement: str
     opengl_replacement: str
 
+# TODO generalize SetBindingLayout to handle more descriptor types if necessary
+class VkDescriptorType(Enum):
+    SAMPLER = auto()
+    UNIFORM_BUFFER = auto()
+
 @dataclass
 class SetBindingLayout:
     set_id: int
     binding: int
-    # TODO generalize
     is_sampler: bool
     size: int
 
@@ -593,6 +597,9 @@ class VertexAttribute:
     is_tightly_packed: bool
 
 # vertex_layouts: list of VertexAttribute
+# this function converts a templated vertex attribute from glsl
+# into the information needed to output a vulkan C side vertex binding/attribute 
+# this is done per shader
 def generate_vertex_bindings_and_attributes(vertex_attributes):
     if len(vertex_attributes) == 0:
         return None
@@ -671,10 +678,10 @@ def check_vertex_layout_present(global_vertex_layouts, new_vertex_layout):
 
 # shader_stage is an enum
 # entry point into parser, gets slices where replacements need to happen,
-# populates global_vertex_layouts, TODO populate a descriptor set table
-# handles vertex descriptions through a side effect, returns strings 
+# populates the global symbol tables: global_vertex_layouts, global_descriptor_sets
+# handles vertex descriptions through a side effect, returns strings containing
 # opengl/vulkan source
-def compile_shader_file(filepath, shader_stage, global_vertex_layouts):
+def compile_shader_file(filepath, name, shader_stage, global_vertex_layouts, global_descriptor_sets):
     with open(filepath, 'r', encoding='utf-8') as f:
         contents = f.read()
 
@@ -706,13 +713,17 @@ def compile_shader_file(filepath, shader_stage, global_vertex_layouts):
 
     slices, vertex_layouts, set_bindings = parse_tokens(tokens, shader_stage, parser_error_reporter)
 
+    vertex_layout_enum_name = "INVALID_VERTEX_LAYOUT"
     if shader_stage == ShaderStage.VERTEX:
         if len(vertex_layouts) == 0:
-            print(f"{YELLOW} Warning: Parsed vertex shader with no layouts {RESET}")
+            print(f"{YELLOW} Warning: Parsed vertex shader {filepath} with no layouts {RESET}")
         else:
             vertex_layout = generate_vertex_bindings_and_attributes(vertex_layouts)
             if not check_vertex_layout_present(global_vertex_layouts, vertex_layout):
                 global_vertex_layouts.append(vertex_layout)
+            vertex_layout_enum_name = make_vertex_layout_name(vertex_layout)
+
+    global_descriptor_sets.append(set_bindings)
 
     vulkan_source = ""
     opengl_source = ""
@@ -731,12 +742,17 @@ def compile_shader_file(filepath, shader_stage, global_vertex_layouts):
 
     vulkan_source += contents[current_start:]
     opengl_source += contents[current_start:]
+    spirv = compile_to_spirv_and_get_bytes(vulkan_source, shader_stage)
 
-    return (vulkan_source, opengl_source)
+    return CompiledShader(name, spirv, shader_stage, opengl_source, vertex_layout_enum_name)
 
+# returns the result of parsing and compiling all shaders
+# defines global tables
 def compile_all_shaders(shaders):
     global_vertex_layouts = []
+    global_descriptor_sets = []
     code = ""
+    vertex_layout_enum_names = []
 
     code += "// Generated shader header, do not edit\n"
     code += "#pragma once\n#include <stdint.h>\n#include <stddef.h>\n#include \"vulkan_base.h\"\n\n"
@@ -745,69 +761,76 @@ def compile_all_shaders(shaders):
     # TODO put in .cpp when separating header and cpp
     shader_spec_array_code += "static const ShaderSpec* generated_shader_specs[] = {\n"
 
+    shader_specifications_code = ""
+
     for source_file, name, stage in shaders:
-        vulkan_source, opengl_source = compile_shader_file(source_file, stage, global_vertex_layouts)
-        spirv = compile_to_spirv_and_get_bytes(vulkan_source, stage)
-        shader = Shader(name, spirv, stage, opengl_source)
-        code += shader_spec_codegen(shader)
+        shader = compile_shader_file(source_file, name, stage, global_vertex_layouts, global_descriptor_sets)
+
+        enum_name = shader.vertex_layout_enum_name 
+        if enum_name not in vertex_layout_enum_names and enum_name != 'INVALID_VERTEX_LAYOUT':
+            vertex_layout_enum_names.append(shader.vertex_layout_enum_name)
+        shader_specifications_code += shader_spec_codegen(shader)
         shader_spec_array_code += f"  &{name}_spec,\n"
 
+    code += vertex_layout_codegen(global_vertex_layouts, vertex_layout_enum_names)
     code += '\n\n'
-    code += vertex_layout_codegen(global_vertex_layouts)
 
+    code += shader_specifications_code
     code += '\n\n'
+
     shader_spec_array_code += "\n};\n"
     code += shader_spec_array_code
     return code
 
-def vertex_layout_codegen(global_vertex_layouts):
-    enum_code = "enum GeneratedVertexLayoutID {\n"
-    enum_names = []
+def make_vertex_layout_name(vertex_layout):
+    attributes, bindings = vertex_layout.attributes, vertex_layout.bindings
 
-    for vertex_layout in global_vertex_layouts:
-        attributes = vertex_layout.attributes
-        bindings = vertex_layout.bindings
+    unique_bindings_to_rates = {}
+    for binding in bindings:
+        if binding.binding in unique_bindings_to_rates:
+            if unique_bindings_to_rates[binding.binding] != binding.rate:
+                print(f"{RED}Mismatch in rates for binding {binding.binding}{RESET}")
+                return None
+        else:
+            unique_bindings_to_rates[binding.binding] = binding.rate
 
-        unique_bindings_to_rates = {}
-        for binding in bindings:
-            if binding.binding in unique_bindings_to_rates:
-                if unique_bindings_to_rates[binding.binding] != binding.rate:
-                    print(f"{RED}Mismatch in rates for binding {binding.binding}{RESET}")
-                    return None
-            else:
-                unique_bindings_to_rates[binding.binding] = binding.rate
-
-        # the name is determined by the locations and uniqueness of bindings
-        # if there is only a single vertex binding, then skip marking all the bindings
-        only_one_vertex_rate_binding = False
-        enum_name = "VERTEX_LAYOUT"
-        if len(unique_bindings_to_rates) == 1:
-            for rate in unique_bindings_to_rates.values():
-                only_one_vertex_rate_binding =  (rate == TokenType.RATE_VERTEX)
-
-        only_vertex_rate_bindings = True
+    # the name is determined by the locations and uniqueness of bindings
+    # if there is only a single vertex binding, then skip marking all the bindings
+    only_one_vertex_rate_binding = False
+    enum_name = "VERTEX_LAYOUT"
+    if len(unique_bindings_to_rates) == 1:
         for rate in unique_bindings_to_rates.values():
-            if (rate == TokenType.RATE_INSTANCE):
-                only_vertex_rate_bindings = False
+            only_one_vertex_rate_binding =  (rate == TokenType.RATE_VERTEX)
 
-        current_binding = None
-        for attribute in attributes:
-            if attribute.binding != current_binding:
-                if not only_one_vertex_rate_binding:
-                    enum_name += f"_BINDING{attribute.binding}"
-                if not only_vertex_rate_bindings:
-                    if unique_bindings_to_rates[attribute.binding] == TokenType.RATE_VERTEX:
-                        enum_name += f"_RATE_VERTEX"
-                    if unique_bindings_to_rates[attribute.binding] == TokenType.RATE_INSTANCE:
-                        enum_name += f"_RATE_INSTANCE"
-                current_binding = attribute.binding
+    only_vertex_rate_bindings = True
+    for rate in unique_bindings_to_rates.values():
+        if (rate == TokenType.RATE_INSTANCE):
+            only_vertex_rate_bindings = False
 
-            enum_name += f"_{vulkan_format_to_glsl_type[attribute.format]}"
+    current_binding = None
+    for attribute in attributes:
+        if attribute.binding != current_binding:
+            if not only_one_vertex_rate_binding:
+                enum_name += f"_BINDING{attribute.binding}"
+            if not only_vertex_rate_bindings:
+                if unique_bindings_to_rates[attribute.binding] == TokenType.RATE_VERTEX:
+                    enum_name += f"_RATE_VERTEX"
+                if unique_bindings_to_rates[attribute.binding] == TokenType.RATE_INSTANCE:
+                    enum_name += f"_RATE_INSTANCE"
+            current_binding = attribute.binding
 
-        enum_names.append(enum_name)
+        enum_name += f"_{vulkan_format_to_glsl_type[attribute.format]}"
+
+    return enum_name
+
+
+def vertex_layout_codegen(global_vertex_layouts, enum_names):
+    enum_code = "enum GeneratedVertexLayoutID {\n"
+
+    for enum_name in enum_names:
         enum_code += f"  {enum_name},\n"
 
-    enum_code += "  NUM_GENERATED_VERTEX_LAYOUTS\n};\n\n"
+    enum_code += "  NUM_GENERATED_VERTEX_LAYOUTS,\n  INVALID_VERTEX_LAYOUT\n};\n\n"
 
     array_code = "const VulkanVertexLayout generated_vertex_layouts[NUM_GENERATED_VERTEX_LAYOUTS] = {\n"
     for i in range(len(global_vertex_layouts)):
@@ -853,11 +876,76 @@ inline void init_vertex_layout_registry(){
 static const VertexLayout *const vertex_layout_registry = _vertex_layout_registry;
 
 inline const VkPipelineVertexInputStateCreateInfo* get_vertex_layout(GeneratedVertexLayoutID id){
+  assert(id < NUM_GENERATED_VERTEX_LAYOUTS);
   return &vertex_layout_registry[id].vertex_input_state;
 }
 """
 
-    return enum_code + array_code + registry_code
+    shader_spec_definitions = r"""struct ShaderSpec {
+  const u32 *spv;
+  u32 size;
+  const char *name;
+  VkShaderStageFlagBits stage_flags;
+  GeneratedVertexLayoutID vertex_layout_id;
+};
+
+static bool cache_shader_module(VulkanShaderCache *cache, ShaderSpec spec) {
+
+  u32 table_index = cache->hash_map.probe(spec.name);
+  if (cache->hash_map.key_values[table_index].occupancy == HASHMAP_OCCUPIED) {
+    fprintf(stderr,
+            "cache_shader_module: Attempting to overwrite shader module. "
+            "Attempting to cache %s, overwriting %s\n",
+            spec.name, cache->hash_map.key_values[table_index].key);
+    return false;
+  }
+
+  if (table_index == cache->hash_map.capacity) {
+    fprintf(stderr,
+            "cache_shader_module: probe returned table.capacity when hashing "
+            "\"%s\" - table full. table index: %d, capacity %d\n",
+            spec.name, table_index, cache->hash_map.capacity);
+    return false;
+  }
+
+  // shaderstage: VkShaderStageFlagBits
+  // shaderspec: VkShaderStageFlags
+  ShaderStage *stage = &cache->hash_map.key_values[table_index].value;
+  stage->module = create_shader_module(cache->device, spec.spv, spec.size);
+  stage->stage = spec.stage_flags;
+  // TODO add preprocessing to shader for specifying an entry point
+  stage->entry_point = "main";
+
+  cache->hash_map.key_values[table_index].key = spec.name;
+  cache->hash_map.key_values[table_index].occupancy = HASHMAP_OCCUPIED;
+  cache->hash_map.size++;
+
+  return true;
+}
+
+static bool cache_shader_modules(VulkanShaderCache *cache, const ShaderSpec **specs,
+                          u32 num_specs) {
+  for (u32 i = 0; i < num_specs; i++) {
+    if (!cache_shader_module(cache, *specs[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+
+"""
+    return enum_code + shader_spec_definitions + array_code + registry_code
+
+def descriptor_set_codegen(global_descriptor_sets):
+    
+
+    # TODO parse this out, currently assuming only the use of uniforms and textures
+    num_descriptor_types = 2
+    descriptor_pool_code = f"VkDescriptorPoolSize generated_pool_sizes[{num_descriptor_types}];"
+
+
+    return descriptor_pool_code
 
 def source_is_newer(source, target):
     if not target.exists():
@@ -941,17 +1029,19 @@ file_stage_to_flag = {
 }
 
 @dataclass
-class Shader:
+class CompiledShader:
     name: str
     spirv: bytes
     stage: ShaderStage
     opengl_source: str
+    vertex_layout_enum_name: str
 
 def c_multiline_string_literal(s):
     lines = s.splitlines()
     quoted_lines = ['"' + line.replace('"', '\\"') + '"' for line in lines]
     return "\n".join(quoted_lines)
 
+# produces the ShaderSpec for a single shader
 # shader: Shader
 def shader_spec_codegen(shader):
     lines = []
@@ -974,6 +1064,7 @@ def shader_spec_codegen(shader):
     lines.append(f"  .size = sizeof({shader.name}),")
     lines.append(f"  .name = {shader.name}_name,")
     lines.append(f"  .stage_flags = {stage_flags},")
+    lines.append(f"  .vertex_layout_id = {shader.vertex_layout_enum_name},")
     lines.append("};\n")
 
     c_string = c_multiline_string_literal(shader.opengl_source)
@@ -1048,10 +1139,9 @@ if __name__ == "__main__":
             shader_name = parts[0] + "_" + shader_stage_string
             shader_stage = string_to_shader_stage[shader_stage_string]
 
-            #shader = Shader(shader_name, spirv, opengl_glsl, shader_stage)
             shaders_to_compile.append((source_file, shader_name, shader_stage))
 
-    if should_recompile:
+    if should_recompile or args.force:
         with open(header_to_generate_path, 'w', encoding='utf-8') as generated_header_handle:
             header_source = compile_all_shaders(shaders_to_compile)
             # TODO the linker doesn't like defining the arrays in the header, and I should

@@ -206,13 +206,6 @@ struct ViewportState {
 
 enum BlendMode { BLEND_MODE_OPAQUE, BLEND_MODE_ALPHA };
 
-struct ShaderSpec {
-  const u32 *spv;
-  u32 size;
-  const char *name;
-  VkShaderStageFlagBits stage_flags;
-};
-
 struct PipelineConfig {
   // pipeline create info
   ShaderStage stages[MAX_SHADER_STAGE_COUNT];
@@ -518,9 +511,6 @@ void destroy_descriptor_set_handle(VkDevice device,
                                    DescriptorSetHandle *handle);
 
 VulkanShaderCache *create_shader_cache(VkDevice device);
-bool cache_shader_module(VulkanShaderCache *cache, ShaderSpec spec);
-bool cache_shader_modules(VulkanShaderCache *cache, const ShaderSpec **specs,
-                          u32 num_specs);
 void destroy_shader_cache(VulkanShaderCache *cache);
 
 void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call);
