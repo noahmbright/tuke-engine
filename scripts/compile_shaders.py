@@ -232,15 +232,22 @@ class TemplateStringSlice:
     opengl_replacement: str
 
 # TODO generalize SetBindingLayout to handle more descriptor types if necessary
-class VkDescriptorType(Enum):
+class DescriptorType(Enum):
     SAMPLER = auto()
     UNIFORM_BUFFER = auto()
+
+descriptor_type_to_vulkan_enum = {
+    DescriptorType.SAMPLER: "VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER",
+    DescriptorType.UNIFORM_BUFFER: "VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER"
+}
 
 @dataclass
 class SetBindingLayout:
     set_id: int
     binding: int
+    # TODO deprecate is_sampler
     is_sampler: bool
+    type: DescriptorType
     size: int
 
 
@@ -479,6 +486,8 @@ def parse_tokens(tokens, stage, parser_error_reporter):
         # {{ ... }} uniform sampler2D identifier;
         # {{ ... }} uniform identifier { ... } identifier;
         is_sampler = (tokens[i].type == TokenType.SAMPLER2D)
+        # TODO generalize if/when more descriptor types are supported
+        descriptor_type = DescriptorType.SAMPLER if is_sampler else DescriptorType.UNIFORM_BUFFER 
         i += 1
 
         size = 0
@@ -505,7 +514,7 @@ def parse_tokens(tokens, stage, parser_error_reporter):
                     return
                 i += 1
 
-        set_bindings.append(SetBindingLayout(set_id, binding, is_sampler, size))
+        set_bindings.append(SetBindingLayout(set_id, binding, is_sampler, descriptor_type, size))
 
 
     while i < n:
@@ -759,7 +768,7 @@ def compile_all_shaders(shaders):
 
     shader_spec_array_code = f"const u32 num_generated_specs = {len(shaders)};\n"
     # TODO put in .cpp when separating header and cpp
-    shader_spec_array_code += "static const ShaderSpec* generated_shader_specs[] = {\n"
+    shader_spec_array_code += "static const ShaderSpec* generated_shader_specs[] = {"
 
     shader_specifications_code = ""
 
@@ -770,12 +779,15 @@ def compile_all_shaders(shaders):
         if enum_name not in vertex_layout_enum_names and enum_name != 'INVALID_VERTEX_LAYOUT':
             vertex_layout_enum_names.append(shader.vertex_layout_enum_name)
         shader_specifications_code += shader_spec_codegen(shader)
-        shader_spec_array_code += f"  &{name}_spec,\n"
+        shader_spec_array_code += f"\n  &{name}_spec,"
 
     code += vertex_layout_codegen(global_vertex_layouts, vertex_layout_enum_names)
     code += '\n\n'
 
     code += shader_specifications_code
+    code += '\n\n'
+
+    code += descriptor_set_codegen(global_descriptor_sets)
     code += '\n\n'
 
     shader_spec_array_code += "\n};\n"
@@ -937,13 +949,34 @@ static bool cache_shader_modules(VulkanShaderCache *cache, const ShaderSpec **sp
 """
     return enum_code + shader_spec_definitions + array_code + registry_code
 
+# global_descriptor_sets: list of SetBindingLayout
 def descriptor_set_codegen(global_descriptor_sets):
-    
+    for s in global_descriptor_sets:
+        print(s)
 
-    # TODO parse this out, currently assuming only the use of uniforms and textures
-    num_descriptor_types = 2
-    descriptor_pool_code = f"VkDescriptorPoolSize generated_pool_sizes[{num_descriptor_types}];"
+    descriptor_type_counts = {}
+    for descriptor_set_list in global_descriptor_sets:
+        for descriptor_set in descriptor_set_list:
+            assert(descriptor_set.type in descriptor_type_to_vulkan_enum)
+            if descriptor_set.type not in descriptor_type_counts:
+                descriptor_type_counts[descriptor_set.type] = 1
+            else:
+                descriptor_type_counts[descriptor_set.type] += 1
 
+    num_descriptor_types = len(descriptor_type_counts)
+    descriptor_pool_code = f"const u32 pool_size_count = {num_descriptor_types};\n"
+    descriptor_pool_code += f"const VkDescriptorPoolSize generated_pool_sizes[{num_descriptor_types}] = {{\n"
+
+    i = 0
+    max_sets = 0
+    for descriptor, count in descriptor_type_counts.items():
+        descriptor_pool_code += f"  {{ .type = {descriptor_type_to_vulkan_enum[descriptor]}, .descriptorCount = {count}}},\n"
+
+        max_sets = max(max_sets, count)
+        i += 1
+
+    descriptor_pool_code += "};\n"
+    descriptor_pool_code += f"const u32 max_sets = {max_sets};\n"
 
     return descriptor_pool_code
 

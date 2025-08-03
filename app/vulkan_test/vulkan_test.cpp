@@ -35,16 +35,8 @@ int main() {
   VulkanBuffer *vertex_buffer = &buffer_manager.vertex_buffer;
   VulkanBuffer *index_buffer = &buffer_manager.index_buffer;
 
-  // TODO eventually will want an abstraction over pools, potentially using
-  // shader reflection data
-  VkDescriptorPoolSize pool_sizes[2];
-  pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  pool_sizes[0].descriptorCount = 3;
-  pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  pool_sizes[1].descriptorCount = 1;
-
-  VkDescriptorPool descriptor_pool =
-      create_descriptor_pool(context.device, pool_sizes, 2, 3);
+  VkDescriptorPool descriptor_pool = create_descriptor_pool(
+      context.device, generated_pool_sizes, pool_size_count, max_sets);
 
   UniformBuffer x_uniform_buffer =
       create_uniform_buffer(&context, sizeof(float) + sizeof(MVPUniform));
