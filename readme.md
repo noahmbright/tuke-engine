@@ -12,8 +12,11 @@ Completed:
 * Shader caching
 * Instancing
 * Index buffers
+* Descriptor set sizes out of reflection data
+* Vertex layouts out of reflection data
 
 TODO:
+* Descriptor sets out of reflection
 * Per frame uniform buffers
 * Dynamic uniform buffer 
 * Double/triple buffering
@@ -27,6 +30,7 @@ TODO:
 * Particles
 * Vulkan Sync
 * Normal mapping 
+* move from combined image sampler to samplers + images
 
 General
 TODO:

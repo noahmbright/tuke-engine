@@ -5,15 +5,17 @@
 #include "utils.h"
 #include "vulkan_base.h"
 
-struct MVPUniform {
-  glm::mat4 model;
-  glm::mat4 view;
-  glm::mat4 projection;
-};
-
 int main() {
   VulkanContext context = create_vulkan_context("Tuke");
   init_vertex_layout_registry();
+  VkDescriptorPool descriptor_pool = create_descriptor_pool(
+      context.device, generated_pool_sizes, pool_size_count, max_sets);
+  cache_shader_modules(context.shader_cache, generated_shader_specs,
+                       num_generated_specs);
+  ViewportState viewport_state =
+      create_viewport_state_xy(context.swapchain_extent, 0, 0);
+  VkClearValue clear_value;
+  clear_value.color = {{1.0, 0.0, 0.0, 1.0}};
 
   VulkanTexture textures[NUM_TEXTURES];
   load_vulkan_textures(&context, texture_names, NUM_TEXTURES, textures);
@@ -35,19 +37,13 @@ int main() {
   VulkanBuffer *vertex_buffer = &buffer_manager.vertex_buffer;
   VulkanBuffer *index_buffer = &buffer_manager.index_buffer;
 
-  VkDescriptorPool descriptor_pool = create_descriptor_pool(
-      context.device, generated_pool_sizes, pool_size_count, max_sets);
-
-  UniformBuffer x_uniform_buffer =
+  UniformBuffer uniform_buffer =
       create_uniform_buffer(&context, sizeof(float) + sizeof(MVPUniform));
 
-  cache_shader_modules(context.shader_cache, generated_shader_specs,
-                       num_generated_specs);
-
   // the uniform buffer will contain the layout: mvp | x
-  // for the simple.frag.in, x uniform is set/binding 0/0
+  // for simple.frag.in, x uniform is set/binding 0/0
   DescriptorSetBuilder x_set_builder = create_descriptor_set_builder(&context);
-  add_uniform_buffer_descriptor_set(&x_set_builder, &x_uniform_buffer,
+  add_uniform_buffer_descriptor_set(&x_set_builder, &uniform_buffer,
                                     sizeof(MVPUniform), sizeof(float), 0, 1,
                                     VK_SHADER_STAGE_FRAGMENT_BIT, false);
   DescriptorSetHandle x_descriptor =
@@ -59,10 +55,10 @@ int main() {
   // instanced quad: the mvp uniform is set/binding 0/0, the float is 0/1
   DescriptorSetBuilder mvp_set_builder =
       create_descriptor_set_builder(&context);
-  add_uniform_buffer_descriptor_set(&mvp_set_builder, &x_uniform_buffer, 0,
+  add_uniform_buffer_descriptor_set(&mvp_set_builder, &uniform_buffer, 0,
                                     sizeof(MVPUniform), 0, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
-  add_uniform_buffer_descriptor_set(&mvp_set_builder, &x_uniform_buffer,
+  add_uniform_buffer_descriptor_set(&mvp_set_builder, &uniform_buffer,
                                     sizeof(MVPUniform), sizeof(float), 1, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
   add_texture_descriptor_set(&mvp_set_builder, &textures[2], sampler, 2, 1,
@@ -110,10 +106,9 @@ int main() {
   square_render_call.descriptor_set = x_descriptor.descriptor_set;
   square_render_call.is_indexed = false;
 
-  u32 instance_count = 6;
   RenderCall instanced_render_call;
   instanced_render_call.num_indices = 6;
-  instanced_render_call.instance_count = instance_count;
+  instanced_render_call.instance_count = instanced_quad_count;
   instanced_render_call.graphics_pipeline = instanced_quad_pipeline;
   instanced_render_call.num_vertex_buffers = 2;
   instanced_render_call.vertex_buffer_offsets[0] =
@@ -126,12 +121,6 @@ int main() {
   instanced_render_call.index_buffer = index_buffer->buffer;
   instanced_render_call.index_buffer_offset = 0;
   instanced_render_call.is_indexed = true;
-
-  ViewportState viewport_state =
-      create_viewport_state_xy(context.swapchain_extent, 0, 0);
-
-  VkClearValue clear_value;
-  clear_value.color = {{1.0, 0.0, 0.0, 1.0}};
 
   MVPUniform mvp;
   mvp.projection = glm::mat4(1.0f);
@@ -151,8 +140,8 @@ int main() {
       continue;
     }
 
-    write_to_uniform_buffer(&x_uniform_buffer, &mvp, 0, sizeof(mvp));
-    write_to_uniform_buffer(&x_uniform_buffer, &x, sizeof(mvp), sizeof(x));
+    write_to_uniform_buffer(&uniform_buffer, &mvp, 0, sizeof(mvp));
+    write_to_uniform_buffer(&uniform_buffer, &x, sizeof(mvp), sizeof(x));
 
     VkCommandBuffer command_buffer = begin_command_buffer(&context);
     begin_render_pass(&context, command_buffer, clear_value,
@@ -190,7 +179,7 @@ int main() {
   vkDestroyPipeline(context.device, triangle_pipeline, NULL);
   vkDestroyPipeline(context.device, instanced_quad_pipeline, NULL);
 
-  destroy_uniform_buffer(&context, &x_uniform_buffer);
+  destroy_uniform_buffer(&context, &uniform_buffer);
 
   vkDestroyDescriptorPool(context.device, descriptor_pool, NULL);
 

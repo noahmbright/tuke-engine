@@ -41,7 +41,10 @@ class TokenType(Enum):
     VERSION = auto()
     VOID = auto()
     UNIFORM = auto()
+    SAMPLER = auto()
     SAMPLER2D = auto()
+    TEXTURE2D = auto()
+    IMAGE2D = auto()
 
     FLOAT = auto()
     VEC2 = auto()
@@ -79,13 +82,36 @@ glsl_types_to_sizes = {
     TokenType.MAT4 : 4 * 4 * SIZE_OF_FLOAT,
 }
 
+glsl_types_to_alignments = {
+    TokenType.FLOAT: 4,
+    TokenType.VEC2: 8,
+    TokenType.VEC3 : 16,
+    TokenType.VEC4 : 16,
+    TokenType.MAT2 : 16,
+    TokenType.MAT3 : 16,
+    TokenType.MAT4 : 16,
+}
+
+glsl_types_to_c_types = {
+    TokenType.FLOAT: "f32",
+    TokenType.VEC2: "glm::vec2",
+    TokenType.VEC3 : "glm::vec3",
+    TokenType.VEC4 : "glm::vec4",
+    TokenType.MAT2 : "glm::mat2",
+    TokenType.MAT3 : "glm::mat3",
+    TokenType.MAT4 : "glm::mat4",
+}
+
 text_to_glsl_keyword = {
     "in": TokenType.IN,
     "out": TokenType.OUT,
     "version": TokenType.VERSION,
     "void": TokenType.VOID,
     "uniform": TokenType.UNIFORM,
+    "sampler": TokenType.SAMPLER,
     "sampler2D": TokenType.SAMPLER2D,
+    "texture2D": TokenType.TEXTURE2D,
+    "image2D": TokenType.IMAGE2D,
 
     "float": TokenType.FLOAT,
     "vec2": TokenType.VEC2,
@@ -233,13 +259,29 @@ class TemplateStringSlice:
 
 # TODO generalize SetBindingLayout to handle more descriptor types if necessary
 class DescriptorType(Enum):
-    SAMPLER = auto()
+    SAMPLER2D = auto()
     UNIFORM_BUFFER = auto()
 
 descriptor_type_to_vulkan_enum = {
-    DescriptorType.SAMPLER: "VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER",
+    DescriptorType.SAMPLER2D: "VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER",
     DescriptorType.UNIFORM_BUFFER: "VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER"
 }
+
+# Not supporting nested structs or arrays yet
+@dataclass
+class StructMember:
+    name: str
+    glsl_type: TokenType
+    offset: int
+    size: int
+
+@dataclass
+# not supporting anonymous structs yet
+class StructDescription:
+    typename: str
+    identifier: str
+    size: int
+    members: list[StructMember]
 
 @dataclass
 class SetBindingLayout:
@@ -248,8 +290,10 @@ class SetBindingLayout:
     # TODO deprecate is_sampler
     is_sampler: bool
     type: DescriptorType
-    size: int
+    struct_description: StructDescription
 
+def align_up(offset, alignment):
+    return (offset + alignment - 1) & ~(alignment - 1)
 
 def parse_tokens(tokens, stage, parser_error_reporter):
     i = 0
@@ -437,7 +481,6 @@ def parse_tokens(tokens, stage, parser_error_reporter):
         i += 1
 
 
-
     # {{ SET_BINDING set binding }} uniform sampler2D identifier;
     # or 
     # {{ SET_BINDING set binding }} uniform identifier { (type identifier;)! } idenitifer;
@@ -451,7 +494,7 @@ def parse_tokens(tokens, stage, parser_error_reporter):
             return
         i += 1
 
-        # need to call this set_id bc set is a python datatype
+        # need to call this set_id bc set is reserved in python
         (i, still_valid) = parser_error_reporter(tokens[i].text.isdigit(), i,
                               "Expected set id digit after SET_BINDING")
         if not still_valid:
@@ -485,36 +528,89 @@ def parse_tokens(tokens, stage, parser_error_reporter):
         # don't think I need extra info here for samplers
         # {{ ... }} uniform sampler2D identifier;
         # {{ ... }} uniform identifier { ... } identifier;
+        # the first identifier in the non sampler is a type name, the second is the instance identifier 
         is_sampler = (tokens[i].type == TokenType.SAMPLER2D)
         # TODO generalize if/when more descriptor types are supported
-        descriptor_type = DescriptorType.SAMPLER if is_sampler else DescriptorType.UNIFORM_BUFFER 
+        descriptor_type = DescriptorType.SAMPLER2D if is_sampler else DescriptorType.UNIFORM_BUFFER 
+
+        uniform_structure_type_name = None
+        if not is_sampler:
+            (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.TEXT, i,
+                                  "Expected structure type name after uniform in a non-sampler")
+            uniform_structure_type_name = tokens[i].text 
+            if not still_valid:
+                return
+
+        # skip either the sampler2D or the struct identifier
         i += 1
 
         size = 0
-        if not is_sampler:
-            assert(tokens[i].type == TokenType.L_BRACE)
+        members = []
+        identifier = None
+        struct_description = None
+        if descriptor_type == DescriptorType.UNIFORM_BUFFER:
+
+            (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.L_BRACE, i,
+                                  "Expected { to begin uniform struct definition")
             i += 1
+
             while i < n and tokens[i].type != TokenType.R_BRACE:
 
-                (i, still_valid) = parser_error_reporter(tokens[i].type in glsl_types_to_sizes, i,
+                (i, still_valid) = parser_error_reporter(tokens[i].type in glsl_types_to_alignments, i,
                                       "Expected glsl type in uniform layout")
-                size += glsl_types_to_sizes[tokens[i].type]
+                (i, still_valid) = parser_error_reporter(tokens[i].type != TokenType.VEC3, i,
+                                      "Found vec3 inside glsl struct, not supported because alignment hell")
+
+                glsl_type = tokens[i].type
+                member_size = glsl_types_to_sizes[tokens[i].type]
+                current_alignment = glsl_types_to_alignments[tokens[i].type]
+
                 if not still_valid:
                     return
                 i += 1
+
+                current_size = members[-1].offset + members[-1].size if members else 0
+                offset = align_up(current_size, current_alignment)
 
                 (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.TEXT, i,
                                       "Expected identifier after glsl type in uniform")
                 if not still_valid:
                     return
+                name = tokens[i].text
                 i += 1
+
                 (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.SEMICOLON, i,
                                       "Expected ; after identifier in uniform")
                 if not still_valid:
                     return
                 i += 1
 
-        set_bindings.append(SetBindingLayout(set_id, binding, is_sampler, descriptor_type, size))
+                members.append(StructMember(name, glsl_type, offset, member_size))
+
+            (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.R_BRACE, i,
+                                  "Expected } to finish uniform struct definition")
+            i += 1
+
+            (i, still_valid) = parser_error_reporter(tokens[i].type == TokenType.TEXT, i,
+                                  "Expected identifier after glsl uniform description")
+            if not still_valid:
+                return
+            identifier = tokens[i].text
+            i += 1
+
+            if members:
+                final_offset = members[-1].offset + members[-1].size
+                final_alignment = max(glsl_types_to_sizes[member.glsl_type] for member in members)
+                size = align_up(final_offset, final_alignment)
+
+                if size > final_offset:
+                    bytes_to_pad = (size - final_offset)
+                    num_floats =  bytes_to_pad // 4
+                    members.append(StructMember(f"_pad[{num_floats}]", TokenType.FLOAT, final_offset, bytes_to_pad))
+
+            struct_description = StructDescription(uniform_structure_type_name, identifier, size, members)
+
+        set_bindings.append(SetBindingLayout(set_id, binding, is_sampler, descriptor_type, struct_description))
 
 
     while i < n:
@@ -696,6 +792,8 @@ def compile_shader_file(filepath, name, shader_stage, global_vertex_layouts, glo
 
     tokens = lex_string(contents)
 
+    # dont advance index if condition is true
+    # if condition is false, report an error and recover
     def parser_error_reporter(condition, token_idx, message):
         if not condition:
             print(f"{RED}Parser error in {filepath}{RESET}")
@@ -949,12 +1047,23 @@ static bool cache_shader_modules(VulkanShaderCache *cache, const ShaderSpec **sp
 """
     return enum_code + shader_spec_definitions + array_code + registry_code
 
+# different from vertex layouts, where we check all vertex layouts when adding a new one
+# here, it only matters if two structs with the same name have different layouts, because
+# that presents an ambiguity for the C compiler when it tries to compile our code
+def check_structs_the_same(new_desc, old_desc):
+    return new_desc == old_desc
+
 # global_descriptor_sets: list of SetBindingLayout
 def descriptor_set_codegen(global_descriptor_sets):
     for s in global_descriptor_sets:
-        print(s)
+        print("--------")
+        for it in s:
+            print(it)
 
+    # currently not supporting anonymous structs, but map typename to description anyway
+    # that's what I would do if I had a proper NamedStruct structure myself
     descriptor_type_counts = {}
+    structs = {}
     for descriptor_set_list in global_descriptor_sets:
         for descriptor_set in descriptor_set_list:
             assert(descriptor_set.type in descriptor_type_to_vulkan_enum)
@@ -963,6 +1072,31 @@ def descriptor_set_codegen(global_descriptor_sets):
             else:
                 descriptor_type_counts[descriptor_set.type] += 1
 
+            if descriptor_set.struct_description:
+                struct_desc = descriptor_set.struct_description
+                if struct_desc.typename in structs:
+                    if not check_structs_the_same(struct_desc, structs[struct_desc.typename]):
+                        print(f"{RED} found colliding struct defintions for {struct_desc.typename}{RESET}")
+                else:
+                    structs[struct_desc.typename] = struct_desc
+
+
+    c_struct_definitions = ""
+
+    for typename, struct in structs.items():
+        max_alignment = max(glsl_types_to_alignments[m.glsl_type] for m in struct.members)
+        struct_definition = f"struct alignas({max_alignment}) {typename} {{\n"
+
+        max_alignment = 0
+        for member in struct.members:
+            c_type = glsl_types_to_c_types[member.glsl_type]
+            alignment = glsl_types_to_alignments[member.glsl_type]
+            struct_definition += f"  alignas({alignment}) {c_type} {member.name};\n"
+
+        struct_definition += "};\n\n"
+        c_struct_definitions += struct_definition
+
+    # descriptor pool creation codegen
     num_descriptor_types = len(descriptor_type_counts)
     descriptor_pool_code = f"const u32 pool_size_count = {num_descriptor_types};\n"
     descriptor_pool_code += f"const VkDescriptorPoolSize generated_pool_sizes[{num_descriptor_types}] = {{\n"
@@ -978,7 +1112,7 @@ def descriptor_set_codegen(global_descriptor_sets):
     descriptor_pool_code += "};\n"
     descriptor_pool_code += f"const u32 max_sets = {max_sets};\n"
 
-    return descriptor_pool_code
+    return c_struct_definitions + descriptor_pool_code
 
 def source_is_newer(source, target):
     if not target.exists():
