@@ -1,9 +1,11 @@
 #include "vulkan_test.h"
 #include "compiled_shaders.h"
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/quaternion_transform.hpp"
 #include "glm/glm.hpp"
 #include "utils.h"
 #include "vulkan_base.h"
+#include <vulkan/vulkan_core.h>
 
 int main() {
   VulkanContext context = create_vulkan_context("Tuke");
@@ -14,8 +16,7 @@ int main() {
                        num_generated_specs);
   ViewportState viewport_state =
       create_viewport_state_xy(context.swapchain_extent, 0, 0);
-  VkClearValue clear_value;
-  clear_value.color = {{1.0, 0.0, 0.0, 1.0}};
+  const VkClearValue clear_value = {.color = {{1.0, 0.0, 0.0, 1.0}}};
 
   VulkanTexture textures[NUM_TEXTURES];
   load_vulkan_textures(&context, texture_names, NUM_TEXTURES, textures);
@@ -32,34 +33,39 @@ int main() {
       UPLOAD_VERTEX_ARRAY(buffer_upload_queue, quad_positions);
   const BufferHandle *unit_square_indices_slice =
       UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
+  const BufferHandle *cube_slice =
+      UPLOAD_VERTEX_ARRAY(buffer_upload_queue, cube_vertices);
 
   BufferManager buffer_manager = flush_buffers(&context, &buffer_upload_queue);
   VulkanBuffer *vertex_buffer = &buffer_manager.vertex_buffer;
   VulkanBuffer *index_buffer = &buffer_manager.index_buffer;
 
-  UniformBuffer uniform_buffer =
-      create_uniform_buffer(&context, sizeof(float) + sizeof(MVPUniform));
+  UniformBufferManager ub_manager = new_uniform_buffer_manager();
+  UniformWrite mvp_handle = push_uniform(&ub_manager, sizeof(MVPUniform));
+  UniformWrite cube_model_handle = push_uniform(&ub_manager, sizeof(CubeModel));
+  UniformWrite x_handle = push_uniform(&ub_manager, sizeof(f32));
+  UniformBuffer global_uniform_buffer =
+      create_uniform_buffer(&context, ub_manager.current_offset);
 
-  // the uniform buffer will contain the layout: mvp | x
+  // the uniform buffer will contain the layout: mvp | cube model | x
   // for simple.frag.in, x uniform is set/binding 0/0
   DescriptorSetBuilder x_set_builder = create_descriptor_set_builder(&context);
-  add_uniform_buffer_descriptor_set(&x_set_builder, &uniform_buffer,
-                                    sizeof(MVPUniform), sizeof(float), 0, 1,
+  add_uniform_buffer_descriptor_set(&x_set_builder, &global_uniform_buffer,
+                                    x_handle.offset, x_handle.size, 0, 1,
                                     VK_SHADER_STAGE_FRAGMENT_BIT, false);
   DescriptorSetHandle x_descriptor =
       build_descriptor_set(&x_set_builder, descriptor_pool);
-
   VkPipelineLayout x_pipeline_layout = create_pipeline_layout(
       context.device, &x_descriptor.descriptor_set_layout, 1);
 
   // instanced quad: the mvp uniform is set/binding 0/0, the float is 0/1
   DescriptorSetBuilder mvp_set_builder =
       create_descriptor_set_builder(&context);
-  add_uniform_buffer_descriptor_set(&mvp_set_builder, &uniform_buffer, 0,
-                                    sizeof(MVPUniform), 0, 1,
+  add_uniform_buffer_descriptor_set(&mvp_set_builder, &global_uniform_buffer,
+                                    mvp_handle.offset, mvp_handle.size, 0, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
-  add_uniform_buffer_descriptor_set(&mvp_set_builder, &uniform_buffer,
-                                    sizeof(MVPUniform), sizeof(float), 1, 1,
+  add_uniform_buffer_descriptor_set(&mvp_set_builder, &global_uniform_buffer,
+                                    x_handle.offset, x_handle.size, 1, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
   add_texture_descriptor_set(&mvp_set_builder, &textures[2], sampler, 2, 1,
                              VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -70,6 +76,19 @@ int main() {
   VkPipelineLayout mvp_pipeline_layout = create_pipeline_layout(
       context.device, &mvp_descriptor.descriptor_set_layout, 1);
 
+  // cube descriptor set
+  DescriptorSetBuilder cube_set_builder =
+      create_descriptor_set_builder(&context);
+  add_uniform_buffer_descriptor_set(
+      &cube_set_builder, &global_uniform_buffer, cube_model_handle.offset,
+      cube_model_handle.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
+  DescriptorSetHandle cube_descriptor =
+      build_descriptor_set(&cube_set_builder, descriptor_pool);
+
+  VkPipelineLayout cube_pipeline_layout = create_pipeline_layout(
+      context.device, &cube_descriptor.descriptor_set_layout, 1);
+
+  // create pipelines
   VkPipeline triangle_pipeline = create_default_graphics_pipeline(
       &context, simple_vert_spec.name, simple_frag_spec.name,
       get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3), x_pipeline_layout);
@@ -82,6 +101,10 @@ int main() {
       &context, instanced_quad_vert_spec.name, instanced_quad_frag_spec.name,
       get_vertex_layout(instanced_quad_vert_spec.vertex_layout_id),
       mvp_pipeline_layout);
+
+  VkPipeline cube_pipeline = create_default_graphics_pipeline(
+      &context, cube_vert_spec.name, cube_frag_spec.name,
+      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3_VEC2), cube_pipeline_layout);
 
   RenderCall triangle_render_call;
   triangle_render_call.num_vertices = 3;
@@ -106,6 +129,17 @@ int main() {
   square_render_call.descriptor_set = x_descriptor.descriptor_set;
   square_render_call.is_indexed = false;
 
+  RenderCall cube_render_call;
+  cube_render_call.num_vertices = 36;
+  cube_render_call.instance_count = 1;
+  cube_render_call.graphics_pipeline = cube_pipeline;
+  cube_render_call.num_vertex_buffers = 1;
+  cube_render_call.vertex_buffer_offsets[0] = cube_slice->offset;
+  cube_render_call.vertex_buffers[0] = vertex_buffer->buffer;
+  cube_render_call.pipeline_layout = cube_pipeline_layout;
+  cube_render_call.descriptor_set = cube_descriptor.descriptor_set;
+  cube_render_call.is_indexed = false;
+
   RenderCall instanced_render_call;
   instanced_render_call.num_indices = 6;
   instanced_render_call.instance_count = instanced_quad_count;
@@ -126,6 +160,10 @@ int main() {
   mvp.projection = glm::mat4(1.0f);
   mvp.view = glm::mat4(1.0f);
 
+  const glm::vec3 cube_translation_vector = {0.5f, -0.5f, 0.0f};
+  const f32 root3 = 0.57735026919;
+  const glm::vec3 cube_rotation_axis = {root3, root3, root3};
+
   while (!glfwWindowShouldClose(context.window)) {
     glfwPollEvents();
     float t = glfwGetTime();
@@ -134,14 +172,20 @@ int main() {
 
     mvp.model = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
     mvp.model = glm::rotate(mvp.model, sint, glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 cube_model =
+        glm::translate(glm::mat4(1.0f), cube_translation_vector);
+    cube_model = glm::rotate(cube_model, t, cube_rotation_axis);
+    cube_model = glm::scale(cube_model, {0.5f, 0.5f, 0.5f});
 
     if (!begin_frame(&context)) {
       fprintf(stderr, "Failed to begin frame\n");
       continue;
     }
 
-    write_to_uniform_buffer(&uniform_buffer, &mvp, 0, sizeof(mvp));
-    write_to_uniform_buffer(&uniform_buffer, &x, sizeof(mvp), sizeof(x));
+    write_to_uniform_buffer(&global_uniform_buffer, &mvp, mvp_handle);
+    write_to_uniform_buffer(&global_uniform_buffer, &cube_model,
+                            cube_model_handle);
+    write_to_uniform_buffer(&global_uniform_buffer, &x, x_handle);
 
     VkCommandBuffer command_buffer = begin_command_buffer(&context);
     begin_render_pass(&context, command_buffer, clear_value,
@@ -152,6 +196,7 @@ int main() {
     render_mesh(command_buffer, &triangle_render_call);
     render_mesh(command_buffer, &square_render_call);
     render_mesh(command_buffer, &instanced_render_call);
+    render_mesh(command_buffer, &cube_render_call);
 
     vkCmdEndRenderPass(command_buffer);
     VK_CHECK(vkEndCommandBuffer(command_buffer),
@@ -172,14 +217,17 @@ int main() {
 
   destroy_descriptor_set_handle(context.device, &x_descriptor);
   destroy_descriptor_set_handle(context.device, &mvp_descriptor);
+  destroy_descriptor_set_handle(context.device, &cube_descriptor);
 
   vkDestroyPipelineLayout(context.device, x_pipeline_layout, NULL);
   vkDestroyPipelineLayout(context.device, mvp_pipeline_layout, NULL);
+  vkDestroyPipelineLayout(context.device, cube_pipeline_layout, NULL);
   vkDestroyPipeline(context.device, square_pipeline, NULL);
   vkDestroyPipeline(context.device, triangle_pipeline, NULL);
   vkDestroyPipeline(context.device, instanced_quad_pipeline, NULL);
+  vkDestroyPipeline(context.device, cube_pipeline, NULL);
 
-  destroy_uniform_buffer(&context, &uniform_buffer);
+  destroy_uniform_buffer(&context, &global_uniform_buffer);
 
   vkDestroyDescriptorPool(context.device, descriptor_pool, NULL);
 

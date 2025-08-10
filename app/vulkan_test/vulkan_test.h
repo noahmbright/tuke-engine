@@ -40,6 +40,63 @@ const f32 quad_positions[] = {
   -0.3, -0.3
   -0.3, -0.3
 };
+
+const f32 cube_vertices[] = {
+    // Front face (+Z)
+    // xyz,              nx, ny, nz, u, v
+    -0.5f, -0.5f,  0.5f, 0, 0, 1, 0, 0,
+     0.5f, -0.5f,  0.5f, 0, 0, 1, 1, 0,
+     0.5f,  0.5f,  0.5f, 0, 0, 1, 1, 1,
+
+    -0.5f, -0.5f,  0.5f, 0, 0, 1, 0, 0,
+     0.5f,  0.5f,  0.5f, 0, 0, 1, 1, 1,
+    -0.5f,  0.5f,  0.5f, 0, 0, 1, 0, 1,
+
+     //Back face (-Z)
+     0.5f, -0.5f, -0.5f, 0, 0, -1, 0, 0,
+    -0.5f, -0.5f, -0.5f, 0, 0, -1, 1, 0,
+    -0.5f,  0.5f, -0.5f, 0, 0, -1, 1, 1,
+
+     0.5f, -0.5f, -0.5f, 0, 0, -1, 0, 0,
+    -0.5f,  0.5f, -0.5f, 0, 0, -1, 1, 1,
+     0.5f,  0.5f, -0.5f, 0, 0, -1, 0, 1,
+
+     //Left face (-X)
+    -0.5f, -0.5f, -0.5f, -1, 0, 0, 0, 0,
+    -0.5f, -0.5f,  0.5f, -1, 0, 0, 1, 0,
+    -0.5f,  0.5f,  0.5f, -1, 0, 0, 1, 1,
+
+    -0.5f, -0.5f, -0.5f, -1, 0, 0, 0, 0,
+    -0.5f,  0.5f,  0.5f, -1, 0, 0, 1, 1,
+    -0.5f,  0.5f, -0.5f, -1, 0, 0, 0, 1,
+
+     //Right face (+X)
+     0.5f, -0.5f,  0.5f, 1, 0, 0, 0, 0,
+     0.5f, -0.5f, -0.5f, 1, 0, 0, 1, 0,
+     0.5f,  0.5f, -0.5f, 1, 0, 0, 1, 1,
+
+     0.5f, -0.5f,  0.5f, 1, 0, 0, 0, 0,
+     0.5f,  0.5f, -0.5f, 1, 0, 0, 1, 1,
+     0.5f,  0.5f,  0.5f, 1, 0, 0, 0, 1,
+
+     //Top face (+Y)
+    -0.5f,  0.5f,  0.5f, 0, 1, 0, 0, 0,
+     0.5f,  0.5f,  0.5f, 0, 1, 0, 1, 0,
+     0.5f,  0.5f, -0.5f, 0, 1, 0, 1, 1,
+
+    -0.5f,  0.5f,  0.5f, 0, 1, 0, 0, 0,
+     0.5f,  0.5f, -0.5f, 0, 1, 0, 1, 1,
+    -0.5f,  0.5f, -0.5f, 0, 1, 0, 0, 1,
+
+     //Bottom face (-Y)
+    -0.5f, -0.5f, -0.5f, 0, -1, 0, 0, 0,
+     0.5f, -0.5f, -0.5f, 0, -1, 0, 1, 0,
+     0.5f, -0.5f,  0.5f, 0, -1, 0, 1, 1,
+
+    -0.5f, -0.5f, -0.5f, 0, -1, 0, 0, 0,
+     0.5f, -0.5f,  0.5f, 0, -1, 0, 1, 1,
+    -0.5f, -0.5f,  0.5f, 0, -1, 0, 0, 1,
+};
 // clang-format on
 
 enum TextureId {
@@ -52,63 +109,3 @@ enum TextureId {
 static const char *texture_names[NUM_TEXTURES] = {
     "textures/generic_girl.jpg", "textures/girl_face.jpg",
     "textures/girl_face_normal_map.jpg"};
-
-#define MAX_TEXTURES (4)
-#define MAX_UNIFORMS (4)
-#define UNIFORM_ALIGNMENT 256
-
-u32 align_up(u32 value, u32 alignment) {
-  return (value + alignment - 1) & ~(alignment - 1);
-}
-
-struct UniformDescriptorUpload {
-  u32 size;
-  u32 offset;
-};
-
-// TODO this is not sensitive to alignment rules, ugh
-// unclear if this should be handled in reflection or here
-struct DescriptorSetUploader {
-  u32 num_uniforms;
-  UniformDescriptorUpload uniform_descriptor_uploads[MAX_UNIFORMS];
-
-  u32 num_textures;
-  u32 num_samplers;
-};
-
-DescriptorSetUploader new_descriptor_set_uploader() {
-  DescriptorSetUploader uploader;
-
-  uploader.num_uniforms = 0;
-  uploader.num_textures = 0;
-  uploader.num_samplers = 0;
-
-  memset(uploader.uniform_descriptor_uploads, 0,
-         sizeof(uploader.uniform_descriptor_uploads));
-
-  return uploader;
-}
-
-void upload_uniform_descriptor(DescriptorSetUploader *uploader, u32 size) {
-  u32 i = uploader->num_uniforms;
-  assert(i < MAX_UNIFORMS);
-
-  u32 offset = 0;
-  if (i > 0) {
-    u32 last_offset = uploader->uniform_descriptor_uploads[i - 1].offset;
-    u32 last_size = uploader->uniform_descriptor_uploads[i - 1].size;
-    offset = align_up(last_offset + last_size, UNIFORM_ALIGNMENT);
-  }
-
-  uploader->uniform_descriptor_uploads[i].offset = offset;
-  uploader->uniform_descriptor_uploads[i].size = size;
-  ++uploader->num_uniforms;
-}
-
-// a shader file that I write prescribes a bunch of stuff:
-// the program itself, compiled into spirv
-// the vertex layout to use
-// the descriptor set to use
-struct Material {
-  UniformBuffer *uniform_buffers;
-};

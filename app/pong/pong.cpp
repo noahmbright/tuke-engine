@@ -5,7 +5,8 @@
 #include "window.h"
 
 static const char *texture_names[NUM_TEXTURES] = {
-    "textures/generic_girl.jpg", "textures/pong/field_background.jpg"};
+    "textures/generic_girl.jpg", "textures/pong/field_background.jpg",
+    "textures/girl_face.jpg", "textures/girl_face_normal_map.jpg"};
 
 void init_buffers(State *state) {
 
@@ -35,7 +36,14 @@ void init_buffers(State *state) {
   // TODO how to reuse this staging buffer?
   destroy_vulkan_buffer(ctx, staging_arena.buffer);
 
-  state->uniform_buffer = create_uniform_buffer(ctx, 3 * MAT4_SIZE);
+  UniformBufferManager ub_manager = new_uniform_buffer_manager();
+  state->uniform_writes.camera_vp =
+      push_uniform(&ub_manager, sizeof(VPUniform));
+  state->uniform_writes.arena_model =
+      push_uniform(&ub_manager, sizeof(glm::mat4));
+  state->uniform_writes.player_paddle_model =
+      push_uniform(&ub_manager, sizeof(glm::mat4));
+  state->uniform_buffer = create_uniform_buffer(ctx, ub_manager.current_offset);
 }
 
 // currently, global VP is premultiplied proj * view
@@ -56,8 +64,8 @@ void init_descriptor_sets(State *state) {
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
 
   add_texture_descriptor_set(
-      &background_builder, &state->textures[TEXTURE_FIELD_BACKGROUND],
-      state->sampler, 2, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+      &background_builder, &state->textures[TEXTURE_GIRL_FACE], state->sampler,
+      2, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND] =
       build_descriptor_set(&background_builder, state->descriptor_pool);
@@ -235,3 +243,5 @@ void process_inputs(State *state) {
 
   } // switch(state->game_mode)
 }
+
+void write_uniforms(State *state) {}

@@ -52,7 +52,13 @@ const u32 indices_size = sizeof(unit_square_indices);
 const u32 instance_data_size = sizeof(instance_data0);
 const u32 total_size = paddle_vertices_size + indices_size + instance_data_size;
 
-enum TextureID { TEXTURE_GENERIC_GIRL, TEXTURE_FIELD_BACKGROUND, NUM_TEXTURES };
+enum TextureID {
+  TEXTURE_GENERIC_GIRL,
+  TEXTURE_FIELD_BACKGROUND,
+  TEXTURE_GIRL_FACE,
+  TEXTURE_GIRL_FACE_NORMAL_MAP,
+  NUM_TEXTURES
+};
 
 enum DescriptorHandleID {
   DESCRIPTOR_HANDLE_BACKGROUND,
@@ -64,6 +70,12 @@ enum GameMode {
   GAMEMODE_PAUSED,
   GAMEMODE_PLAYING,
   GAMEMODE_MAIN_MENU,
+};
+
+struct UniformWrites {
+  UniformWrite camera_vp;
+  UniformWrite arena_model;
+  UniformWrite player_paddle_model;
 };
 
 struct State {
@@ -85,6 +97,7 @@ struct State {
   RenderCall render_call;
 
   UniformBuffer uniform_buffer;
+  UniformWrites uniform_writes;
 
   Inputs inputs;
   GameMode game_mode;
@@ -96,15 +109,10 @@ struct Paddle {
   glm::vec3 size;
 };
 
-struct MVPUniform {
-  glm::mat4 model;
-  glm::mat4 view;
-  glm::mat4 projection;
-};
-
 State setup_state(const char *title);
 void destroy_state(State *state);
 
 void initialize_textures(u32 num_textures, VulkanTexture *out_textures);
 void render(State *state);
 void process_inputs(State *state);
+void write_uniforms(State *state);

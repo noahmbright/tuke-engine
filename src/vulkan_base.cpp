@@ -1885,8 +1885,9 @@ void destroy_uniform_buffer(const VulkanContext *context,
 }
 
 void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
-                             u32 offset, u32 size) {
-  memcpy(uniform_buffer->mapped + offset, data, size);
+                             UniformWrite uniform_write) {
+  memcpy(uniform_buffer->mapped + uniform_write.offset, data,
+         uniform_write.size);
 }
 
 VertexLayoutBuilder create_vertex_layout_builder() {
@@ -2307,6 +2308,7 @@ void add_texture_descriptor_set(DescriptorSetBuilder *builder,
   assert(builder->image_info_count < MAX_DESCRIPTOR_IMAGE_INFOS);
   assert(builder->binding_count < MAX_LAYOUT_BINDINGS);
 
+  // TODO handle separate textures and samplers
   VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   builder->layout_bindings[builder->binding_count] =
       create_descriptor_set_layout_binding(binding, stage_flags,
@@ -2501,4 +2503,19 @@ void destroy_buffer_manager(BufferManager *buffer_manager) {
   destroy_vulkan_buffer(ctx, buffer_manager->vertex_buffer);
   destroy_vulkan_buffer(ctx, buffer_manager->index_buffer);
   destroy_vulkan_buffer(ctx, buffer_manager->staging_arena.buffer);
+}
+
+UniformBufferManager new_uniform_buffer_manager() {
+  UniformBufferManager uniform_buffer_manager;
+  uniform_buffer_manager.current_offset = 0;
+  return uniform_buffer_manager;
+}
+
+UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager,
+                          u32 size) {
+  UniformWrite uniform_write;
+  uniform_write.size = size;
+  uniform_write.offset = uniform_buffer_manager->current_offset;
+  uniform_buffer_manager->current_offset += size;
+  return uniform_write;
 }

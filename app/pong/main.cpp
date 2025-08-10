@@ -9,6 +9,7 @@ int main() {
   VulkanContext *ctx = &state.context;
   glm::vec3 camera_pos{0.0f, 0.0f, 30.0f};
   Camera camera = new_camera(CameraType::Camera2D, camera_pos);
+  camera.y_needs_inverted = true;
 
   // TODO how to get model onto GPU? uniform? something else?
   glm::mat4 arena_model = glm::scale(glm::mat4(1.0f), arena_dimensions0);
@@ -22,17 +23,16 @@ int main() {
   const CameraMatrices camera_matrices =
       new_camera_matrices(&camera, width, height);
   glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
-
   glm::mat4 player_paddle_model = glm::mat4(1.0f);
 
   // TODO want a system for updating parts of a buffer by name
   // uniform buffer structure: camera vp, background model, paddle model
-  write_to_uniform_buffer(&state.uniform_buffer, &camera_vp, 0 * MAT4_SIZE,
-                          MAT4_SIZE);
-  write_to_uniform_buffer(&state.uniform_buffer, &arena_model, 1 * MAT4_SIZE,
-                          MAT4_SIZE);
+  write_to_uniform_buffer(&state.uniform_buffer, &camera_vp,
+                          state.uniform_writes.camera_vp);
+  write_to_uniform_buffer(&state.uniform_buffer, &arena_model,
+                          state.uniform_writes.arena_model);
   write_to_uniform_buffer(&state.uniform_buffer, &player_paddle_model,
-                          2 * MAT4_SIZE, MAT4_SIZE);
+                          state.uniform_writes.player_paddle_model);
 
   f64 t_prev = glfwGetTime();
   while (!glfwWindowShouldClose(ctx->window)) {

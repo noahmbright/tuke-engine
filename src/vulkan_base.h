@@ -193,6 +193,17 @@ struct VulkanBuffer {
   VkMemoryPropertyFlags memory_property_flags;
 };
 
+struct UniformBufferManager {
+  u32 current_offset;
+};
+
+// TODO could be most efficient to do some void* voodoo with a C buffer
+// stored in the uniform buffer, and write that to the GPU in one shot
+struct UniformWrite {
+  u32 offset;
+  u32 size;
+};
+
 struct UniformBuffer {
   VulkanBuffer vulkan_buffer;
   u8 *mapped;
@@ -443,7 +454,12 @@ void destroy_uniform_buffer(const VulkanContext *context,
                             UniformBuffer *uniform_buffer);
 
 void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
-                             u32 offset, u32 size);
+                             UniformWrite uniform_write);
+
+UniformBufferManager new_uniform_buffer_manager();
+
+UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager,
+                          u32 size);
 
 PipelineConfig create_default_graphics_pipeline_config(
     const VulkanContext *context, const char *vertex_shader_name,
