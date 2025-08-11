@@ -5,16 +5,18 @@
 {{ LOCATION 2 BINDING 1 RATE_INSTANCE OFFSET TIGHTLY_PACKED }} in vec2 instance_offset;
 
 {{ LOCATION 0 }} out vec2 uv;
+{{ LOCATION 1 }} out float pos_z;
 
-{{ SET_BINDING 0 0 }} uniform MVPUniform{
+{{ SET_BINDING 0 0 BUFFER_LABEL GLOBAL }} uniform MVPUniform{
     mat4 model;
     mat4 view;
     mat4 projection;
 } mvp;
 
-{{ SET_BINDING 0 1 }} uniform XUniform{
+{{ SET_BINDING 0 1 BUFFER_LABEL GLOBAL }} uniform XUniform{
     float x;
 } u_x;
+
 
 void main(){
     //mat4 model_view = mvp.model * mvp.view;
@@ -22,6 +24,6 @@ void main(){
     //norm = normal_matrix * a_normal;
     uv = a_uv;
     vec3 pos = a_pos;
-    pos.x += u_x.x;
-    gl_Position = mvp.model * vec4(pos, 1.0) + vec4(instance_offset, 0.0, 0.0);
+    pos_z = pos.z;
+    gl_Position = mvp.model * vec4(vec2(pos), 0.4, 1.0) + vec4(instance_offset, u_x.x, 0.0);
 }

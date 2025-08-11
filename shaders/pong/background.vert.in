@@ -5,16 +5,15 @@
 
 {{ LOCATION 0 }} out vec2 uv;
 
-{{ SET_BINDING 0 0 }} uniform VPUniform {
+{{ SET_BINDING 0 0 BUFFER_LABEL PONG_GLOBAL }} uniform VPUniform {
     mat4 vp;
-} vp;
+} pong_vp;
 
-{{ SET_BINDING 0 1 }} uniform ModelUniform{
+{{ SET_BINDING 0 1 BUFFER_LABEL PONG_GLOBAL }} uniform ModelUniform{
     mat4 model;
-} model;
-
+} background_model;
 
 void main(){
     uv = a_uv;
-    gl_Position = vp.vp * model.model * vec4(a_pos, 1.0);
+    gl_Position = pong_vp.vp * background_model.model * vec4(a_pos, 1.0);
 }

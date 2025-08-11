@@ -5,11 +5,11 @@
 
 {{ LOCATION 0 }} out vec2 uv;
 
-{{ SET_BINDING 0 0 }} uniform VPUniform {
+{{ SET_BINDING 0 0 BUFFER_LABEL PONG_GLOBAL }} uniform VPUniform {
     mat4 vp;
 } vp;
 
-{{ SET_BINDING 0 1 }} uniform ModelUniform {
+{{ SET_BINDING 0 1 BUFFER_LABEL PONG_GLOBAL }} uniform ModelUniform {
     mat4 model;
 } model;
 

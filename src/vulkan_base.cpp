@@ -21,28 +21,36 @@
 // per queue.
 
 void destroy_swapchain(VulkanContext *context) {
+  SwapchainStorage *storage = &context->swapchain_storage;
+
   // framebuffers
-  for (u32 i = 0; i < context->swapchain_storage.image_count; ++i) {
+  for (u32 i = 0; i < storage->image_count; ++i) {
     vkDestroyFramebuffer(context->device, context->framebuffers[i], NULL);
     context->framebuffers[i] = VK_NULL_HANDLE;
   }
 
   // swapchain image views
-  for (u32 i = 0; i < context->swapchain_storage.image_count; i++) {
-    if (context->swapchain_storage.use_static) {
-      vkDestroyImageView(
-          context->device,
-          context->swapchain_storage.as.static_storage.image_views[i], NULL);
+  for (u32 i = 0; i < storage->image_count; i++) {
+    if (storage->use_static) {
+      vkDestroyImageView(context->device,
+                         storage->as.static_storage.image_views[i], NULL);
     } else {
-      vkDestroyImageView(
-          context->device,
-          context->swapchain_storage.as.dynamic_storage.image_views[i], NULL);
+      vkDestroyImageView(context->device,
+                         storage->as.dynamic_storage.image_views[i], NULL);
     }
   }
 
   if (!context->swapchain_storage.use_static) {
-    free(context->swapchain_storage.as.dynamic_storage.image_views);
-    free(context->swapchain_storage.as.dynamic_storage.images);
+    free(storage->as.dynamic_storage.image_views);
+    free(storage->as.dynamic_storage.images);
+  }
+
+  for (u32 i = 0; i < NUM_SWAPCHAIN_IMAGES; i++) {
+    DepthBuffer *depth_buffer = &storage->depth_buffers[i];
+
+    vkDestroyImage(context->device, depth_buffer->image, NULL);
+    vkDestroyImageView(context->device, depth_buffer->image_view, NULL);
+    vkFreeMemory(context->device, depth_buffer->device_memory, NULL);
   }
 
   if (context->swapchain) {
@@ -51,7 +59,7 @@ void destroy_swapchain(VulkanContext *context) {
     printf("Tried to destroy null swapchain\n");
   }
 
-  memset(&context->swapchain_storage, 0, sizeof(context->swapchain_storage));
+  memset(storage, 0, sizeof(SwapchainStorage));
 }
 
 void destroy_vulkan_context(VulkanContext *context) {
@@ -586,15 +594,157 @@ VkSwapchainKHR create_swapchain(VkDevice device,
   return swapchain;
 }
 
-SwapchainStorage create_swapchain_storage(VkDevice device,
-                                          VkSurfaceFormatKHR surface_format,
-                                          VkSwapchainKHR swapchain) {
+void transition_image_layout(VulkanContext *context, VkImage image,
+                             VkImageLayout old_layout,
+                             VkImageLayout new_layout) {
+
+  VkImageMemoryBarrier image_memory_barrier;
+  image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  image_memory_barrier.pNext = NULL;
+  image_memory_barrier.srcAccessMask = 0;
+  image_memory_barrier.dstAccessMask = 0;
+  image_memory_barrier.oldLayout = old_layout;
+  image_memory_barrier.newLayout = new_layout;
+  image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  image_memory_barrier.image = image;
+  image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  image_memory_barrier.subresourceRange.baseMipLevel = 0;
+  image_memory_barrier.subresourceRange.levelCount = 1;
+  image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+  image_memory_barrier.subresourceRange.layerCount = 1;
+
+  // TODO I don't yet understand these transition cases
+  VkPipelineStageFlags src_stage, dst_stage;
+  if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
+      new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+
+    image_memory_barrier.srcAccessMask = 0;
+    image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+    src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+
+  } else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
+             new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+
+    image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+
+  } else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
+             new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+
+    image_memory_barrier.subresourceRange.aspectMask =
+        VK_IMAGE_ASPECT_DEPTH_BIT;
+
+    image_memory_barrier.srcAccessMask = 0;
+    image_memory_barrier.dstAccessMask =
+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    dst_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+
+  } else {
+    assert(false && "Unsupported layout transition!");
+  }
+
+  VkCommandBuffer single_use_command_buffer =
+      begin_single_use_command_buffer(context);
+  // TODO what are all these arguments?
+  vkCmdPipelineBarrier(single_use_command_buffer, src_stage, dst_stage, 0, 0,
+                       NULL, 0, NULL, 1, &image_memory_barrier);
+  end_single_use_command_buffer(context, single_use_command_buffer);
+}
+
+DepthBuffer create_depth_buffer(VulkanContext *context) {
+  DepthBuffer depth_buffer;
+  // TODO depth query formats
+  VkFormat depth_format = VK_FORMAT_D32_SFLOAT;
+
+  VkImageCreateInfo texture_image_info;
+  texture_image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  texture_image_info.pNext = 0;
+  texture_image_info.flags = 0;
+  texture_image_info.imageType = VK_IMAGE_TYPE_2D;
+  texture_image_info.format = depth_format;
+  texture_image_info.extent.width = context->swapchain_extent.width;
+  texture_image_info.extent.height = context->swapchain_extent.height;
+  texture_image_info.extent.depth = 1;
+  texture_image_info.mipLevels = 1;   // what? does this even make sense here?
+  texture_image_info.arrayLayers = 1; // what? does this even make sense here?
+  texture_image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+  texture_image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+  texture_image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  texture_image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  texture_image_info.queueFamilyIndexCount = 0;
+  texture_image_info.pQueueFamilyIndices = NULL;
+  texture_image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  VK_CHECK(vkCreateImage(context->device, &texture_image_info, NULL,
+                         &depth_buffer.image),
+           "create_depth_buffer: Failed to vkCreateImage");
+
+  VkMemoryRequirements memory_requirements;
+  vkGetImageMemoryRequirements(context->device, depth_buffer.image,
+                               &memory_requirements);
+
+  VkMemoryAllocateInfo memory_allocate_info;
+  memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  memory_allocate_info.pNext = NULL;
+  memory_allocate_info.allocationSize = memory_requirements.size;
+  memory_allocate_info.memoryTypeIndex = find_memory_type(
+      context->physical_device, memory_requirements.memoryTypeBits,
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+  VK_CHECK(vkAllocateMemory(context->device, &memory_allocate_info, NULL,
+                            &depth_buffer.device_memory),
+           "create_depth_buffer: Failed to vkAllocateMemory");
+
+  VK_CHECK(vkBindImageMemory(context->device, depth_buffer.image,
+                             depth_buffer.device_memory, 0),
+           "create_depth_buffer: Failed to vkBindImageMemory");
+
+  VkImageViewCreateInfo image_view_create_info;
+  image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  image_view_create_info.pNext = NULL;
+  image_view_create_info.flags = 0;
+  image_view_create_info.image = depth_buffer.image;
+  image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  image_view_create_info.format = depth_format;
+  image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+  image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+  image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+  image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+  // TODO allow for depth and stencil attachments
+  image_view_create_info.subresourceRange.aspectMask =
+      VK_IMAGE_ASPECT_DEPTH_BIT;
+  image_view_create_info.subresourceRange.baseMipLevel = 0;
+  image_view_create_info.subresourceRange.levelCount = 1;
+  image_view_create_info.subresourceRange.baseArrayLayer = 0;
+  image_view_create_info.subresourceRange.layerCount = 1;
+
+  VK_CHECK(vkCreateImageView(context->device, &image_view_create_info, NULL,
+                             &depth_buffer.image_view),
+           "create_depth_buffer: Failed to vkCreateImageView");
+
+  transition_image_layout(context, depth_buffer.image,
+                          VK_IMAGE_LAYOUT_UNDEFINED,
+                          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+  return depth_buffer;
+}
+
+SwapchainStorage create_swapchain_storage(VulkanContext *context) {
   SwapchainStorage storage;
   storage.use_static = true;
 
   u32 swapchain_image_count;
-  VkResult result =
-      vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, NULL);
+  VkResult result = vkGetSwapchainImagesKHR(context->device, context->swapchain,
+                                            &swapchain_image_count, NULL);
 
   if (swapchain_image_count > NUM_SWAPCHAIN_IMAGES) {
     storage.use_static = false;
@@ -608,10 +758,12 @@ SwapchainStorage create_swapchain_storage(VkDevice device,
       fprintf(stderr, "Failed to allocate memory for swapchain storage\n");
       exit(1);
     }
-    result = vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count,
+    result = vkGetSwapchainImagesKHR(context->device, context->swapchain,
+                                     &swapchain_image_count,
                                      storage.as.dynamic_storage.images);
   } else {
-    result = vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count,
+    result = vkGetSwapchainImagesKHR(context->device, context->swapchain,
+                                     &swapchain_image_count,
                                      storage.as.static_storage.images);
   }
 
@@ -628,7 +780,7 @@ SwapchainStorage create_swapchain_storage(VkDevice device,
       image_view_create_info.image = storage.as.dynamic_storage.images[i];
     }
     image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    image_view_create_info.format = surface_format.format;
+    image_view_create_info.format = context->surface_format.format;
     image_view_create_info.components = {
         .r = VK_COMPONENT_SWIZZLE_IDENTITY,
         .g = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -644,16 +796,21 @@ SwapchainStorage create_swapchain_storage(VkDevice device,
     };
 
     if (storage.use_static) {
-      result = vkCreateImageView(device, &image_view_create_info, NULL,
+      result = vkCreateImageView(context->device, &image_view_create_info, NULL,
                                  &storage.as.static_storage.image_views[i]);
     } else {
-      result = vkCreateImageView(device, &image_view_create_info, NULL,
+      result = vkCreateImageView(context->device, &image_view_create_info, NULL,
                                  &storage.as.dynamic_storage.image_views[i]);
     }
     VK_CHECK_VARIADIC(result, "Failed to create image view %u\n", i);
   }
 
   storage.image_count = swapchain_image_count;
+
+  for (u32 i = 0; i < NUM_SWAPCHAIN_IMAGES; i++) {
+    storage.depth_buffers[i] = create_depth_buffer(context);
+  }
+
   return storage;
 }
 
@@ -673,15 +830,16 @@ VkAttachmentDescription make_color_attachment(VkFormat format) {
 
 VkAttachmentDescription make_depth_attachment(VkFormat format) {
   VkAttachmentDescription depth_attachment;
-  (void)format;
-  (void)depth_attachment.format;
-  (void)depth_attachment.samples;
-  (void)depth_attachment.loadOp;
-  (void)depth_attachment.storeOp;
-  (void)depth_attachment.stencilLoadOp;
-  (void)depth_attachment.stencilStoreOp;
-  (void)depth_attachment.initialLayout;
-  (void)depth_attachment.finalLayout;
+  depth_attachment.flags = 0;
+  depth_attachment.format = format;
+  depth_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+  depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  depth_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  depth_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  depth_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  depth_attachment.finalLayout =
+      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
   return depth_attachment;
 }
 
@@ -689,10 +847,17 @@ VkRenderPass create_render_pass(VkDevice device,
                                 VkSurfaceFormatKHR surface_format) {
   VkAttachmentDescription color_attachment =
       make_color_attachment(surface_format.format);
+  VkAttachmentDescription depth_attachment =
+      make_depth_attachment(VK_FORMAT_D32_SFLOAT);
 
   VkAttachmentReference color_attachment_ref;
   color_attachment_ref.attachment = 0;
   color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  VkAttachmentReference depth_attachment_ref;
+  depth_attachment_ref.attachment = 1;
+  depth_attachment_ref.layout =
+      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkSubpassDescription.html
   VkSubpassDescription subpass;
@@ -703,19 +868,24 @@ VkRenderPass create_render_pass(VkDevice device,
   subpass.pColorAttachments = &color_attachment_ref;
   subpass.colorAttachmentCount = 1;
   subpass.pResolveAttachments = NULL;
-  subpass.pDepthStencilAttachment = NULL;
+  subpass.pDepthStencilAttachment = &depth_attachment_ref;
   subpass.preserveAttachmentCount = 0;
   subpass.pPreserveAttachments = NULL;
 
   VkSubpassDependency dependency;
   dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
   dependency.dstSubpass = 0;
-  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  dependency.srcAccessMask = 0;
-  dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+  dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  dependency.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-  VkAttachmentDescription attachments[NUM_ATTACHMENTS] = {color_attachment};
+  VkAttachmentDescription attachments[NUM_ATTACHMENTS] = {color_attachment,
+                                                          depth_attachment};
 
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkRenderPassCreateInfo.html
   VkRenderPassCreateInfo render_pass_create_info;
@@ -759,12 +929,17 @@ VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass render_pass,
 
 void init_framebuffers(VulkanContext *context) {
   for (u32 i = 0; i < context->swapchain_storage.image_count; i++) {
-    VkImageView view =
+
+    VkImageView color_view =
         context->swapchain_storage.use_static
             ? context->swapchain_storage.as.static_storage.image_views[i]
             : context->swapchain_storage.as.dynamic_storage.image_views[i];
+
+    VkImageView views[] = {
+        color_view, context->swapchain_storage.depth_buffers[i].image_view};
+
     context->framebuffers[i] =
-        create_framebuffer(context->device, context->render_pass, &view,
+        create_framebuffer(context->device, context->render_pass, views,
                            context->swapchain_extent);
   }
 }
@@ -777,8 +952,7 @@ void recreate_swapchain(VulkanContext *context) {
       context->device, context->physical_device, context->surface,
       context->queue_family_indices, context->surface_format,
       context->surface_capabilities, context->swapchain_extent);
-  create_swapchain_storage(context->device, context->surface_format,
-                           context->swapchain);
+  create_swapchain_storage(context);
   init_framebuffers(context);
 }
 
@@ -952,29 +1126,6 @@ VulkanContext create_vulkan_context(const char *title) {
   context.surface_format =
       get_surface_format(context.physical_device, context.surface);
 
-  context.surface_capabilities =
-      get_surface_capabilities(context.physical_device, context.surface);
-  context.swapchain_extent =
-      get_swapchain_extent(context.window, context.surface_capabilities);
-  context.swapchain =
-      create_swapchain(context.device, context.physical_device, context.surface,
-                       context.queue_family_indices, context.surface_format,
-                       context.surface_capabilities, context.swapchain_extent);
-
-  vkGetDeviceQueue(context.device, context.queue_family_indices.graphics_family,
-                   0, &context.graphics_queue);
-  vkGetDeviceQueue(context.device, context.queue_family_indices.present_family,
-                   0, &context.present_queue);
-  vkGetDeviceQueue(context.device, context.queue_family_indices.compute_family,
-                   0, &context.compute_queue);
-  context.swapchain_storage = create_swapchain_storage(
-      context.device, context.surface_format, context.swapchain);
-
-  context.render_pass =
-      create_render_pass(context.device, context.surface_format);
-
-  init_framebuffers(&context);
-
   create_frame_sync_objects(context.device, context.frame_sync_objects);
   context.current_frame = 0;
   context.current_frame_index = 0;
@@ -999,6 +1150,32 @@ VulkanContext create_vulkan_context(const char *title) {
     context.present_command_pool = context.graphics_command_pool;
   }
 
+  // swapchain creation needs to happen after the transient command pool is
+  // allocated because depth buffer creation requires an image transition
+  context.surface_capabilities =
+      get_surface_capabilities(context.physical_device, context.surface);
+  context.swapchain_extent =
+      get_swapchain_extent(context.window, context.surface_capabilities);
+  context.swapchain =
+      create_swapchain(context.device, context.physical_device, context.surface,
+                       context.queue_family_indices, context.surface_format,
+                       context.surface_capabilities, context.swapchain_extent);
+
+  vkGetDeviceQueue(context.device, context.queue_family_indices.graphics_family,
+                   0, &context.graphics_queue);
+  vkGetDeviceQueue(context.device, context.queue_family_indices.present_family,
+                   0, &context.present_queue);
+  vkGetDeviceQueue(context.device, context.queue_family_indices.compute_family,
+                   0, &context.compute_queue);
+  context.swapchain_storage = create_swapchain_storage(&context);
+
+  context.render_pass =
+      create_render_pass(context.device, context.surface_format);
+
+  init_framebuffers(&context);
+
+  // regular command buffers need to be created after the swapchain, which
+  // depends on the transient command bufers
   allocate_command_buffers(context.device, context.graphics_command_pool,
                            context.swapchain_storage.image_count,
                            context.graphics_command_buffers);
@@ -1015,7 +1192,8 @@ VulkanContext create_vulkan_context(const char *title) {
                       &context.frame_sync_objects[context.current_frame_index]
                            .in_flight_fence,
                       VK_TRUE, UINT64_MAX),
-      "asdf");
+      "new_vulkan_context: Failed to vkWaitForFences");
+
   return context;
 }
 
@@ -1181,6 +1359,11 @@ void destroy_vulkan_buffer(const VulkanContext *context, VulkanBuffer buffer) {
 }
 
 VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context) {
+
+  assert(context);
+  assert(context->device != VK_NULL_HANDLE);
+  assert(context->transient_command_pool != VK_NULL_HANDLE);
+
   VkCommandBufferAllocateInfo allocate_info;
   allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   allocate_info.pNext = 0;
@@ -1330,6 +1513,7 @@ create_multisample_state(VkSampleCountFlagBits sample_count_flag) {
 }
 
 VkPipelineDepthStencilStateCreateInfo create_depth_stencil_state() {
+
   VkPipelineDepthStencilStateCreateInfo depth_stencil_state_create_info;
   depth_stencil_state_create_info.sType =
       VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -1340,12 +1524,14 @@ VkPipelineDepthStencilStateCreateInfo create_depth_stencil_state() {
   depth_stencil_state_create_info.depthCompareOp = VK_COMPARE_OP_LESS;
   depth_stencil_state_create_info.depthBoundsTestEnable = VK_FALSE;
   depth_stencil_state_create_info.stencilTestEnable = VK_FALSE;
+
   VkStencilOpState empty_stencil_op_state;
   memset(&empty_stencil_op_state, 0, sizeof(empty_stencil_op_state));
   depth_stencil_state_create_info.front = empty_stencil_op_state;
   depth_stencil_state_create_info.back = empty_stencil_op_state;
   depth_stencil_state_create_info.minDepthBounds = 0.0f;
   depth_stencil_state_create_info.maxDepthBounds = 1.0f;
+
   return depth_stencil_state_create_info;
 }
 
@@ -1568,6 +1754,7 @@ bool begin_frame(VulkanContext *context) {
 VkCommandBuffer begin_command_buffer(const VulkanContext *context) {
   VkCommandBuffer command_buffer =
       context->graphics_command_buffers[context->image_index];
+  assert(command_buffer != VK_NULL_HANDLE);
 
   VkCommandBufferBeginInfo command_buffer_begin_info;
   command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1584,7 +1771,8 @@ VkCommandBuffer begin_command_buffer(const VulkanContext *context) {
 // potentially rename to begin_default_render_pass
 // leaves open possibility of rendering to other framebuffers
 void begin_render_pass(const VulkanContext *context,
-                       VkCommandBuffer command_buffer, VkClearValue clear_value,
+                       VkCommandBuffer command_buffer,
+                       const VkClearValue *clear_value, u32 clear_value_count,
                        VkOffset2D offset) {
   VkRenderPassBeginInfo render_pass_begin_info;
   render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1594,8 +1782,8 @@ void begin_render_pass(const VulkanContext *context,
       context->framebuffers[context->image_index];
   render_pass_begin_info.renderArea.offset = offset;
   render_pass_begin_info.renderArea.extent = context->swapchain_extent;
-  render_pass_begin_info.clearValueCount = 1;
-  render_pass_begin_info.pClearValues = &clear_value;
+  render_pass_begin_info.clearValueCount = clear_value_count;
+  render_pass_begin_info.pClearValues = clear_value;
   vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info,
                        VK_SUBPASS_CONTENTS_INLINE);
 }
@@ -1968,60 +2156,6 @@ void finalize_vertex_input_state(VertexLayoutBuilder *builder) {
       builder->attribute_description_count, builder->attribute_descriptions);
 }
 
-// TODO format in the depth buffer chapter?
-void transition_image_layout(VulkanContext *context,
-                             VulkanTexture vulkan_texture,
-                             VkImageLayout old_layout,
-                             VkImageLayout new_layout) {
-
-  VkImageMemoryBarrier image_memory_barrier;
-  image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  image_memory_barrier.pNext = NULL;
-  image_memory_barrier.srcAccessMask = 0;
-  image_memory_barrier.dstAccessMask = 0;
-  image_memory_barrier.oldLayout = old_layout;
-  image_memory_barrier.newLayout = new_layout;
-  image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  image_memory_barrier.image = vulkan_texture.image;
-  image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  image_memory_barrier.subresourceRange.baseMipLevel = 0;
-  image_memory_barrier.subresourceRange.levelCount = 1;
-  image_memory_barrier.subresourceRange.baseArrayLayer = 0;
-  image_memory_barrier.subresourceRange.layerCount = 1;
-
-  // TODO I don't yet understand these transition cases
-  VkPipelineStageFlags src_stage, dst_stage;
-  if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
-      new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-
-    image_memory_barrier.srcAccessMask = 0;
-    image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-    src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-
-  } else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
-             new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-
-    image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-    src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-
-  } else {
-    assert(false && "Unsupported layout transition!");
-  }
-
-  VkCommandBuffer single_use_command_buffer =
-      begin_single_use_command_buffer(context);
-  // TODO what are all these arguments?
-  vkCmdPipelineBarrier(single_use_command_buffer, src_stage, dst_stage, 0, 0,
-                       NULL, 0, NULL, 1, &image_memory_barrier);
-  end_single_use_command_buffer(context, single_use_command_buffer);
-}
-
 // TODO how to handle reusing staging buffers?
 // Need to see usage when multiple textures are present
 // current idea: anticipate loading several textures at once, read from files,
@@ -2093,7 +2227,8 @@ VulkanTexture create_vulkan_texture_from_file(VulkanContext *context,
   memcpy(ptr_to_mapped_memory, stb_handle.data, texture_size);
 
   // first transition
-  transition_image_layout(context, vulkan_texture, VK_IMAGE_LAYOUT_UNDEFINED,
+  transition_image_layout(context, vulkan_texture.image,
+                          VK_IMAGE_LAYOUT_UNDEFINED,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
   // copy buffer to image
@@ -2123,7 +2258,7 @@ VulkanTexture create_vulkan_texture_from_file(VulkanContext *context,
   end_single_use_command_buffer(context, image_copy_command_buffer);
 
   // second transition
-  transition_image_layout(context, vulkan_texture,
+  transition_image_layout(context, vulkan_texture.image,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 

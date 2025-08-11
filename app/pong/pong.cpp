@@ -193,7 +193,7 @@ void render(State *state) {
   }
 
   VkCommandBuffer command_buffer = begin_command_buffer(ctx);
-  begin_render_pass(ctx, command_buffer, state->clear_value,
+  begin_render_pass(ctx, command_buffer, &state->clear_value, 1,
                     state->viewport_state.scissor.offset);
   vkCmdSetViewport(command_buffer, 0, 1, &state->viewport_state.viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &state->viewport_state.scissor);

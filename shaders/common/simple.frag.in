@@ -3,7 +3,7 @@
 {{ LOCATION 0 }}in vec3 norm;
 {{ LOCATION 0 }}out vec4 FragColor;
 
-{{ SET_BINDING 0 0 }}uniform UniformBufferObject{
+{{ SET_BINDING 0 0 BUFFER_LABEL GLOBAL }}uniform UniformBufferObject{
     float x;
 } ubo;
 

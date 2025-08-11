@@ -16,7 +16,8 @@ int main() {
                        num_generated_specs);
   ViewportState viewport_state =
       create_viewport_state_xy(context.swapchain_extent, 0, 0);
-  const VkClearValue clear_value = {.color = {{1.0, 0.0, 0.0, 1.0}}};
+  const VkClearValue clear_values[NUM_ATTACHMENTS] = {
+      {.color = {{1.0, 0.0, 0.0, 1.0}}}, {1.0f, 0.0f}};
 
   VulkanTexture textures[NUM_TEXTURES];
   load_vulkan_textures(&context, texture_names, NUM_TEXTURES, textures);
@@ -102,9 +103,12 @@ int main() {
       get_vertex_layout(instanced_quad_vert_spec.vertex_layout_id),
       mvp_pipeline_layout);
 
-  VkPipeline cube_pipeline = create_default_graphics_pipeline(
+  PipelineConfig cube_pipeline_config = create_default_graphics_pipeline_config(
       &context, cube_vert_spec.name, cube_frag_spec.name,
       get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3_VEC2), cube_pipeline_layout);
+  cube_pipeline_config.cull_mode = VK_CULL_MODE_FRONT_BIT;
+  VkPipeline cube_pipeline = create_graphics_pipeline(
+      context.device, &cube_pipeline_config, context.pipeline_cache);
 
   RenderCall triangle_render_call;
   triangle_render_call.num_vertices = 3;
@@ -160,7 +164,7 @@ int main() {
   mvp.projection = glm::mat4(1.0f);
   mvp.view = glm::mat4(1.0f);
 
-  const glm::vec3 cube_translation_vector = {0.5f, -0.5f, 0.0f};
+  const glm::vec3 cube_translation_vector = {0.5f, -0.3f, 0.5f};
   const f32 root3 = 0.57735026919;
   const glm::vec3 cube_rotation_axis = {root3, root3, root3};
 
@@ -175,7 +179,7 @@ int main() {
     glm::mat4 cube_model =
         glm::translate(glm::mat4(1.0f), cube_translation_vector);
     cube_model = glm::rotate(cube_model, t, cube_rotation_axis);
-    cube_model = glm::scale(cube_model, {0.5f, 0.5f, 0.5f});
+    cube_model = glm::scale(cube_model, {0.2f, 0.2f, 0.2f});
 
     if (!begin_frame(&context)) {
       fprintf(stderr, "Failed to begin frame\n");
@@ -188,7 +192,7 @@ int main() {
     write_to_uniform_buffer(&global_uniform_buffer, &x, x_handle);
 
     VkCommandBuffer command_buffer = begin_command_buffer(&context);
-    begin_render_pass(&context, command_buffer, clear_value,
+    begin_render_pass(&context, command_buffer, clear_values, NUM_ATTACHMENTS,
                       viewport_state.scissor.offset);
     vkCmdSetViewport(command_buffer, 0, 1, &viewport_state.viewport);
     vkCmdSetScissor(command_buffer, 0, 1, &viewport_state.scissor);

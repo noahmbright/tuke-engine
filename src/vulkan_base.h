@@ -14,7 +14,7 @@
 #define NUM_SWAPCHAIN_IMAGES (4)
 #define MAX_FRAMES_IN_FLIGHT (2)
 #define NUM_QUEUE_FAMILY_INDICES (3)
-#define NUM_ATTACHMENTS (1) // 0 color, TODO 1 depth
+#define NUM_ATTACHMENTS (2) // 0 color, 1 depth
 #define MAX_SHADER_STAGE_COUNT (5)
 #define MAX_PHYSICAL_DEVICES (16)
 #define MAX_COPY_REGIONS (32)
@@ -108,6 +108,12 @@ struct QueueFamilyIndices {
   int compute_family;
 };
 
+struct DepthBuffer {
+  VkImage image;
+  VkImageView image_view;
+  VkDeviceMemory device_memory;
+};
+
 struct SwapchainStorage {
   bool use_static;
 
@@ -123,6 +129,8 @@ struct SwapchainStorage {
       VkImageView *image_views;
     } dynamic_storage;
   } as;
+
+  DepthBuffer depth_buffers[NUM_SWAPCHAIN_IMAGES];
 };
 
 struct ShaderStage {
@@ -152,6 +160,7 @@ struct VulkanContext {
   VkSurfaceFormatKHR surface_format;
   VkExtent2D swapchain_extent;
   SwapchainStorage swapchain_storage;
+  // TODO get this out of the context, add a render pass manager
   VkRenderPass render_pass;
   VkFramebuffer framebuffers[NUM_SWAPCHAIN_IMAGES];
 
@@ -401,7 +410,8 @@ ViewportState create_viewport_state_xy(VkExtent2D swapchain_extent, u32 x,
                                        u32 y);
 
 void begin_render_pass(const VulkanContext *context,
-                       VkCommandBuffer command_buffer, VkClearValue clear_value,
+                       VkCommandBuffer command_buffer,
+                       const VkClearValue *clear_value, u32 clear_value_count,
                        VkOffset2D offset);
 void submit_and_present(const VulkanContext *context,
                         VkCommandBuffer command_buffer);
