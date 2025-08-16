@@ -2,7 +2,7 @@
 
 // clang-format off
 
-const float cube_vertices[] = {
+const float cube_vertices_old[] = {
     -0.5f, -0.5f,  0.5f, 0.4, 0.0, 0.4,
     -0.5f,  0.5f,  0.5f, 0.4, 0.0, 0.4,
      0.5f,  0.5f,  0.5f, 0.4, 0.0, 0.4,

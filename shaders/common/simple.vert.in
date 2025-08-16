@@ -5,7 +5,15 @@
 
 {{ LOCATION 0 }} out vec3 norm;
 
+{{ SET_BINDING 0 1 BUFFER_LABEL GLOBAL }} uniform CameraVP {
+    mat4 vp;
+} camera_vp;
+
+{{ SET_BINDING 0 2 BUFFER_LABEL GLOBAL }} uniform LightPosition {
+    vec4 position;
+} light_position;
+
 void main(){
     norm = a_normal;
-    gl_Position = vec4(a_pos, 1.0);
+    gl_Position = camera_vp.vp * (vec4(a_pos, 1.0) + light_position.position);
 }

@@ -6,13 +6,20 @@
 
 {{ LOCATION 0 }} out vec3 norm;
 {{ LOCATION 1 }} out vec2 uv;
+{{ LOCATION 2 }} out vec3 frag_pos;
 
 {{ SET_BINDING 0 0 BUFFER_LABEL GLOBAL }} uniform CubeModel {
     mat4 model;
 } cube_transform;
 
+{{ SET_BINDING 0 2 BUFFER_LABEL GLOBAL }} uniform CameraVP {
+    mat4 vp;
+} camera_vp;
+
+
 void main(){
-    norm = a_normal;
+    norm = mat3(transpose(inverse(cube_transform.model))) * a_normal;
     uv = a_uv;
-    gl_Position = cube_transform.model * vec4(a_pos, 1.0);
+    frag_pos = vec3(cube_transform.model * vec4(a_pos, 1.0));
+    gl_Position = camera_vp.vp * vec4(frag_pos, 1.0);
 }

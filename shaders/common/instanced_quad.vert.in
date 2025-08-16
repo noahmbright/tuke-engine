@@ -25,5 +25,5 @@ void main(){
     uv = a_uv;
     vec3 pos = a_pos;
     pos_z = pos.z;
-    gl_Position = mvp.model * vec4(vec2(pos), 0.4, 1.0) + vec4(instance_offset, u_x.x, 0.0);
+    gl_Position = mvp.model * vec4(vec2(pos), 0.4, 1.0) + vec4(instance_offset, 1.0, 0.0);
 }

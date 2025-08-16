@@ -1,3 +1,5 @@
+// TODO do I need this?
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <GLFW/glfw3.h> // TODO Remove
 
 #include "camera.h"
@@ -139,10 +141,12 @@ glm::mat4 look_at_from_camera(const Camera *camera) {
 glm::mat4 perspective_projection_from_camera(const Camera *camera,
                                              u32 window_width,
                                              u32 window_height) {
+  f32 near_z = 0.1f;
+  f32 far_z = 100.0f;
   glm::mat4 proj =
       glm::perspective(glm::radians(camera->fovy),
-                       f32(window_width) / f32(window_height), 0.1f, 100.0f);
-  proj[1][1] *= -1.0f * camera->y_needs_inverted;
+                       f32(window_width) / f32(window_height), near_z, far_z);
+  proj[1][1] = camera->y_needs_inverted ? -proj[1][1] : proj[1][1];
   return proj;
 }
 
@@ -153,6 +157,18 @@ CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width,
   camera_matrices.projection =
       perspective_projection_from_camera(camera, window_width, window_height);
   return camera_matrices;
+}
+
+void log_camera(const Camera *camera) {
+
+  printf("camera position:  ");
+  log_vec3(&camera->position);
+
+  printf("camera direction: ");
+  log_vec3(&camera->direction);
+
+  printf("camera up:        ");
+  log_vec3(&camera->up);
 }
 
 // void buffer_camera_matrices_to_gl_uniform_buffer(

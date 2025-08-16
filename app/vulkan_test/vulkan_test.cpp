@@ -1,11 +1,42 @@
+#define GLM_ENABLE_EXPERIMENTAL
+
 #include "vulkan_test.h"
+#include "camera.h"
 #include "compiled_shaders.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/quaternion_transform.hpp"
 #include "glm/glm.hpp"
+#include "glm/gtx/string_cast.hpp"
+#include "tuke_engine.h"
 #include "utils.h"
 #include "vulkan_base.h"
+#include "window.h"
+
+#include <stdalign.h>
+#include <stdio.h>
 #include <vulkan/vulkan_core.h>
+
+glm::vec4 movement_direction_from_inputs(const Inputs *inputs) {
+  glm::vec4 res{0.0f, 0.0f, 0.0f, 1.0f};
+
+  if (inputs->key_inputs[INPUT_KEY_W]) {
+    res.y = 1.0f;
+  }
+
+  if (inputs->key_inputs[INPUT_KEY_A]) {
+    res.x = -1.0f;
+  }
+
+  if (inputs->key_inputs[INPUT_KEY_S]) {
+    res.y = -1.0f;
+  }
+
+  if (inputs->key_inputs[INPUT_KEY_D]) {
+    res.x = 1.0f;
+  }
+
+  return res;
+}
 
 int main() {
   VulkanContext context = create_vulkan_context("Tuke");
@@ -17,7 +48,7 @@ int main() {
   ViewportState viewport_state =
       create_viewport_state_xy(context.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {
-      {.color = {{1.0, 0.0, 0.0, 1.0}}}, {1.0f, 0.0f}};
+      {.color = {{0.01, 0.01, 0.01, 1.0}}}, {1.0f, 0.0f}};
 
   VulkanTexture textures[NUM_TEXTURES];
   load_vulkan_textures(&context, texture_names, NUM_TEXTURES, textures);
@@ -44,20 +75,31 @@ int main() {
   UniformBufferManager ub_manager = new_uniform_buffer_manager();
   UniformWrite mvp_handle = push_uniform(&ub_manager, sizeof(MVPUniform));
   UniformWrite cube_model_handle = push_uniform(&ub_manager, sizeof(CubeModel));
-  UniformWrite x_handle = push_uniform(&ub_manager, sizeof(f32));
+  UniformWrite x_handle =
+      push_uniform(&ub_manager, sizeof(UniformBufferObject));
+  UniformWrite light_position_handle =
+      push_uniform(&ub_manager, sizeof(LightPosition));
+  UniformWrite camera_vp_handle = push_uniform(&ub_manager, sizeof(CameraVP));
   UniformBuffer global_uniform_buffer =
       create_uniform_buffer(&context, ub_manager.current_offset);
 
-  // the uniform buffer will contain the layout: mvp | cube model | x
   // for simple.frag.in, x uniform is set/binding 0/0
-  DescriptorSetBuilder x_set_builder = create_descriptor_set_builder(&context);
-  add_uniform_buffer_descriptor_set(&x_set_builder, &global_uniform_buffer,
+  DescriptorSetBuilder simple_set_builder =
+      create_descriptor_set_builder(&context);
+
+  add_uniform_buffer_descriptor_set(&simple_set_builder, &global_uniform_buffer,
                                     x_handle.offset, x_handle.size, 0, 1,
                                     VK_SHADER_STAGE_FRAGMENT_BIT, false);
-  DescriptorSetHandle x_descriptor =
-      build_descriptor_set(&x_set_builder, descriptor_pool);
+  add_uniform_buffer_descriptor_set(
+      &simple_set_builder, &global_uniform_buffer, camera_vp_handle.offset,
+      camera_vp_handle.size, 1, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(
+      &simple_set_builder, &global_uniform_buffer, light_position_handle.offset,
+      light_position_handle.size, 2, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
+  DescriptorSetHandle simple__descriptor =
+      build_descriptor_set(&simple_set_builder, descriptor_pool);
   VkPipelineLayout x_pipeline_layout = create_pipeline_layout(
-      context.device, &x_descriptor.descriptor_set_layout, 1);
+      context.device, &simple__descriptor.descriptor_set_layout, 1);
 
   // instanced quad: the mvp uniform is set/binding 0/0, the float is 0/1
   DescriptorSetBuilder mvp_set_builder =
@@ -83,6 +125,12 @@ int main() {
   add_uniform_buffer_descriptor_set(
       &cube_set_builder, &global_uniform_buffer, cube_model_handle.offset,
       cube_model_handle.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(
+      &cube_set_builder, &global_uniform_buffer, light_position_handle.offset,
+      light_position_handle.size, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT, false);
+  add_uniform_buffer_descriptor_set(
+      &cube_set_builder, &global_uniform_buffer, camera_vp_handle.offset,
+      camera_vp_handle.size, 2, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
   DescriptorSetHandle cube_descriptor =
       build_descriptor_set(&cube_set_builder, descriptor_pool);
 
@@ -106,7 +154,7 @@ int main() {
   PipelineConfig cube_pipeline_config = create_default_graphics_pipeline_config(
       &context, cube_vert_spec.name, cube_frag_spec.name,
       get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3_VEC2), cube_pipeline_layout);
-  cube_pipeline_config.cull_mode = VK_CULL_MODE_FRONT_BIT;
+  // cube_pipeline_config.cull_mode = VK_CULL_MODE_FRONT_BIT;
   VkPipeline cube_pipeline = create_graphics_pipeline(
       context.device, &cube_pipeline_config, context.pipeline_cache);
 
@@ -119,7 +167,7 @@ int main() {
       triangle_vertices_slice->offset;
   triangle_render_call.vertex_buffers[0] = vertex_buffer->buffer;
   triangle_render_call.pipeline_layout = x_pipeline_layout;
-  triangle_render_call.descriptor_set = x_descriptor.descriptor_set;
+  triangle_render_call.descriptor_set = simple__descriptor.descriptor_set;
   triangle_render_call.is_indexed = false;
 
   RenderCall square_render_call;
@@ -130,7 +178,7 @@ int main() {
   square_render_call.vertex_buffer_offsets[0] = square_slice->offset;
   square_render_call.vertex_buffers[0] = vertex_buffer->buffer;
   square_render_call.pipeline_layout = x_pipeline_layout;
-  square_render_call.descriptor_set = x_descriptor.descriptor_set;
+  square_render_call.descriptor_set = simple__descriptor.descriptor_set;
   square_render_call.is_indexed = false;
 
   RenderCall cube_render_call;
@@ -164,22 +212,41 @@ int main() {
   mvp.projection = glm::mat4(1.0f);
   mvp.view = glm::mat4(1.0f);
 
-  const glm::vec3 cube_translation_vector = {0.5f, -0.3f, 0.5f};
+  const glm::vec3 cube_translation_vector = {1.5f, -1.3f, 1.5f};
   const f32 root3 = 0.57735026919;
   const glm::vec3 cube_rotation_axis = {root3, root3, root3};
 
+  Camera camera = new_camera(CameraType::Camera3D);
+  glm::mat4 camera_vp;
+  Inputs inputs;
+  init_inputs(&inputs);
+
+  f32 t0 = glfwGetTime();
   while (!glfwWindowShouldClose(context.window)) {
+    i32 height, width;
+    glfwGetWindowSize(context.window, &width, &height);
+    update_key_inputs_glfw(&inputs, context.window);
+
     glfwPollEvents();
-    float t = glfwGetTime();
-    float sint = sinf(t);
-    float x = fabs(sint);
+    f32 t = glfwGetTime();
+    f32 dt = t - t0;
+    t0 = t;
+    f32 sint = sinf(t);
+    f32 x = fabs(sint);
 
     mvp.model = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
     mvp.model = glm::rotate(mvp.model, sint, glm::vec3(0.0f, 0.0f, 1.0f));
+
     glm::mat4 cube_model =
         glm::translate(glm::mat4(1.0f), cube_translation_vector);
-    cube_model = glm::rotate(cube_model, t, cube_rotation_axis);
+    // cube_model = glm::rotate(cube_model, t, cube_rotation_axis);
     cube_model = glm::scale(cube_model, {0.2f, 0.2f, 0.2f});
+
+    glm::vec4 light_position(2 * sint, sint, 0.5f, 0.0f);
+
+    CameraMatrices camera_matrices =
+        new_camera_matrices(&camera, width, height);
+    camera_vp = camera_matrices.projection * camera_matrices.view;
 
     if (!begin_frame(&context)) {
       fprintf(stderr, "Failed to begin frame\n");
@@ -190,6 +257,10 @@ int main() {
     write_to_uniform_buffer(&global_uniform_buffer, &cube_model,
                             cube_model_handle);
     write_to_uniform_buffer(&global_uniform_buffer, &x, x_handle);
+    write_to_uniform_buffer(&global_uniform_buffer, &light_position,
+                            light_position_handle);
+    write_to_uniform_buffer(&global_uniform_buffer, &camera_vp,
+                            camera_vp_handle);
 
     VkCommandBuffer command_buffer = begin_command_buffer(&context);
     begin_render_pass(&context, command_buffer, clear_values, NUM_ATTACHMENTS,
@@ -209,6 +280,24 @@ int main() {
 
     context.current_frame++;
     context.current_frame_index = context.current_frame % MAX_FRAMES_IN_FLIGHT;
+    glm::vec4 movement_direction = movement_direction_from_inputs(&inputs);
+    f32 speed = 10.0f;
+    move_camera_3d(&camera, dt, speed * movement_direction);
+
+#if 0
+    if (context.current_frame % 120 == 0) {
+      printf("dt %f\n", dt);
+
+      log_camera(&camera);
+
+      printf("movement direction %f %f %f\n", movement_direction.x,
+             movement_direction.y, movement_direction.z);
+
+      printf("projection: \n%s\n",
+             glm::to_string(camera_matrices.projection).c_str());
+      printf("view: \n%s\n", glm::to_string(camera_matrices.view).c_str());
+    }
+#endif
   }
 
   // cleanup
@@ -219,7 +308,7 @@ int main() {
     destroy_vulkan_texture(context.device, &textures[i]);
   }
 
-  destroy_descriptor_set_handle(context.device, &x_descriptor);
+  destroy_descriptor_set_handle(context.device, &simple__descriptor);
   destroy_descriptor_set_handle(context.device, &mvp_descriptor);
   destroy_descriptor_set_handle(context.device, &cube_descriptor);
 

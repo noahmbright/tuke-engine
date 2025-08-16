@@ -2472,6 +2472,9 @@ void add_texture_descriptor_set(DescriptorSetBuilder *builder,
   builder->write_descriptor_count++;
 }
 
+// TODO decouple layouts from descriptor sets
+// I make a layout for every descriptor set, but I should be able to
+// create layouts from mixtures of descriptor sets
 DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder,
                                          VkDescriptorPool descriptor_pool) {
   DescriptorSetHandle handle;

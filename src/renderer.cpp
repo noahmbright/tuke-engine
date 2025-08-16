@@ -23,7 +23,7 @@ RenderData init_cube(unsigned program) {
   unsigned vbo;
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices), cube_vertices,
+  glBufferData(GL_ARRAY_BUFFER, sizeof(cube_vertices_old), cube_vertices_old,
                GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), 0);

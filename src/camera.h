@@ -48,10 +48,11 @@ void move_camera(Camera *camera, f32 delta_t,
 
 glm::mat4 look_at_from_camera(const Camera *camera);
 glm::mat4 perspective_projection_from_camera(const Camera *camera,
-                                             int window_width,
-                                             int window_height);
+                                             u32 window_width,
+                                             u32 window_height);
 CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width,
                                    u32 window_height);
+void log_camera(const Camera *camera);
 
 // void buffer_camera_matrices_to_gl_uniform_buffer(
 // const CameraMatrices *camera_matrices);

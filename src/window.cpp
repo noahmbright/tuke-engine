@@ -10,17 +10,29 @@
 // stack allocated. the problem is when we go to point with the prev/cur
 // pointers to those stack allocated arrays
 void init_inputs(Inputs *inputs) {
-  for (u32 i = 0; i < NUM_KEYS; i++) {
+  for (u32 i = 0; i < NUM_INPUTS; i++) {
     inputs->key_inputs_array[0][i] = false;
     inputs->key_inputs_array[1][i] = false;
   }
 
   inputs->key_inputs = inputs->key_inputs_array[0];
   inputs->prev_key_inputs = inputs->key_inputs_array[1];
+
+  inputs->left_mouse_clicked = false;
+  inputs->right_mouse_clicked = false;
 }
 
-bool key_pressed(Inputs *inputs, Key key) {
+bool key_pressed(Inputs *inputs, Input key) {
   return inputs->key_inputs[key] && !inputs->prev_key_inputs[key];
+}
+
+void update_mouse_input_glfw(Inputs *inputs, GLFWwindow *window) {
+
+  inputs->left_mouse_clicked =
+      (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+
+  inputs->right_mouse_clicked =
+      (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
 }
 
 // update the inputs AND swap the pointers to the current frames inputs
@@ -28,29 +40,38 @@ void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
 
   const i32 key_to_glfw_key[] = {
 
-      [KEY_SPACEBAR] = GLFW_KEY_SPACE,
-      [KEY_W] = GLFW_KEY_W,
-      [KEY_A] = GLFW_KEY_A,
-      [KEY_S] = GLFW_KEY_S,
-      [KEY_D] = GLFW_KEY_D,
+      [INPUT_KEY_SPACEBAR] = GLFW_KEY_SPACE,
+      [INPUT_KEY_W] = GLFW_KEY_W,
+      [INPUT_KEY_A] = GLFW_KEY_A,
+      [INPUT_KEY_S] = GLFW_KEY_S,
+      [INPUT_KEY_D] = GLFW_KEY_D,
 
-      [KEY_LEFT_ARROW] = GLFW_KEY_LEFT,
-      [KEY_RIGHT_ARROW] = GLFW_KEY_RIGHT,
-      [KEY_UP_ARROW] = GLFW_KEY_UP,
-      [KEY_DOWN_ARROW] = GLFW_KEY_DOWN,
+      [INPUT_KEY_LEFT_ARROW] = GLFW_KEY_LEFT,
+      [INPUT_KEY_RIGHT_ARROW] = GLFW_KEY_RIGHT,
+      [INPUT_KEY_UP_ARROW] = GLFW_KEY_UP,
+      [INPUT_KEY_DOWN_ARROW] = GLFW_KEY_DOWN,
 
-      [KEY_Q] = GLFW_KEY_Q,
-      [KEY_ESCAPE] = GLFW_KEY_ESCAPE,
+      [INPUT_LEFT_SHIFT] = GLFW_KEY_LEFT_SHIFT,
+      [INPUT_RIGHT_SHIFT] = GLFW_KEY_RIGHT_SHIFT,
+
+      [INPUT_KEY_Q] = GLFW_KEY_Q,
+      [INPUT_KEY_ESCAPE] = GLFW_KEY_ESCAPE,
   };
 
   bool *temp = inputs->key_inputs;
   inputs->key_inputs = inputs->prev_key_inputs;
   inputs->prev_key_inputs = temp;
 
-  for (u32 i = 0; i < NUM_KEYS; i++) {
+  for (u32 i = 0; i < NUM_INPUTS; i++) {
     inputs->key_inputs[i] =
         (glfwGetKey(window, key_to_glfw_key[i]) == GLFW_PRESS);
   }
+}
+
+glm::vec2 get_cursor_position(GLFWwindow *window) {
+  double xpos, ypos;
+  glfwGetCursorPos(window, &xpos, &ypos);
+  return {xpos, ypos};
 }
 
 void error_callback(int error, const char *description) {
@@ -101,55 +122,4 @@ GLFWwindow *new_window(bool is_vulkan, const char *title, const int width,
   }
 
   return window;
-}
-
-glm::vec4 get_window_movement_vector(GLFWwindow *window) {
-
-  glm::vec4 res{};
-
-  if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-    res.y += 1.0f;
-  }
-
-  if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-    res.x -= 1.0f;
-  }
-
-  if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-    res.y -= 1.0f;
-  }
-
-  if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS ||
-      glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-    res.x += 1.0f;
-  }
-
-  if (glm::length(res))
-    res = glm::normalize(res);
-
-  float sprint_boost =
-      1.0f + float(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS);
-
-  res.w = sprint_boost;
-  return res;
-}
-
-glm::vec2 get_cursor_position(GLFWwindow *window) {
-  double xpos, ypos;
-  glfwGetCursorPos(window, &xpos, &ypos);
-  return {xpos, ypos};
-}
-
-// TODO array of pressed keys? press and release?
-bool is_left_clicking(GLFWwindow *window) {
-  int state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
-  return (state == GLFW_PRESS);
-}
-
-bool is_right_clicking(GLFWwindow *window) {
-  int state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT);
-  return (state == GLFW_PRESS);
 }

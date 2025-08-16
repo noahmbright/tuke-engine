@@ -518,6 +518,8 @@ VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(
 
 DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context);
 
+// TODO this function/builder structure itself needs updated to decouple layouts
+// from descriptor sets - a layout should be a list of descriptors
 DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder,
                                          VkDescriptorPool descriptor_pool);
 
