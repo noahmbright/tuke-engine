@@ -68,7 +68,7 @@ int main() {
   AllInstanceData all_instance_data;
   all_instance_data.left_paddle.position = left_paddle_pos0;
 
-  // TODO how to get model onto GPU? uniform? something else?
+  // TODO how to get model onto GPU? uniform? something else? push constant?
   glm::mat4 arena_model = glm::scale(glm::mat4(1.0f), arena_dimensions0);
 
   // TODO make camera matrices only on camera movement
@@ -96,8 +96,16 @@ int main() {
     glfwPollEvents();
     f64 t = glfwGetTime();
     f64 dt = t - t_prev;
+    f32 sint = sinf(t);
+    f32 cost = cosf(t);
     t_prev = t;
     (void)dt;
+
+    player_paddle_model = glm::mat4(1.0f);
+    player_paddle_model =
+        glm::translate(player_paddle_model, glm::vec3(sint, cost, 1.0f));
+    write_to_uniform_buffer(&state.uniform_buffer, &player_paddle_model,
+                            state.uniform_writes.player_paddle_model);
 
     process_inputs(&state);
     render(&state);

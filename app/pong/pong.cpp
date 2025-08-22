@@ -22,13 +22,15 @@ void init_buffers(State *state) {
   state->buffer_manager = flush_buffers(ctx, &buffer_upload_queue);
 
   // uniform buffer
+  // TODO can I come up with a scheme for coordinating UBOs and the location of
+  // what data in what portion of the renderer maps to what data in the shaders?
   UniformBufferManager ub_manager = new_uniform_buffer_manager();
   state->uniform_writes.camera_vp =
       push_uniform(&ub_manager, sizeof(VPUniform));
   state->uniform_writes.arena_model =
       push_uniform(&ub_manager, sizeof(glm::mat4));
   state->uniform_writes.player_paddle_model =
-      push_uniform(&ub_manager, sizeof(glm::mat4));
+      push_uniform(&ub_manager, sizeof(InstanceDataUBO));
   state->uniform_buffer = create_uniform_buffer(ctx, ub_manager.current_offset);
 }
 
@@ -47,7 +49,6 @@ void init_descriptor_sets(State *state) {
       build_descriptor_set(&global_vp_builder, state->descriptor_pool);
 
   // TODO background vs arena, in game vs overlay
-  // background has sampler, background model
   DescriptorSetBuilder background_builder = create_descriptor_set_builder(ctx);
   // background model
   add_uniform_buffer_descriptor_set(&background_builder, &state->uniform_buffer,
@@ -63,15 +64,12 @@ void init_descriptor_sets(State *state) {
       build_descriptor_set(&background_builder, state->descriptor_pool);
 
   // paddles and ball
-  // paddles/ball have global VP, array of textures?
   DescriptorSetBuilder paddle_ball_builder = create_descriptor_set_builder(ctx);
-  // global vp
-  // TODO this is the same as above
-  add_uniform_buffer_descriptor_set(&paddle_ball_builder,
-                                    &state->uniform_buffer,
-                                    state->uniform_writes.camera_vp.offset,
-                                    state->uniform_writes.camera_vp.size, 0, 1,
-                                    VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(
+      &paddle_ball_builder, &state->uniform_buffer,
+      state->uniform_writes.player_paddle_model.offset,
+      state->uniform_writes.player_paddle_model.size, 0, 1,
+      VK_SHADER_STAGE_VERTEX_BIT, false);
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL] =
       build_descriptor_set(&paddle_ball_builder, state->descriptor_pool);
@@ -118,11 +116,17 @@ void init_paddles_material(State *state) {
 
   Material *mat = &state->paddle_material;
 
+  DescriptorSetHandle *vp_handle =
+      &state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP];
+
   DescriptorSetHandle *paddle_handle =
       &state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL];
 
-  state->paddle_material.pipeline_layout = create_pipeline_layout(
-      state->context.device, &paddle_handle->descriptor_set_layout, 1);
+  VkDescriptorSetLayout layouts[2] = {vp_handle->descriptor_set_layout,
+                                      paddle_handle->descriptor_set_layout};
+
+  state->paddle_material.pipeline_layout =
+      create_pipeline_layout(state->context.device, layouts, 2);
 
   state->paddle_material.pipeline = create_default_graphics_pipeline(
       &state->context, paddle_vert_spec.name, paddle_frag_spec.name,
@@ -134,8 +138,9 @@ void init_paddles_material(State *state) {
   mat->render_call.instance_count = instance_count;
   mat->render_call.graphics_pipeline = mat->pipeline;
   mat->render_call.pipeline_layout = mat->pipeline_layout;
-  mat->render_call.num_descriptor_sets = 1;
-  mat->render_call.descriptor_sets[0] = paddle_handle->descriptor_set;
+  mat->render_call.num_descriptor_sets = 2;
+  mat->render_call.descriptor_sets[0] = vp_handle->descriptor_set;
+  mat->render_call.descriptor_sets[1] = paddle_handle->descriptor_set;
   mat->render_call.num_vertex_buffers = 1;
   mat->render_call.vertex_buffer_offsets[0] = 0;
   mat->render_call.vertex_buffers[0] =

@@ -1156,19 +1156,31 @@ def descriptor_set_codegen(global_descriptor_sets):
 
     c_struct_definitions = ""
 
+    # emit struct body
     for typename, struct in structs.items():
         max_alignment = max(glsl_types_to_alignments[m.glsl_type] for m in struct.members)
+
+        struct_array_sizes = ""
         # TODO figure out if this should ever not just be 16
         struct_definition = f"struct alignas(16) {typename} {{\n"
 
         max_alignment = 0
         for member in struct.members:
+            if member.array_size:
+                size_variable_name = f"{typename}_{member.name}_array_size"
+                struct_array_sizes += f"const u32 {size_variable_name} = {member.array_size};\n"
+                array_snippet = f"[{size_variable_name}]"
+            else:
+                array_snippet = ""
+                size_variable_name = ""
+
             c_type = glsl_types_to_c_types[member.glsl_type]
             alignment = glsl_types_to_alignments[member.glsl_type]
-            array_snippet = f"[{member.array_size}]" if member.array_size else ""
             struct_definition += f"  alignas({alignment}) {c_type} {member.name}{array_snippet};\n"
 
         struct_definition += "};\n\n"
+
+        c_struct_definitions += struct_array_sizes
         c_struct_definitions += struct_definition
 
     # descriptor pool creation codegen

@@ -34,6 +34,9 @@ TODO:
 * Normal mapping 
 * move from combined image sampler to samplers + images
 * Push constants
+* would be good to have a system to allow for descriptor set automation and
+  reuse without coordinating bindings manually for something like an effect
+  used in several shaders
 
 General
 TODO:
@@ -46,8 +49,6 @@ TODO:
 
 From GPT
 # Vulkan Backend TODOs
-
-- [ ] Implement image layout transitions for textures
 - [ ] Implement shader hot reloading for faster iteration
 - [ ] Implement shadow mapping pipeline
 - [ ] Implement PBR shading with IBL
@@ -71,7 +72,6 @@ Build only what is required to unlock your immediate creative goals; refine abst
     Uniforms:
         Tangent-space matrix (TBN matrix)
         Normal map texture sampler
-
     Why?
     Requires per-vertex or per-pixel transforms with additional uniforms. Handling combined uniforms + samplers is good practice.
 
