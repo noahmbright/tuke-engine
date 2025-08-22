@@ -1305,6 +1305,15 @@ VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type,
                                   uniform_buffer_memory_properties);
   }
 
+  case BUFFER_TYPE_COHERENT_STREAMING: {
+    VkBufferUsageFlags uniform_buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    VkMemoryPropertyFlags uniform_buffer_memory_properties =
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    return create_buffer_explicit(context, uniform_buffer_usage, size,
+                                  uniform_buffer_memory_properties);
+  }
+
   default:
     assert(false && "create_buffer: got an invalid buffer_type");
   }
@@ -1869,6 +1878,7 @@ create_pipeline_layout(VkDevice device,
   pipeline_layout_create_info.flags = 0;
   pipeline_layout_create_info.setLayoutCount = set_layout_count;
   pipeline_layout_create_info.pSetLayouts = descriptor_set_layout;
+  // TODO push constants
   pipeline_layout_create_info.pushConstantRangeCount = 0;
   pipeline_layout_create_info.pPushConstantRanges = NULL;
 
@@ -2522,21 +2532,17 @@ void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call) {
   vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     render_call->graphics_pipeline);
 
-  // TODO when would these not be 0 and 0?
-  // TODO when would these not be 0 and 1?
   u32 first_binding = 0;
   vkCmdBindVertexBuffers(
       command_buffer, first_binding, render_call->num_vertex_buffers,
       render_call->vertex_buffers, render_call->vertex_buffer_offsets);
 
-  // TODO what are these?
   u32 first_set = 0;
-  u32 descriptor_set_count = 1;
   u32 dynamic_offset_count = 0;
-  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          render_call->pipeline_layout, first_set,
-                          descriptor_set_count, &render_call->descriptor_set,
-                          dynamic_offset_count, NULL);
+  vkCmdBindDescriptorSets(
+      command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+      render_call->pipeline_layout, first_set, render_call->num_descriptor_sets,
+      render_call->descriptor_sets, dynamic_offset_count, NULL);
 
   u32 first_instance = 0;
   i32 vertex_offset = 0; // TODO understand when this would be non zero

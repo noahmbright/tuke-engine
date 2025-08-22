@@ -3,7 +3,7 @@
 {{ LOCATION 0 }} in vec2 uv;
 {{ LOCATION 0 }} out vec4 frag_color;
 
-{{ SET_BINDING 0 2 }} uniform sampler2D tex;
+{{ SET_BINDING 1 1 }} uniform sampler2D tex;
 
 void main(){
     frag_color = texture(tex, uv);

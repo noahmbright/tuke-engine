@@ -20,6 +20,7 @@
 #define MAX_COPY_REGIONS (32)
 #define MAX_VERTEX_BINDINGS (4)
 #define MAX_VERTEX_ATTRIBUTES (4)
+#define MAX_DESCRIPTOR_SETS (4)
 
 #define MAX_LAYOUT_BINDINGS (4)
 #define MAX_DESCRIPTOR_WRITES (4)
@@ -257,6 +258,7 @@ enum BufferType {
   BUFFER_TYPE_VERTEX,
   BUFFER_TYPE_INDEX,
   BUFFER_TYPE_UNIFORM,
+  BUFFER_TYPE_COHERENT_STREAMING,
 };
 
 struct StagingArena {
@@ -341,7 +343,9 @@ struct RenderCall {
   u32 instance_count;
   VkPipeline graphics_pipeline;
   VkPipelineLayout pipeline_layout;
-  VkDescriptorSet descriptor_set;
+
+  u32 num_descriptor_sets;
+  VkDescriptorSet descriptor_sets[MAX_DESCRIPTOR_SETS];
 
   u32 num_vertex_buffers;
   VkDeviceSize vertex_buffer_offsets[MAX_VERTEX_BINDINGS];

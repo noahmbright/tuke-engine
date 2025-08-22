@@ -9,7 +9,7 @@
     mat4 vp;
 } pong_vp;
 
-{{ SET_BINDING 0 1 BUFFER_LABEL PONG_GLOBAL }} uniform ModelUniform{
+{{ SET_BINDING 1 0 BUFFER_LABEL PONG_GLOBAL }} uniform ModelUniform{
     mat4 model;
 } background_model;
 

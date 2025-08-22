@@ -48,7 +48,8 @@ int main() {
   ViewportState viewport_state =
       create_viewport_state_xy(context.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {
-      {.color = {{0.01, 0.01, 0.01, 1.0}}}, {1.0f, 0.0f}};
+      {.color = {{0.01, 0.01, 0.01, 1.0}}},
+      {.depthStencil = {.depth = 1.0f, .stencil = 0}}};
 
   VulkanTexture textures[NUM_TEXTURES];
   load_vulkan_textures(&context, texture_names, NUM_TEXTURES, textures);
@@ -154,7 +155,7 @@ int main() {
   PipelineConfig cube_pipeline_config = create_default_graphics_pipeline_config(
       &context, cube_vert_spec.name, cube_frag_spec.name,
       get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3_VEC2), cube_pipeline_layout);
-  // cube_pipeline_config.cull_mode = VK_CULL_MODE_FRONT_BIT;
+  cube_pipeline_config.cull_mode = VK_CULL_MODE_FRONT_BIT;
   VkPipeline cube_pipeline = create_graphics_pipeline(
       context.device, &cube_pipeline_config, context.pipeline_cache);
 
@@ -167,7 +168,8 @@ int main() {
       triangle_vertices_slice->offset;
   triangle_render_call.vertex_buffers[0] = vertex_buffer->buffer;
   triangle_render_call.pipeline_layout = x_pipeline_layout;
-  triangle_render_call.descriptor_set = simple__descriptor.descriptor_set;
+  triangle_render_call.num_descriptor_sets = 1;
+  triangle_render_call.descriptor_sets[0] = simple__descriptor.descriptor_set;
   triangle_render_call.is_indexed = false;
 
   RenderCall square_render_call;
@@ -178,7 +180,8 @@ int main() {
   square_render_call.vertex_buffer_offsets[0] = square_slice->offset;
   square_render_call.vertex_buffers[0] = vertex_buffer->buffer;
   square_render_call.pipeline_layout = x_pipeline_layout;
-  square_render_call.descriptor_set = simple__descriptor.descriptor_set;
+  square_render_call.num_descriptor_sets = 1;
+  square_render_call.descriptor_sets[0] = simple__descriptor.descriptor_set;
   square_render_call.is_indexed = false;
 
   RenderCall cube_render_call;
@@ -189,7 +192,8 @@ int main() {
   cube_render_call.vertex_buffer_offsets[0] = cube_slice->offset;
   cube_render_call.vertex_buffers[0] = vertex_buffer->buffer;
   cube_render_call.pipeline_layout = cube_pipeline_layout;
-  cube_render_call.descriptor_set = cube_descriptor.descriptor_set;
+  cube_render_call.num_descriptor_sets = 1;
+  cube_render_call.descriptor_sets[0] = cube_descriptor.descriptor_set;
   cube_render_call.is_indexed = false;
 
   RenderCall instanced_render_call;
@@ -203,7 +207,8 @@ int main() {
   instanced_render_call.vertex_buffers[0] = vertex_buffer->buffer;
   instanced_render_call.vertex_buffers[1] = vertex_buffer->buffer;
   instanced_render_call.pipeline_layout = mvp_pipeline_layout;
-  instanced_render_call.descriptor_set = mvp_descriptor.descriptor_set;
+  instanced_render_call.num_descriptor_sets = 1;
+  instanced_render_call.descriptor_sets[0] = mvp_descriptor.descriptor_set;
   instanced_render_call.index_buffer = index_buffer->buffer;
   instanced_render_call.index_buffer_offset = 0;
   instanced_render_call.is_indexed = true;
@@ -217,6 +222,7 @@ int main() {
   const glm::vec3 cube_rotation_axis = {root3, root3, root3};
 
   Camera camera = new_camera(CameraType::Camera3D);
+  camera.position = {0.0f, 0.0f, 5.0f};
   glm::mat4 camera_vp;
   Inputs inputs;
   init_inputs(&inputs);

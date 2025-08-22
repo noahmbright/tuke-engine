@@ -9,33 +9,19 @@ static const char *texture_names[NUM_TEXTURES] = {
     "textures/girl_face.jpg", "textures/girl_face_normal_map.jpg"};
 
 void init_buffers(State *state) {
-
   VulkanContext *ctx = &state->context;
-  state->vertex_buffer = create_buffer(ctx, BUFFER_TYPE_VERTEX, total_size);
-  state->index_buffer =
-      create_buffer(ctx, BUFFER_TYPE_INDEX, sizeof(unit_square_indices));
 
-  StagingArena staging_arena = create_staging_arena(ctx, total_size);
+  // big vertex/index buffers
+  BufferUploadQueue buffer_upload_queue = new_buffer_upload_queue();
 
-  // TODO making errors with offsets and staging
+  const BufferHandle *unit_quad_vertices_slice =
+      UPLOAD_VERTEX_ARRAY(buffer_upload_queue, paddle_vertices);
+  const BufferHandle *quad_inices_slice =
+      UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
 
-  // paddle vertices go in the first sizeof(...) bytes of the vertex buffer
-  u32 paddle_vertices_offset = stage_data_explicit(
-      ctx, &staging_arena, paddle_vertices, sizeof(paddle_vertices),
-      state->vertex_buffer.buffer, 0 /*dst_offset*/);
-  (void)paddle_vertices_offset;
+  state->buffer_manager = flush_buffers(ctx, &buffer_upload_queue);
 
-  // unit_square_indices go in the first sizeof(...) bytes of the index_buffer
-  u32 index_data_offset = stage_data_explicit(
-      ctx, &staging_arena, unit_square_indices, sizeof(unit_square_indices),
-      state->index_buffer.buffer, 0 /*dst_offset*/);
-  (void)index_data_offset;
-
-  flush_staging_arena(ctx, &staging_arena);
-
-  // TODO how to reuse this staging buffer?
-  destroy_vulkan_buffer(ctx, staging_arena.buffer);
-
+  // uniform buffer
   UniformBufferManager ub_manager = new_uniform_buffer_manager();
   state->uniform_writes.camera_vp =
       push_uniform(&ub_manager, sizeof(VPUniform));
@@ -50,44 +36,114 @@ void init_buffers(State *state) {
 void init_descriptor_sets(State *state) {
   VulkanContext *ctx = &state->context;
 
-  // TODO background vs arena, in game vs overlay
-  // background has global VP, sampler, background model
-  DescriptorSetBuilder background_builder = create_descriptor_set_builder(ctx);
+  // global VP
+  DescriptorSetBuilder global_vp_builder = create_descriptor_set_builder(ctx);
   // global vp
-  add_uniform_buffer_descriptor_set(&background_builder, &state->uniform_buffer,
-                                    0, MAT4_SIZE, 0, 1,
+  add_uniform_buffer_descriptor_set(&global_vp_builder, &state->uniform_buffer,
+                                    state->uniform_writes.camera_vp.offset,
+                                    state->uniform_writes.camera_vp.size, 0, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
+  state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP] =
+      build_descriptor_set(&global_vp_builder, state->descriptor_pool);
 
+  // TODO background vs arena, in game vs overlay
+  // background has sampler, background model
+  DescriptorSetBuilder background_builder = create_descriptor_set_builder(ctx);
   // background model
   add_uniform_buffer_descriptor_set(&background_builder, &state->uniform_buffer,
-                                    MAT4_SIZE, MAT4_SIZE, 1, 1,
-                                    VK_SHADER_STAGE_VERTEX_BIT, false);
+                                    state->uniform_writes.arena_model.offset,
+                                    state->uniform_writes.arena_model.size, 0,
+                                    1, VK_SHADER_STAGE_VERTEX_BIT, false);
 
   add_texture_descriptor_set(
       &background_builder, &state->textures[TEXTURE_GIRL_FACE], state->sampler,
-      2, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+      1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND] =
       build_descriptor_set(&background_builder, state->descriptor_pool);
 
+  // paddles and ball
   // paddles/ball have global VP, array of textures?
   DescriptorSetBuilder paddle_ball_builder = create_descriptor_set_builder(ctx);
   // global vp
+  // TODO this is the same as above
   add_uniform_buffer_descriptor_set(&paddle_ball_builder,
-                                    &state->uniform_buffer, 0, MAT4_SIZE, 0, 1,
+                                    &state->uniform_buffer,
+                                    state->uniform_writes.camera_vp.offset,
+                                    state->uniform_writes.camera_vp.size, 0, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
-
-  // position transform
-  add_uniform_buffer_descriptor_set(
-      &paddle_ball_builder, &state->uniform_buffer, 2 * MAT4_SIZE, MAT4_SIZE, 1,
-      1, VK_SHADER_STAGE_VERTEX_BIT, false);
-
-  add_texture_descriptor_set(
-      &paddle_ball_builder, &state->textures[TEXTURE_GENERIC_GIRL],
-      state->sampler, 2, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL] =
       build_descriptor_set(&paddle_ball_builder, state->descriptor_pool);
+}
+
+void init_background_material(State *state) {
+
+  Material *mat = &state->background_material;
+
+  DescriptorSetHandle *vp_handle =
+      &state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP];
+
+  DescriptorSetHandle *background_handle =
+      &state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND];
+
+  VkDescriptorSetLayout layouts[2] = {vp_handle->descriptor_set_layout,
+                                      background_handle->descriptor_set_layout};
+
+  state->background_material.pipeline_layout =
+      create_pipeline_layout(state->context.device, layouts, 2);
+
+  state->background_material.pipeline = create_default_graphics_pipeline(
+      &state->context, background_vert_spec.name, background_frag_spec.name,
+      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2),
+      state->background_material.pipeline_layout);
+
+  mat->render_call.instance_count = 1;
+  mat->render_call.graphics_pipeline = mat->pipeline;
+  mat->render_call.pipeline_layout = mat->pipeline_layout;
+  mat->render_call.num_descriptor_sets = 2;
+  mat->render_call.descriptor_sets[0] = vp_handle->descriptor_set;
+  mat->render_call.descriptor_sets[1] = background_handle->descriptor_set;
+  mat->render_call.num_vertex_buffers = 1;
+  mat->render_call.vertex_buffer_offsets[0] = 0;
+  mat->render_call.vertex_buffers[0] =
+      state->buffer_manager.vertex_buffer.buffer;
+  mat->render_call.index_buffer_offset = 0;
+  mat->render_call.num_indices = 6;
+  mat->render_call.index_buffer = state->buffer_manager.index_buffer.buffer;
+  mat->render_call.is_indexed = true;
+}
+
+void init_paddles_material(State *state) {
+
+  Material *mat = &state->paddle_material;
+
+  DescriptorSetHandle *paddle_handle =
+      &state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL];
+
+  state->paddle_material.pipeline_layout = create_pipeline_layout(
+      state->context.device, &paddle_handle->descriptor_set_layout, 1);
+
+  state->paddle_material.pipeline = create_default_graphics_pipeline(
+      &state->context, paddle_vert_spec.name, paddle_frag_spec.name,
+      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2),
+      state->paddle_material.pipeline_layout);
+
+  // TODO bump to 2 and 3
+  const u32 instance_count = 1;
+  mat->render_call.instance_count = instance_count;
+  mat->render_call.graphics_pipeline = mat->pipeline;
+  mat->render_call.pipeline_layout = mat->pipeline_layout;
+  mat->render_call.num_descriptor_sets = 1;
+  mat->render_call.descriptor_sets[0] = paddle_handle->descriptor_set;
+  mat->render_call.num_vertex_buffers = 1;
+  mat->render_call.vertex_buffer_offsets[0] = 0;
+  mat->render_call.vertex_buffers[0] =
+      state->buffer_manager.vertex_buffer.buffer;
+  mat->render_call.index_buffer_offset = 0;
+  mat->render_call.num_indices = 6 * instance_count;
+  mat->render_call.index_buffer = state->buffer_manager.index_buffer.buffer;
+  mat->render_call.is_indexed = true;
 }
 
 State setup_state(const char *title) {
@@ -108,19 +164,8 @@ State setup_state(const char *title) {
   // TODO this sampler never changes - look into wiring immutable samplers
   state.sampler = create_sampler(ctx->device);
 
-  // TODO will want to add some kind of accumulation of resources into
-  // python compiler
-  // pool sizes are not for individual resources, but places that a resource
-  // needs to bind
-  const u32 max_sets = 3;
-  const u32 pool_size_count = 2;
-  VkDescriptorPoolSize mvp_pool_sizes[pool_size_count];
-  mvp_pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  mvp_pool_sizes[0].descriptorCount = 3;
-  mvp_pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  mvp_pool_sizes[1].descriptorCount = 2;
-  state.descriptor_pool = create_descriptor_pool(ctx->device, mvp_pool_sizes,
-                                                 pool_size_count, max_sets);
+  state.descriptor_pool = create_descriptor_pool(
+      ctx->device, generated_pool_sizes, pool_size_count, max_sets);
 
   cache_shader_module(ctx->shader_cache, paddle_vert_spec);
   cache_shader_module(ctx->shader_cache, paddle_frag_spec);
@@ -129,29 +174,12 @@ State setup_state(const char *title) {
 
   init_descriptor_sets(&state);
 
-  DescriptorSetHandle *background_handle =
-      &state.descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND];
-  state.pipeline_layout = create_pipeline_layout(
-      ctx->device, &background_handle->descriptor_set_layout, 1);
-
-  state.pipeline = create_default_graphics_pipeline(
-      ctx, background_vert_spec.name, background_frag_spec.name,
-      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2), state.pipeline_layout);
-
-  state.clear_value.color = {{0.0, 1.0, 0.0, 1.0}};
+  state.clear_values[0].color = {{0.0, 1.0, 0.0, 1.0}};
+  state.clear_values[1].depthStencil = {.depth = 1.0f, .stencil = 0};
   state.viewport_state = create_viewport_state_xy(ctx->swapchain_extent, 0, 0);
 
-  state.render_call.instance_count = 1;
-  state.render_call.graphics_pipeline = state.pipeline;
-  state.render_call.pipeline_layout = state.pipeline_layout;
-  state.render_call.descriptor_set = background_handle->descriptor_set;
-  state.render_call.num_vertex_buffers = 1;
-  state.render_call.vertex_buffer_offsets[0] = 0;
-  state.render_call.vertex_buffers[0] = state.vertex_buffer.buffer;
-  state.render_call.index_buffer_offset = 0;
-  state.render_call.num_indices = 6;
-  state.render_call.index_buffer = state.index_buffer.buffer;
-  state.render_call.is_indexed = true;
+  init_background_material(&state);
+  init_paddles_material(&state);
 
   return state;
 }
@@ -172,13 +200,12 @@ void destroy_state(State *state) {
                                   &state->descriptor_set_handles[i]);
   }
 
-  vkDestroyPipelineLayout(ctx->device, state->pipeline_layout, NULL);
-  vkDestroyPipeline(ctx->device, state->pipeline, NULL);
+  destroy_material(ctx, &state->background_material);
+  destroy_material(ctx, &state->paddle_material);
 
   vkDestroyDescriptorPool(ctx->device, state->descriptor_pool, NULL);
 
-  destroy_vulkan_buffer(ctx, state->vertex_buffer);
-  destroy_vulkan_buffer(ctx, state->index_buffer);
+  destroy_buffer_manager(&state->buffer_manager);
   destroy_uniform_buffer(ctx, &state->uniform_buffer);
 
   destroy_vulkan_context(ctx);
@@ -193,12 +220,13 @@ void render(State *state) {
   }
 
   VkCommandBuffer command_buffer = begin_command_buffer(ctx);
-  begin_render_pass(ctx, command_buffer, &state->clear_value, 1,
+  begin_render_pass(ctx, command_buffer, state->clear_values, 2,
                     state->viewport_state.scissor.offset);
   vkCmdSetViewport(command_buffer, 0, 1, &state->viewport_state.viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &state->viewport_state.scissor);
 
-  render_mesh(command_buffer, &state->render_call);
+  render_mesh(command_buffer, &state->background_material.render_call);
+  render_mesh(command_buffer, &state->paddle_material.render_call);
 
   vkCmdEndRenderPass(command_buffer);
   VK_CHECK(vkEndCommandBuffer(command_buffer), "Failed to end command buffer");

@@ -39,18 +39,14 @@ enum EntityIndex {
   NUM_ENTITIES
 };
 
-// clang-format off
-const f32 instance_data0[] = {
-    -arena_dimensions_x0 + x_offset0, 0.0f, 0.0f, // left paddle
-     arena_dimensions_x0 - x_offset0, 0.0f, 0.0f, // right paddle
-     0.0f, 0.0f, 0.0f, // ball
-};
-// clang-format on
+const glm::vec4 left_paddle_pos0{-arena_dimensions_x0 + x_offset0, 0.0f, 0.0f,
+                                 0.0f};
+const glm::vec4 right_paddle_pos0{arena_dimensions_x0 - x_offset0, 0.0f, 0.0f,
+                                  0.0f};
+const glm::vec4 ball_pos0{0.0f, 0.0f, 0.0f, 0.0f};
 
 const u32 paddle_vertices_size = sizeof(paddle_vertices);
 const u32 indices_size = sizeof(unit_square_indices);
-const u32 instance_data_size = sizeof(instance_data0);
-const u32 total_size = paddle_vertices_size + indices_size + instance_data_size;
 
 enum TextureID {
   TEXTURE_GENERIC_GIRL,
@@ -62,6 +58,7 @@ enum TextureID {
 
 enum DescriptorHandleID {
   DESCRIPTOR_HANDLE_BACKGROUND,
+  DESCRIPTOR_HANDLE_GLOBAL_VP,
   DESCRIPTOR_HANDLE_PADDLES_AND_BALL,
   NUM_DESCRIPTOR_HANDLES
 };
@@ -71,6 +68,19 @@ enum GameMode {
   GAMEMODE_PLAYING,
   GAMEMODE_MAIN_MENU,
 };
+
+struct Material {
+  DescriptorSetHandle descriptor_set_handle;
+  VkPipelineLayout pipeline_layout;
+  RenderCall render_call;
+  VkPipeline pipeline;
+};
+
+inline void destroy_material(VulkanContext *ctx, Material *material) {
+
+  vkDestroyPipelineLayout(ctx->device, material->pipeline_layout, NULL);
+  vkDestroyPipeline(ctx->device, material->pipeline, NULL);
+}
 
 struct UniformWrites {
   UniformWrite camera_vp;
@@ -85,19 +95,19 @@ struct State {
 
   VulkanContext context;
   VulkanTexture textures[NUM_TEXTURES];
-  VulkanBuffer vertex_buffer;
-  VulkanBuffer index_buffer;
   VkSampler sampler;
   DescriptorSetHandle descriptor_set_handles[NUM_DESCRIPTOR_HANDLES];
   VkDescriptorPool descriptor_pool;
-  VkPipelineLayout pipeline_layout;
-  VkPipeline pipeline;
-  VkClearValue clear_value;
+  VkClearValue clear_values[NUM_ATTACHMENTS];
+
+  Material background_material;
+  Material paddle_material;
+
   ViewportState viewport_state;
-  RenderCall render_call;
 
   UniformBuffer uniform_buffer;
   UniformWrites uniform_writes;
+  BufferManager buffer_manager;
 
   Inputs inputs;
   GameMode game_mode;
