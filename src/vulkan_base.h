@@ -378,6 +378,13 @@ struct BufferManager {
   StagingArena staging_arena;
 };
 
+struct CoherentStreamingBuffer {
+  VulkanBuffer vulkan_buffer;
+  u8 *data;
+  u32 size;
+  u32 head;
+};
+
 VulkanContext create_vulkan_context(const char *title);
 void destroy_vulkan_context(VulkanContext *);
 VulkanBuffer create_buffer_explicit(const VulkanContext *context,
@@ -560,3 +567,8 @@ void destroy_buffer_manager(BufferManager *buffer_manager);
 
 #define UPLOAD_INDEX_ARRAY(queue, array)                                       \
   (upload_data(&queue, BUFFER_TYPE_INDEX, (void *)array, sizeof(array)))
+
+CoherentStreamingBuffer
+create_coherent_streaming_buffer(const VulkanContext *ctx, u32 size);
+void write_to_streaming_buffer(
+    CoherentStreamingBuffer *coherent_streaming_buffer, void *data, u32 size);

@@ -134,8 +134,7 @@ void init_paddles_material(State *state) {
       state->paddle_material.pipeline_layout);
 
   // TODO bump to 2 and 3
-  const u32 instance_count = 1;
-  mat->render_call.instance_count = instance_count;
+  mat->render_call.instance_count = InstanceDataUBO_model_array_size;
   mat->render_call.graphics_pipeline = mat->pipeline;
   mat->render_call.pipeline_layout = mat->pipeline_layout;
   mat->render_call.num_descriptor_sets = 2;
@@ -146,7 +145,7 @@ void init_paddles_material(State *state) {
   mat->render_call.vertex_buffers[0] =
       state->buffer_manager.vertex_buffer.buffer;
   mat->render_call.index_buffer_offset = 0;
-  mat->render_call.num_indices = 6 * instance_count;
+  mat->render_call.num_indices = 6;
   mat->render_call.index_buffer = state->buffer_manager.index_buffer.buffer;
   mat->render_call.is_indexed = true;
 }

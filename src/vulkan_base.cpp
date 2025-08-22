@@ -2663,3 +2663,36 @@ UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager,
   uniform_buffer_manager->current_offset += size;
   return uniform_write;
 }
+
+CoherentStreamingBuffer
+create_coherent_streaming_buffer(const VulkanContext *ctx, u32 size) {
+  CoherentStreamingBuffer coherent_streaming_buffer;
+
+  coherent_streaming_buffer.vulkan_buffer =
+      create_buffer(ctx, BUFFER_TYPE_COHERENT_STREAMING, size);
+
+  vkMapMemory(ctx->device, coherent_streaming_buffer.vulkan_buffer.memory, 0,
+              size, 0, (void **)&coherent_streaming_buffer.data);
+
+  coherent_streaming_buffer.size = size;
+  coherent_streaming_buffer.head = 0;
+
+  return coherent_streaming_buffer;
+}
+
+void write_to_streaming_buffer(
+    CoherentStreamingBuffer *coherent_streaming_buffer, void *data, u32 size) {
+
+  assert(size <= coherent_streaming_buffer->size);
+
+  u8 *dest = coherent_streaming_buffer->data;
+  u32 offset = coherent_streaming_buffer->head;
+  bool overflowed = (offset + size > coherent_streaming_buffer->size);
+  if (overflowed) {
+    offset = 0;
+  }
+
+  memcpy(dest + offset, data, size);
+
+  coherent_streaming_buffer->head = overflowed ? size : offset + size;
+}

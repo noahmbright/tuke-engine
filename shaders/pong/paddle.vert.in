@@ -10,11 +10,11 @@
 } vp;
 
 {{ SET_BINDING 1 0 BUFFER_LABEL PONG_GLOBAL }} uniform InstanceDataUBO {
-    mat4 offset[1];
+    mat4 model[3];
 } instance_data;
 
 void main(){
     uv = a_uv;
-    mat4 model = instance_data.offset[gl_InstanceIndex];
+    mat4 model = instance_data.model[gl_InstanceIndex];
     gl_Position = vp.vp * model * vec4(a_pos, 1.0);
 }
