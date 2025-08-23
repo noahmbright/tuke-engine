@@ -103,7 +103,7 @@ inline void destroy_material(VulkanContext *ctx, Material *material) {
 struct UniformWrites {
   UniformWrite camera_vp;
   UniformWrite arena_model;
-  UniformWrite player_paddle_model;
+  UniformWrite instance_data;
 };
 
 struct State {
@@ -129,6 +129,19 @@ struct State {
 
   Inputs inputs;
   GameMode game_mode;
+  InstanceDataUBO instance_data;
+
+  glm::vec3 left_paddle_position;
+  glm::vec3 right_paddle_position;
+  glm::vec3 ball_position;
+
+  f32 left_paddle_speed;
+  f32 right_paddle_speed;
+  f32 ball_speed;
+
+  glm::vec3 left_paddle_direction;
+  glm::vec3 right_paddle_direction;
+  glm::vec3 ball_direction;
 };
 
 struct Paddle {
@@ -142,5 +155,5 @@ void destroy_state(State *state);
 
 void initialize_textures(u32 num_textures, VulkanTexture *out_textures);
 void render(State *state);
-void process_inputs(State *state);
+void process_inputs(State *state, f32 dt);
 void write_uniforms(State *state);

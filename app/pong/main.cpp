@@ -23,20 +23,12 @@ int main() {
   const CameraMatrices camera_matrices =
       new_camera_matrices(&camera, width, height);
   glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
-  glm::mat4 player_paddle_model = glm::mat4(1.0f);
-
-  InstanceDataUBO instance_data;
-  instance_data.model[0] = left_paddle_model0;
-  instance_data.model[1] = right_paddle_model0;
-  instance_data.model[2] = ball_model0;
 
   // uniform buffer structure: camera vp, background model, paddle model
   write_to_uniform_buffer(&state.uniform_buffer, &camera_vp,
                           state.uniform_writes.camera_vp);
   write_to_uniform_buffer(&state.uniform_buffer, &arena_model,
                           state.uniform_writes.arena_model);
-  write_to_uniform_buffer(&state.uniform_buffer, &instance_data,
-                          state.uniform_writes.player_paddle_model);
 
   // main loop
   f64 t_prev = glfwGetTime();
@@ -45,12 +37,8 @@ int main() {
     f64 t = glfwGetTime();
     f64 dt = t - t_prev;
     t_prev = t;
-    (void)dt;
 
-    // write_to_uniform_buffer(&state.uniform_buffer, &player_paddle_model,
-    // state.uniform_writes.player_paddle_model);
-
-    process_inputs(&state);
+    process_inputs(&state, dt);
     render(&state);
   }
 

@@ -22,8 +22,16 @@ void init_inputs(Inputs *inputs) {
   inputs->right_mouse_clicked = false;
 }
 
-bool key_pressed(Inputs *inputs, Input key) {
+bool key_pressed(const Inputs *inputs, Input key) {
   return inputs->key_inputs[key] && !inputs->prev_key_inputs[key];
+}
+
+bool key_released(const Inputs *inputs, Input key) {
+  return !inputs->key_inputs[key] && inputs->prev_key_inputs[key];
+}
+
+bool key_held(const Inputs *inputs, Input key) {
+  return inputs->key_inputs[key];
 }
 
 void update_mouse_input_glfw(Inputs *inputs, GLFWwindow *window) {

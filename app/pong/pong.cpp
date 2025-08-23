@@ -1,5 +1,6 @@
 #include "pong.h"
 #include "compiled_shaders.h"
+#include "tuke_engine.h"
 #include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
 #include "window.h"
@@ -29,7 +30,7 @@ void init_buffers(State *state) {
       push_uniform(&ub_manager, sizeof(VPUniform));
   state->uniform_writes.arena_model =
       push_uniform(&ub_manager, sizeof(glm::mat4));
-  state->uniform_writes.player_paddle_model =
+  state->uniform_writes.instance_data =
       push_uniform(&ub_manager, sizeof(InstanceDataUBO));
   state->uniform_buffer = create_uniform_buffer(ctx, ub_manager.current_offset);
 }
@@ -65,11 +66,11 @@ void init_descriptor_sets(State *state) {
 
   // paddles and ball
   DescriptorSetBuilder paddle_ball_builder = create_descriptor_set_builder(ctx);
-  add_uniform_buffer_descriptor_set(
-      &paddle_ball_builder, &state->uniform_buffer,
-      state->uniform_writes.player_paddle_model.offset,
-      state->uniform_writes.player_paddle_model.size, 0, 1,
-      VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(&paddle_ball_builder,
+                                    &state->uniform_buffer,
+                                    state->uniform_writes.instance_data.offset,
+                                    state->uniform_writes.instance_data.size, 0,
+                                    1, VK_SHADER_STAGE_VERTEX_BIT, false);
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL] =
       build_descriptor_set(&paddle_ball_builder, state->descriptor_pool);
@@ -185,6 +186,24 @@ State setup_state(const char *title) {
   init_background_material(&state);
   init_paddles_material(&state);
 
+  state.left_paddle_position = left_paddle_pos0;
+  state.right_paddle_position = right_paddle_pos0;
+  state.ball_position = ball_pos0;
+
+  state.left_paddle_speed = 5.0f;
+  state.right_paddle_speed = 5.0f;
+  state.ball_speed = 5.0f;
+
+  state.left_paddle_direction = glm::vec3(0.0f);
+  state.right_paddle_direction = glm::vec3(0.0f);
+  state.ball_direction = glm::vec3(0.0f);
+
+  state.instance_data.model[0] = left_paddle_model0;
+  state.instance_data.model[1] = right_paddle_model0;
+  state.instance_data.model[2] = ball_model0;
+  write_to_uniform_buffer(&state.uniform_buffer, &state.instance_data,
+                          state.uniform_writes.instance_data);
+
   return state;
 }
 
@@ -240,40 +259,82 @@ void render(State *state) {
   ctx->current_frame_index = ctx->current_frame % MAX_FRAMES_IN_FLIGHT;
 }
 
-void process_inputs(State *state) {
-  Inputs *inputs = &state->inputs;
-  update_key_inputs_glfw(inputs, state->context.window);
+void process_inputs_paused(State *state) {
+  const Inputs *inputs = &state->inputs;
+
+  if (key_pressed(inputs, INPUT_KEY_Q)) {
+    printf("unpausing\n");
+    state->game_mode = GAMEMODE_PLAYING;
+  }
+}
+
+void process_inputs_playing(State *state, f32 dt) {
+  const Inputs *inputs = &state->inputs;
+
+  if (key_pressed(inputs, INPUT_KEY_Q)) {
+    printf("pausing\n");
+    state->game_mode = GAMEMODE_PAUSED;
+  }
+
+  glm::vec3 input_direction(0.0f);
+
+  if (key_held(inputs, INPUT_KEY_W)) {
+    input_direction.y += 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_A)) {
+    input_direction.x -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_S)) {
+    input_direction.y -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_D)) {
+    input_direction.x += 1.0f;
+  }
+
+  // TODO make the paddle scale over the course of the game
+  // TODO add a Transform struct so I don't need to multiply the infrequently
+  // changing scale and frequently changing translations
+  if (input_direction.length() > EPSILON) {
+    state->left_paddle_position +=
+        dt * state->left_paddle_speed * input_direction;
+
+    const glm::mat4 left_paddle_translated =
+        glm::translate(glm::mat4(1.0f), state->left_paddle_position);
+    const glm::mat4 left_paddle_model =
+        glm::scale(left_paddle_translated, paddle_scale0);
+    state->instance_data.model[0] = left_paddle_model;
+
+    write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data,
+                            state->uniform_writes.instance_data);
+  }
+}
+
+void process_inputs_main_menu(State *state) {
+  const Inputs *inputs = &state->inputs;
+
+  if (key_pressed(inputs, INPUT_KEY_SPACEBAR)) {
+    printf("starting game\n");
+    state->game_mode = GAMEMODE_PLAYING;
+  }
+}
+
+void process_inputs(State *state, f32 dt) {
+  update_key_inputs_glfw(&state->inputs, state->context.window);
 
   switch (state->game_mode) {
-
   case GAMEMODE_PAUSED: {
-    if (key_pressed(inputs, INPUT_KEY_Q)) {
-      printf("unpausing\n");
-      state->game_mode = GAMEMODE_PLAYING;
-    }
-
+    process_inputs_paused(state);
     break;
-  } // paused
-
+  }
   case GAMEMODE_PLAYING: {
-    if (key_pressed(inputs, INPUT_KEY_Q)) {
-      printf("pausing\n");
-      state->game_mode = GAMEMODE_PAUSED;
-    }
-
+    process_inputs_playing(state, dt);
     break;
-  } // playing
-
+  }
   case GAMEMODE_MAIN_MENU: {
-    if (key_pressed(inputs, INPUT_KEY_SPACEBAR)) {
-      printf("starting game\n");
-      state->game_mode = GAMEMODE_PLAYING;
-    }
-
+    process_inputs_main_menu(state);
     break;
-  } // main_menu
-
-  } // switch(state->game_mode)
+  }
+  }
 }
 
 void write_uniforms(State *state) {}

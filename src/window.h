@@ -42,4 +42,6 @@ GLFWwindow *new_window(bool is_vulkan = false, const char *title = "Tuke",
                        const int width = 800, const int height = 600);
 void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window);
 void init_inputs(Inputs *inputs);
-bool key_pressed(Inputs *inputs, Input key);
+bool key_pressed(const Inputs *inputs, Input key);
+bool key_released(const Inputs *inputs, Input key);
+bool key_held(const Inputs *inputs, Input key);
