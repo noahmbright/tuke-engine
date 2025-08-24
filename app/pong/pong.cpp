@@ -1,5 +1,7 @@
 #include "pong.h"
 #include "compiled_shaders.h"
+#include "physics.h"
+#include "statistics.h"
 #include "tuke_engine.h"
 #include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
@@ -134,7 +136,6 @@ void init_paddles_material(State *state) {
       get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2),
       state->paddle_material.pipeline_layout);
 
-  // TODO bump to 2 and 3
   mat->render_call.instance_count = InstanceDataUBO_model_array_size;
   mat->render_call.graphics_pipeline = mat->pipeline;
   mat->render_call.pipeline_layout = mat->pipeline_layout;
@@ -158,6 +159,8 @@ State setup_state(const char *title) {
   state.arena_dimensions = arena_dimensions0;
   init_inputs(&state.inputs);
   state.game_mode = GAMEMODE_MAIN_MENU;
+  state.movement_mode = MOVEMENT_MODE_VERTICAL_ONLY;
+  state.pong_mode = PONG_MODE_BETWEEN_POINTS;
   state.left_score = state.right_score = 0;
 
   state.context = create_vulkan_context(title);
@@ -203,6 +206,8 @@ State setup_state(const char *title) {
   state.instance_data.model[2] = ball_model0;
   write_to_uniform_buffer(&state.uniform_buffer, &state.instance_data,
                           state.uniform_writes.instance_data);
+
+  state.rngs.ball_direction = create_rng(0x69);
 
   return state;
 }
@@ -262,7 +267,7 @@ void render(State *state) {
 void process_inputs_paused(State *state) {
   const Inputs *inputs = &state->inputs;
 
-  if (key_pressed(inputs, INPUT_KEY_Q)) {
+  if (key_pressed(inputs, INPUT_KEY_ESCAPE)) {
     printf("unpausing\n");
     state->game_mode = GAMEMODE_PLAYING;
   }
@@ -271,24 +276,57 @@ void process_inputs_paused(State *state) {
 void process_inputs_playing(State *state, f32 dt) {
   const Inputs *inputs = &state->inputs;
 
-  if (key_pressed(inputs, INPUT_KEY_Q)) {
+  if (key_pressed(inputs, INPUT_KEY_ESCAPE)) {
     printf("pausing\n");
     state->game_mode = GAMEMODE_PAUSED;
   }
 
   glm::vec3 input_direction(0.0f);
+  bool horizontal_enabled =
+      (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED);
 
   if (key_held(inputs, INPUT_KEY_W)) {
     input_direction.y += 1.0f;
   }
   if (key_held(inputs, INPUT_KEY_A)) {
-    input_direction.x -= 1.0f;
+    input_direction.x -= horizontal_enabled * 1.0f;
   }
   if (key_held(inputs, INPUT_KEY_S)) {
     input_direction.y -= 1.0f;
   }
   if (key_held(inputs, INPUT_KEY_D)) {
-    input_direction.x += 1.0f;
+    input_direction.x += horizontal_enabled * 1.0f;
+  }
+
+  if (key_pressed(inputs, INPUT_KEY_SPACEBAR) &&
+      state->pong_mode == PONG_MODE_BETWEEN_POINTS) {
+
+    // TODO convert to a branchless scheme
+    f32 theta = random_f32_xoroshiro128_plus(&state->rngs.ball_direction);
+    const f32 half_pi = PI / 2.0f;
+    const f32 epsilon = PI / 16.0f;
+    const f32 top_min = half_pi - epsilon;
+    const f32 top_max = half_pi + epsilon;
+    const f32 bottom_min = 3 * half_pi - epsilon;
+    const f32 bottom_max = 3 * half_pi + epsilon;
+
+    while (interval_contains(theta, top_min, top_max) ||
+           interval_contains(theta, bottom_min, bottom_max)) {
+      theta = random_f32_xoroshiro128_plus(&state->rngs.ball_direction);
+    }
+
+    const f32 x = cosf(theta);
+    const f32 y = sinf(theta);
+    state->ball_direction.x = x;
+    state->ball_direction.y = y;
+  }
+
+  // TODO replace with powerup
+  if (key_held(inputs, INPUT_KEY_H)) {
+    state->movement_mode =
+        (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED)
+            ? MOVEMENT_MODE_VERTICAL_ONLY
+            : MOVEMENT_MODE_HORIZONTAL_ENABLED;
   }
 
   // TODO make the paddle scale over the course of the game
@@ -298,14 +336,12 @@ void process_inputs_playing(State *state, f32 dt) {
     state->left_paddle_position +=
         dt * state->left_paddle_speed * input_direction;
 
+    // TODO get around this pattern
     const glm::mat4 left_paddle_translated =
         glm::translate(glm::mat4(1.0f), state->left_paddle_position);
     const glm::mat4 left_paddle_model =
         glm::scale(left_paddle_translated, paddle_scale0);
     state->instance_data.model[0] = left_paddle_model;
-
-    write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data,
-                            state->uniform_writes.instance_data);
   }
 }
 
@@ -318,7 +354,7 @@ void process_inputs_main_menu(State *state) {
   }
 }
 
-void process_inputs(State *state, f32 dt) {
+void process_inputs(State *state, const f32 dt) {
   update_key_inputs_glfw(&state->inputs, state->context.window);
 
   switch (state->game_mode) {
@@ -337,4 +373,15 @@ void process_inputs(State *state, f32 dt) {
   }
 }
 
-void write_uniforms(State *state) {}
+void update_game_state(State *state, const f32 dt) {
+  // TODO convert to a single state struct and use velocity
+  state->ball_position += dt * state->ball_speed * state->ball_direction;
+
+  const glm::mat4 ball_translated =
+      glm::translate(glm::mat4(1.0f), state->ball_position);
+  const glm::mat4 ball_model = glm::scale(ball_translated, ball_scale0);
+  state->instance_data.model[2] = ball_model;
+
+  write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data,
+                          state->uniform_writes.instance_data);
+}

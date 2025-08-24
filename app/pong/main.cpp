@@ -40,6 +40,7 @@ int main() {
 
     process_inputs(&state, dt);
     render(&state);
+    update_game_state(&state, dt);
   }
 
   destroy_state(&state);

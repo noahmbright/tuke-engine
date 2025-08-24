@@ -53,6 +53,7 @@ void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
       [INPUT_KEY_A] = GLFW_KEY_A,
       [INPUT_KEY_S] = GLFW_KEY_S,
       [INPUT_KEY_D] = GLFW_KEY_D,
+      [INPUT_KEY_H] = GLFW_KEY_H,
 
       [INPUT_KEY_LEFT_ARROW] = GLFW_KEY_LEFT,
       [INPUT_KEY_RIGHT_ARROW] = GLFW_KEY_RIGHT,
@@ -93,7 +94,7 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action,
   (void)mods;
   (void)scancode;
 
-  if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+  if (key == GLFW_KEY_O && action == GLFW_PRESS) {
     glfwSetWindowShouldClose(window, GLFW_TRUE);
   }
 }

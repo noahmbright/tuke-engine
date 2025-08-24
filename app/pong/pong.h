@@ -3,6 +3,7 @@
 #include "compiled_shaders.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/glm.hpp"
+#include "statistics.h"
 #include "tuke_engine.h"
 #include "vulkan_base.h"
 
@@ -87,6 +88,16 @@ enum GameMode {
   GAMEMODE_MAIN_MENU,
 };
 
+enum MovementMode {
+  MOVEMENT_MODE_VERTICAL_ONLY,
+  MOVEMENT_MODE_HORIZONTAL_ENABLED,
+};
+
+enum PongMode {
+  PONG_MODE_BETWEEN_POINTS,
+  PONG_MODE_LIVE_BALL,
+};
+
 struct Material {
   DescriptorSetHandle descriptor_set_handle;
   VkPipelineLayout pipeline_layout;
@@ -104,6 +115,16 @@ struct UniformWrites {
   UniformWrite camera_vp;
   UniformWrite arena_model;
   UniformWrite instance_data;
+};
+
+struct Paddle {
+  glm::vec3 position;
+  glm::vec3 velocity;
+  glm::vec3 size;
+};
+
+struct RNGs {
+  RNG ball_direction;
 };
 
 struct State {
@@ -126,10 +147,14 @@ struct State {
   UniformBuffer uniform_buffer;
   UniformWrites uniform_writes;
   BufferManager buffer_manager;
+  InstanceDataUBO instance_data;
 
   Inputs inputs;
+  RNGs rngs;
+
   GameMode game_mode;
-  InstanceDataUBO instance_data;
+  MovementMode movement_mode;
+  PongMode pong_mode;
 
   glm::vec3 left_paddle_position;
   glm::vec3 right_paddle_position;
@@ -144,16 +169,10 @@ struct State {
   glm::vec3 ball_direction;
 };
 
-struct Paddle {
-  glm::vec3 position;
-  glm::vec3 velocity;
-  glm::vec3 size;
-};
-
 State setup_state(const char *title);
 void destroy_state(State *state);
 
 void initialize_textures(u32 num_textures, VulkanTexture *out_textures);
 void render(State *state);
-void process_inputs(State *state, f32 dt);
-void write_uniforms(State *state);
+void process_inputs(State *state, const f32 dt);
+void update_game_state(State *state, const f32 dt);
