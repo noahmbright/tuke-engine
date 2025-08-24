@@ -4,6 +4,7 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/glm.hpp"
 #include "statistics.h"
+#include "transform.h"
 #include "tuke_engine.h"
 #include "vulkan_base.h"
 
@@ -39,7 +40,7 @@ enum EntityIndex {
   ENTITY_LEFT_PADDLE = 0,
   ENTITY_RIGHT_PADDLE,
   ENTITY_BALL,
-  ENTITY_BACKGROUND,
+  // ENTITY_BACKGROUND,
   NUM_ENTITIES
 };
 
@@ -151,6 +152,8 @@ struct State {
 
   Inputs inputs;
   RNGs rngs;
+
+  Transform transforms[NUM_ENTITIES];
 
   GameMode game_mode;
   MovementMode movement_mode;

@@ -2,6 +2,7 @@
 #include "compiled_shaders.h"
 #include "physics.h"
 #include "statistics.h"
+#include "transform.h"
 #include "tuke_engine.h"
 #include "vulkan/vulkan_core.h"
 #include "vulkan_base.h"
@@ -152,6 +153,28 @@ void init_paddles_material(State *state) {
   mat->render_call.is_indexed = true;
 }
 
+static void init_transforms(State *state) {
+  Transform *transforms = state->transforms;
+
+  transforms[ENTITY_LEFT_PADDLE] =
+      create_transform(&state->left_paddle_position);
+  transforms[ENTITY_LEFT_PADDLE].scale = &paddle_scale0;
+
+  transforms[ENTITY_RIGHT_PADDLE] =
+      create_transform(&state->right_paddle_position);
+  transforms[ENTITY_RIGHT_PADDLE].scale = &paddle_scale0;
+
+  transforms[ENTITY_BALL] = create_transform(&state->ball_position);
+  transforms[ENTITY_BALL].scale = &ball_scale0;
+
+  for (u32 i = 0; i < NUM_ENTITIES; i++) {
+    generate_transform(&state->transforms[i], &state->instance_data.model[i]);
+  }
+
+  write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data,
+                          state->uniform_writes.instance_data);
+}
+
 State setup_state(const char *title) {
   init_vertex_layout_registry();
 
@@ -201,13 +224,8 @@ State setup_state(const char *title) {
   state.right_paddle_direction = glm::vec3(0.0f);
   state.ball_direction = glm::vec3(0.0f);
 
-  state.instance_data.model[0] = left_paddle_model0;
-  state.instance_data.model[1] = right_paddle_model0;
-  state.instance_data.model[2] = ball_model0;
-  write_to_uniform_buffer(&state.uniform_buffer, &state.instance_data,
-                          state.uniform_writes.instance_data);
-
   state.rngs.ball_direction = create_rng(0x69);
+  init_transforms(&state);
 
   return state;
 }
@@ -321,7 +339,7 @@ void process_inputs_playing(State *state, f32 dt) {
     state->ball_direction.y = y;
   }
 
-  // TODO replace with powerup
+  // TODO Pong: replace with powerup
   if (key_held(inputs, INPUT_KEY_H)) {
     state->movement_mode =
         (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED)
@@ -329,19 +347,11 @@ void process_inputs_playing(State *state, f32 dt) {
             : MOVEMENT_MODE_HORIZONTAL_ENABLED;
   }
 
-  // TODO make the paddle scale over the course of the game
-  // TODO add a Transform struct so I don't need to multiply the infrequently
-  // changing scale and frequently changing translations
+  // TODO Pong: make the paddle scale over the course of the game
   if (input_direction.length() > EPSILON) {
     state->left_paddle_position +=
         dt * state->left_paddle_speed * input_direction;
-
-    // TODO get around this pattern
-    const glm::mat4 left_paddle_translated =
-        glm::translate(glm::mat4(1.0f), state->left_paddle_position);
-    const glm::mat4 left_paddle_model =
-        glm::scale(left_paddle_translated, paddle_scale0);
-    state->instance_data.model[0] = left_paddle_model;
+    state->transforms[ENTITY_LEFT_PADDLE].dirty = true;
   }
 }
 
@@ -374,13 +384,21 @@ void process_inputs(State *state, const f32 dt) {
 }
 
 void update_game_state(State *state, const f32 dt) {
+  if (state->game_mode == GAMEMODE_PAUSED) {
+    return;
+  }
+
   // TODO convert to a single state struct and use velocity
   state->ball_position += dt * state->ball_speed * state->ball_direction;
+  state->transforms[ENTITY_BALL].dirty = true;
 
-  const glm::mat4 ball_translated =
-      glm::translate(glm::mat4(1.0f), state->ball_position);
-  const glm::mat4 ball_model = glm::scale(ball_translated, ball_scale0);
-  state->instance_data.model[2] = ball_model;
+  for (u32 i = 0; i < NUM_ENTITIES; i++) {
+    Transform transform = state->transforms[i];
+
+    if (transform.dirty) {
+      generate_transform(&transform, &state->instance_data.model[i]);
+    }
+  }
 
   write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data,
                           state->uniform_writes.instance_data);
