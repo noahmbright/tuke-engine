@@ -10,6 +10,7 @@ file(GLOB_RECURSE ENGINE_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/stb_image.cpp
     ${CMAKE_SOURCE_DIR}/src/utils.cpp
     ${CMAKE_SOURCE_DIR}/src/transform.cpp
+    ${CMAKE_SOURCE_DIR}/src/physics.cpp
 )
 
 add_library(engine STATIC ${ENGINE_SOURCE_FILES})

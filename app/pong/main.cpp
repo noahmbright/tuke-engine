@@ -16,8 +16,6 @@ int main() {
 
   // TODO make camera matrices only on camera movement
   // TODO buffer only on resize
-  // TODO when can I most efficiently multiply matrices together, view/proj?
-  //    When would that not be possible?
   int height, width;
   glfwGetFramebufferSize(ctx->window, &width, &height);
   const CameraMatrices camera_matrices =

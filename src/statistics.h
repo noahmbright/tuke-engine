@@ -57,3 +57,9 @@ static inline f32 random_f32_xoroshiro128_plus(RNG *rng) {
   const f32 x = 1.0f / 16777216.0f;
   return n * x;
 }
+
+static inline f32 random_f32_in_range_xoroshiro128_plus(RNG *rng, f32 min,
+                                                        f32 max) {
+  f32 rand = random_f32_xoroshiro128_plus(rng);
+  return (max - min) * rand + min;
+}

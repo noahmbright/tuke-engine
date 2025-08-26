@@ -15,3 +15,6 @@ static inline glm::vec2 random_unit_vec2(RNG *rng) {
 }
 
 glm::vec3 random_unit_vec3(RNG *rng);
+
+bool aabb_collision(glm::vec3 pos1, glm::vec3 size1, glm::vec3 pos2,
+                    glm::vec3 size2);

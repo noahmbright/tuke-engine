@@ -61,8 +61,8 @@ void init_descriptor_sets(State *state) {
                                     1, VK_SHADER_STAGE_VERTEX_BIT, false);
 
   add_texture_descriptor_set(
-      &background_builder, &state->textures[TEXTURE_GIRL_FACE], state->sampler,
-      1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+      &background_builder, &state->textures[TEXTURE_FIELD_BACKGROUND],
+      state->sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND] =
       build_descriptor_set(&background_builder, state->descriptor_pool);
@@ -157,14 +157,14 @@ static void init_transforms(State *state) {
   Transform *transforms = state->transforms;
 
   transforms[ENTITY_LEFT_PADDLE] =
-      create_transform(&state->left_paddle_position);
+      create_transform(&state->positions[ENTITY_LEFT_PADDLE]);
   transforms[ENTITY_LEFT_PADDLE].scale = &paddle_scale0;
 
   transforms[ENTITY_RIGHT_PADDLE] =
-      create_transform(&state->right_paddle_position);
+      create_transform(&state->positions[ENTITY_RIGHT_PADDLE]);
   transforms[ENTITY_RIGHT_PADDLE].scale = &paddle_scale0;
 
-  transforms[ENTITY_BALL] = create_transform(&state->ball_position);
+  transforms[ENTITY_BALL] = create_transform(&state->positions[ENTITY_BALL]);
   transforms[ENTITY_BALL].scale = &ball_scale0;
 
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
@@ -212,17 +212,21 @@ State setup_state(const char *title) {
   init_background_material(&state);
   init_paddles_material(&state);
 
-  state.left_paddle_position = left_paddle_pos0;
-  state.right_paddle_position = right_paddle_pos0;
-  state.ball_position = ball_pos0;
+  state.positions[ENTITY_LEFT_PADDLE] = left_paddle_pos0;
+  state.positions[ENTITY_RIGHT_PADDLE] = right_paddle_pos0;
+  state.positions[ENTITY_BALL] = ball_pos0;
 
-  state.left_paddle_speed = 5.0f;
-  state.right_paddle_speed = 5.0f;
-  state.ball_speed = 5.0f;
+  state.velocities[ENTITY_LEFT_PADDLE] = glm::vec3(0.0f);
+  state.velocities[ENTITY_RIGHT_PADDLE] = glm::vec3(0.0f);
+  state.velocities[ENTITY_BALL] = glm::vec3(0.0f);
 
-  state.left_paddle_direction = glm::vec3(0.0f);
-  state.right_paddle_direction = glm::vec3(0.0f);
-  state.ball_direction = glm::vec3(0.0f);
+  state.scales[ENTITY_LEFT_PADDLE] = paddle_scale0;
+  state.scales[ENTITY_RIGHT_PADDLE] = paddle_scale0;
+  state.scales[ENTITY_BALL] = ball_scale0;
+
+  state.left_paddle_speed = speed0;
+  state.right_paddle_speed = speed0;
+  state.ball_speed = speed0;
 
   state.rngs.ball_direction = create_rng(0x69);
   init_transforms(&state);
@@ -319,8 +323,9 @@ void process_inputs_playing(State *state, f32 dt) {
   if (key_pressed(inputs, INPUT_KEY_SPACEBAR) &&
       state->pong_mode == PONG_MODE_BETWEEN_POINTS) {
 
-    // TODO convert to a branchless scheme
-    f32 theta = random_f32_xoroshiro128_plus(&state->rngs.ball_direction);
+    // TODO engine: convert to a branchless scheme
+    f32 theta =
+        2 * PI * random_f32_xoroshiro128_plus(&state->rngs.ball_direction);
     const f32 half_pi = PI / 2.0f;
     const f32 epsilon = PI / 16.0f;
     const f32 top_min = half_pi - epsilon;
@@ -335,12 +340,14 @@ void process_inputs_playing(State *state, f32 dt) {
 
     const f32 x = cosf(theta);
     const f32 y = sinf(theta);
-    state->ball_direction.x = x;
-    state->ball_direction.y = y;
+    state->velocities[ENTITY_BALL].x = state->ball_speed * x;
+    state->velocities[ENTITY_BALL].y = state->ball_speed * y;
+
+    state->pong_mode = PONG_MODE_LIVE_BALL;
   }
 
   // TODO Pong: replace with powerup
-  if (key_held(inputs, INPUT_KEY_H)) {
+  if (key_pressed(inputs, INPUT_KEY_H)) {
     state->movement_mode =
         (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED)
             ? MOVEMENT_MODE_VERTICAL_ONLY
@@ -349,7 +356,7 @@ void process_inputs_playing(State *state, f32 dt) {
 
   // TODO Pong: make the paddle scale over the course of the game
   if (input_direction.length() > EPSILON) {
-    state->left_paddle_position +=
+    state->positions[ENTITY_LEFT_PADDLE] +=
         dt * state->left_paddle_speed * input_direction;
     state->transforms[ENTITY_LEFT_PADDLE].dirty = true;
   }
@@ -383,21 +390,118 @@ void process_inputs(State *state, const f32 dt) {
   }
 }
 
+void handle_collisions(State *state) {
+  glm::vec3 *positions = state->positions;
+  glm::vec3 *scales = state->scales;
+
+  glm::vec3 ball_pos = positions[ENTITY_BALL];
+  glm::vec3 ball_scale = scales[ENTITY_BALL];
+
+  glm::vec3 left_paddle_pos = positions[ENTITY_LEFT_PADDLE];
+  glm::vec3 left_paddle_scale = scales[ENTITY_LEFT_PADDLE];
+
+  glm::vec3 right_paddle_pos = positions[ENTITY_RIGHT_PADDLE];
+  glm::vec3 right_paddle_scale = scales[ENTITY_RIGHT_PADDLE];
+
+  // TODO Pong: Maybe have this resize dynamically
+  f32 arena_horizontal_boundary = arena_dimensions_x0 / 2.0f;
+  f32 arena_vertical_boundary = arena_dimensions_y0 / 2.0f;
+
+  // collisions with boundaries
+  if (ball_pos.x + 0.5f * ball_scale.x > arena_horizontal_boundary) {
+    state->left_score++;
+    positions[ENTITY_BALL] = ball_pos0;
+    state->pong_mode = PONG_MODE_BETWEEN_POINTS;
+    state->velocities[ENTITY_BALL] = glm::vec3(0.0f);
+  }
+  if (ball_pos.x - 0.5f * ball_scale.x < -arena_horizontal_boundary) {
+    state->right_score++;
+    positions[ENTITY_BALL] = ball_pos0;
+    state->pong_mode = PONG_MODE_BETWEEN_POINTS;
+    state->velocities[ENTITY_BALL] = glm::vec3(0.0f);
+  }
+
+  if (ball_pos.y + 0.5f * ball_scale.y > arena_vertical_boundary) {
+    state->velocities[ENTITY_BALL].y = -state->velocities[ENTITY_BALL].y;
+    ball_pos.y = arena_vertical_boundary - 0.5f * ball_scale.y;
+  }
+  if (ball_pos.y - 0.5f * ball_scale.y < -arena_vertical_boundary) {
+    state->velocities[ENTITY_BALL].y = -state->velocities[ENTITY_BALL].y;
+    ball_pos.y = -arena_vertical_boundary + 0.5f * ball_scale.y;
+  }
+
+  // paddle intersects with arena boundary
+  // left paddle
+  // vertical
+  if (left_paddle_pos.y + 0.5f * left_paddle_scale.y >
+      arena_vertical_boundary) {
+    positions[ENTITY_LEFT_PADDLE].y =
+        arena_vertical_boundary - 0.5f * left_paddle_scale.y;
+  }
+
+  if (left_paddle_pos.y - 0.5f * left_paddle_scale.y <
+      -arena_vertical_boundary) {
+    positions[ENTITY_LEFT_PADDLE].y =
+        -arena_vertical_boundary + 0.5f * left_paddle_scale.y;
+  }
+
+  // horizontal
+  if (left_paddle_pos.x + 0.5f * left_paddle_scale.x >
+      arena_horizontal_boundary) {
+    positions[ENTITY_LEFT_PADDLE].x =
+        arena_horizontal_boundary - 0.5f * left_paddle_scale.x;
+  }
+
+  if (left_paddle_pos.x - 0.5f * left_paddle_scale.x <
+      -arena_horizontal_boundary) {
+    positions[ENTITY_LEFT_PADDLE].x =
+        -arena_horizontal_boundary + 0.5f * left_paddle_scale.x;
+  }
+
+  // right paddle
+  if (right_paddle_pos.y - 0.5f * right_paddle_scale.y <
+      -arena_vertical_boundary) {
+    positions[ENTITY_RIGHT_PADDLE].y =
+        -arena_vertical_boundary + 0.5f * right_paddle_scale.y;
+  }
+
+  if (right_paddle_pos.y + 0.5f * right_paddle_scale.y >
+      arena_vertical_boundary) {
+    positions[ENTITY_RIGHT_PADDLE].y =
+        arena_vertical_boundary - 0.5f * right_paddle_scale.y;
+  }
+
+  // TODO pong: do swept collision detection and debouncing
+  // TODO pong: handle collisions with top and bottom of paddle
+  if (aabb_collision(ball_pos, ball_scale, left_paddle_pos,
+                     left_paddle_scale) ||
+      aabb_collision(ball_pos, ball_scale, right_paddle_pos,
+                     right_paddle_scale)) {
+    state->velocities[ENTITY_BALL].x = -state->velocities[ENTITY_BALL].x;
+  }
+}
+
 void update_game_state(State *state, const f32 dt) {
   if (state->game_mode == GAMEMODE_PAUSED) {
     return;
   }
 
-  // TODO convert to a single state struct and use velocity
-  state->ball_position += dt * state->ball_speed * state->ball_direction;
-  state->transforms[ENTITY_BALL].dirty = true;
+  if (state->positions[ENTITY_BALL].y >
+      state->positions[ENTITY_RIGHT_PADDLE].y) {
+    state->velocities[ENTITY_RIGHT_PADDLE].y = cpu_speed0;
+  } else {
+    state->velocities[ENTITY_RIGHT_PADDLE].y = -cpu_speed0;
+  }
 
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
-    Transform transform = state->transforms[i];
+    state->positions[i] += dt * state->velocities[i];
+  }
 
-    if (transform.dirty) {
-      generate_transform(&transform, &state->instance_data.model[i]);
-    }
+  handle_collisions(state);
+
+  for (u32 i = 0; i < NUM_ENTITIES; i++) {
+    Transform *transform = &state->transforms[i];
+    generate_transform(transform, &state->instance_data.model[i]);
   }
 
   write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data,

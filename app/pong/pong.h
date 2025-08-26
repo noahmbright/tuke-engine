@@ -8,10 +8,8 @@
 #include "tuke_engine.h"
 #include "vulkan_base.h"
 
-#define MAT4_SIZE (sizeof(glm::mat4))
-
 // clang-format off
-// start with rectangles, TODO cube
+// start with rectangles, TODO Pong: cube
 // TL, BL, BR, TR
 const f32 paddle_vertices[] = {
    // x, y, z         u, v
@@ -43,6 +41,9 @@ enum EntityIndex {
   // ENTITY_BACKGROUND,
   NUM_ENTITIES
 };
+
+const f32 speed0 = 12.5f;
+const f32 cpu_speed0 = .6 * speed0;
 
 const glm::vec3 paddle_scale0{1.0f, 4.0f, 1.0f};
 const glm::vec3 ball_scale0{0.5f, 0.5f, 0.5f};
@@ -153,23 +154,24 @@ struct State {
   Inputs inputs;
   RNGs rngs;
 
+  // TODO engine: figure out a system for batching rewrites that occur often
+  // vs ones that occur infrequently
+  // allow for a system that avoids recomputing matrix multiplications for
+  // things that don't change
+  //
+  // this stuff all should be updated every frame, only the paddles and ball
   Transform transforms[NUM_ENTITIES];
+  glm::vec3 positions[NUM_ENTITIES];
+  glm::vec3 velocities[NUM_ENTITIES];
+  glm::vec3 scales[NUM_ENTITIES];
 
   GameMode game_mode;
   MovementMode movement_mode;
   PongMode pong_mode;
 
-  glm::vec3 left_paddle_position;
-  glm::vec3 right_paddle_position;
-  glm::vec3 ball_position;
-
   f32 left_paddle_speed;
   f32 right_paddle_speed;
   f32 ball_speed;
-
-  glm::vec3 left_paddle_direction;
-  glm::vec3 right_paddle_direction;
-  glm::vec3 ball_direction;
 };
 
 State setup_state(const char *title);
