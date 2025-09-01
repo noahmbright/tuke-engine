@@ -1,8 +1,10 @@
 #pragma once
 
+#include "camera.h"
 #include "compiled_shaders.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/glm.hpp"
+#include "physics.h"
 #include "statistics.h"
 #include "transform.h"
 #include "tuke_engine.h"
@@ -42,8 +44,11 @@ enum EntityIndex {
   NUM_ENTITIES
 };
 
+const f64 powerup_draw_interval_in_sec = 5.0f;
+const f32 prob_powerup_spawns = 0.2f;
+
 const f32 speed0 = 12.5f;
-const f32 cpu_speed0 = .6 * speed0;
+const f32 cpu_speed0 = .8 * speed0;
 
 const glm::vec3 paddle_scale0{1.0f, 4.0f, 1.0f};
 const glm::vec3 ball_scale0{0.5f, 0.5f, 0.5f};
@@ -127,6 +132,7 @@ struct Paddle {
 
 struct RNGs {
   RNG ball_direction;
+  RNG powerup_spawn;
 };
 
 struct State {
@@ -172,6 +178,11 @@ struct State {
   f32 left_paddle_speed;
   f32 right_paddle_speed;
   f32 ball_speed;
+
+  f64 time_since_last_powerup_draw;
+
+  Camera camera;
+  ScreenShake screen_shake;
 };
 
 State setup_state(const char *title);

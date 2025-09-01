@@ -1100,6 +1100,9 @@ PipelineConfig create_default_graphics_pipeline_config(
 VulkanContext create_vulkan_context(const char *title) {
   VulkanContext context;
   context.window = new_window(true /* is_vulkan*/, title);
+  glfwGetFramebufferSize(context.window, &context.window_framebuffer_width,
+                         &context.window_framebuffer_height);
+
   context.instance = create_instance(title);
 #ifdef TUKE_DISABLE_VULKAN_VALIDATION
   context.debug_messenger = VK_NULL_HANDLE;

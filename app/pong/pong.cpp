@@ -1,4 +1,5 @@
 #include "pong.h"
+#include "camera.h"
 #include "compiled_shaders.h"
 #include "physics.h"
 #include "statistics.h"
@@ -228,8 +229,45 @@ State setup_state(const char *title) {
   state.right_paddle_speed = speed0;
   state.ball_speed = speed0;
 
+  state.time_since_last_powerup_draw = 0.0f;
+
   state.rngs.ball_direction = create_rng(0x69);
+  state.rngs.powerup_spawn = create_rng(0x420);
   init_transforms(&state);
+
+  glm::vec3 camera_pos{0.0f, 0.0f, 30.0f};
+  state.camera = new_camera(CameraType::Camera2D, camera_pos);
+  state.camera.y_needs_inverted = true;
+
+  // TODO how to get model onto GPU? uniform? something else? push constant?
+  glm::mat4 arena_model = glm::scale(glm::mat4(1.0f), arena_dimensions0);
+
+  // TODO make camera matrices only on camera movement
+  // TODO buffer only on resize
+  const CameraMatrices camera_matrices =
+      new_camera_matrices(&state.camera, state.context.window_framebuffer_width,
+                          state.context.window_framebuffer_height);
+  glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
+
+  // uniform buffer structure: camera vp, background model, paddle model
+  write_to_uniform_buffer(&state.uniform_buffer, &camera_vp,
+                          state.uniform_writes.camera_vp);
+  write_to_uniform_buffer(&state.uniform_buffer, &arena_model,
+                          state.uniform_writes.arena_model);
+
+  state.screen_shake.x_oscillator.phase = 0.0f;
+  state.screen_shake.x_oscillator.omega = 10.0f;
+  state.screen_shake.x_oscillator.decay_constant = 4.0f;
+  state.screen_shake.x_oscillator.amplitude = 0.3f;
+
+  state.screen_shake.y_oscillator.phase = 45.0f;
+  state.screen_shake.y_oscillator.omega = 10.0f;
+  state.screen_shake.y_oscillator.decay_constant = 4.0f;
+  state.screen_shake.y_oscillator.amplitude = 0.3f;
+
+  state.screen_shake.active = false;
+  state.screen_shake.time_elapsed = 0.0f;
+  state.screen_shake.cutoff_duration = 0.5f;
 
   return state;
 }
@@ -478,12 +516,52 @@ void handle_collisions(State *state) {
       aabb_collision(ball_pos, ball_scale, right_paddle_pos,
                      right_paddle_scale)) {
     state->velocities[ENTITY_BALL].x = -state->velocities[ENTITY_BALL].x;
+    state->screen_shake.active = true;
   }
+}
+
+void update_screen_shake(State *state, f32 dt) {
+
+  i32 width = state->context.window_framebuffer_width;
+  i32 height = state->context.window_framebuffer_height;
+
+  CameraMatrices camera_matrices;
+  state->screen_shake.time_elapsed += dt;
+
+  if (state->screen_shake.time_elapsed > state->screen_shake.cutoff_duration) {
+    camera_matrices = new_camera_matrices(&state->camera, width, height);
+    state->screen_shake.time_elapsed = 0.0f;
+    state->screen_shake.active = false;
+  } else {
+    f32 dx = evaluate_damped_harmonic_oscillator(
+        state->screen_shake.x_oscillator, state->screen_shake.time_elapsed);
+    f32 dy = evaluate_damped_harmonic_oscillator(
+        state->screen_shake.y_oscillator, state->screen_shake.time_elapsed);
+
+    camera_matrices = new_camera_matrices_with_offset(
+        &state->camera, glm::vec3(dx, dy, 0.0f), width, height);
+  }
+
+  glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
+  write_to_uniform_buffer(&state->uniform_buffer, &camera_vp,
+                          state->uniform_writes.camera_vp);
 }
 
 void update_game_state(State *state, const f32 dt) {
   if (state->game_mode == GAMEMODE_PAUSED) {
     return;
+  }
+
+  state->time_since_last_powerup_draw += dt;
+  if (state->time_since_last_powerup_draw > powerup_draw_interval_in_sec) {
+    state->time_since_last_powerup_draw -= powerup_draw_interval_in_sec;
+
+    f32 prob_to_spawn =
+        random_f32_xoroshiro128_plus(&state->rngs.powerup_spawn);
+    if (prob_to_spawn < prob_powerup_spawns) {
+      // TODO spawn powerup
+      (void)prob_to_spawn;
+    }
   }
 
   if (state->positions[ENTITY_BALL].y >
@@ -506,4 +584,8 @@ void update_game_state(State *state, const f32 dt) {
 
   write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data,
                           state->uniform_writes.instance_data);
+
+  if (state->screen_shake.active) {
+    update_screen_shake(state, dt);
+  }
 }

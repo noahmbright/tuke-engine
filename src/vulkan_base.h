@@ -161,6 +161,9 @@ struct VulkanContext {
   VkSurfaceFormatKHR surface_format;
   VkExtent2D swapchain_extent;
   SwapchainStorage swapchain_storage;
+  i32 window_framebuffer_width;
+  i32 window_framebuffer_height;
+
   // TODO get this out of the context, add a render pass manager
   VkRenderPass render_pass;
   VkFramebuffer framebuffers[NUM_SWAPCHAIN_IMAGES];

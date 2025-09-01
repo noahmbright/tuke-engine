@@ -92,16 +92,6 @@ Camera new_camera(CameraType type, const glm::vec3 &pos,
     break;
   }
 
-  // TODO where does this stuff go?
-  // unsigned ubo;
-  // glGenBuffers(1, &ubo);
-  // glBindBuffer(GL_UNIFORM_BUFFER, ubo);
-  // glBufferData(GL_UNIFORM_BUFFER, sizeof(CameraMatrices), nullptr,
-  //             GL_DYNAMIC_DRAW);
-  // glBindBuffer(GL_UNIFORM_BUFFER, 0);
-  // glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
-  // camera.ubo = ubo;
-
   return camera;
 }
 
@@ -138,6 +128,12 @@ glm::mat4 look_at_from_camera(const Camera *camera) {
                      camera->up);
 }
 
+glm::mat4 look_at_from_camera_with_offset(const Camera *camera,
+                                          glm::vec3 offset) {
+  glm::vec3 pos = camera->position + offset;
+  return glm::lookAt(pos, pos + camera->direction, camera->up);
+}
+
 glm::mat4 perspective_projection_from_camera(const Camera *camera,
                                              u32 window_width,
                                              u32 window_height) {
@@ -154,6 +150,17 @@ CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width,
                                    u32 window_height) {
   CameraMatrices camera_matrices;
   camera_matrices.view = look_at_from_camera(camera);
+  camera_matrices.projection =
+      perspective_projection_from_camera(camera, window_width, window_height);
+  return camera_matrices;
+}
+
+CameraMatrices new_camera_matrices_with_offset(const Camera *camera,
+                                               glm::vec3 offset,
+                                               u32 window_width,
+                                               u32 window_height) {
+  CameraMatrices camera_matrices;
+  camera_matrices.view = look_at_from_camera_with_offset(camera, offset);
   camera_matrices.projection =
       perspective_projection_from_camera(camera, window_width, window_height);
   return camera_matrices;

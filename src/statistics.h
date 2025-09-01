@@ -63,3 +63,10 @@ static inline f32 random_f32_in_range_xoroshiro128_plus(RNG *rng, f32 min,
   f32 rand = random_f32_xoroshiro128_plus(rng);
   return (max - min) * rand + min;
 }
+
+// noise
+static inline f32 quadratic_fade(f32 t) { return t * t * (3 - 2 * t); }
+
+static inline f32 quintic_fade(f32 t) {
+  return t * t * t * (t * (6.0f * t - 15.0f) + 10.0f * t);
+}

@@ -2,6 +2,20 @@
 
 #include "statistics.h"
 #include "tuke_engine.h"
+#include <math.h>
+
+struct DampedHarmonicOscillator {
+  f32 omega; // angular frequency
+  f32 phase;
+  f32 amplitude;
+  f32 decay_constant;
+};
+
+static inline f32
+evaluate_damped_harmonic_oscillator(DampedHarmonicOscillator dho, f32 t) {
+  return dho.amplitude * expf(-dho.decay_constant * t) *
+         cosf(dho.omega * t + dho.phase);
+}
 
 static inline bool interval_contains(f32 x, f32 min, f32 max) {
   return max >= x && x >= min;
