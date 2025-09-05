@@ -2,6 +2,8 @@
 
 #include "tuke_engine.h"
 
+#define STATIC_ALIAS_THRESHOLD 32
+
 // use SplitMix64 and xoroshiro128+, requiring up to 128 bits
 struct RNG {
   u64 state;
@@ -70,3 +72,24 @@ static inline f32 quadratic_fade(f32 t) { return t * t * (3 - 2 * t); }
 static inline f32 quintic_fade(f32 t) {
   return t * t * t * (t * (6.0f * t - 15.0f) + 10.0f * t);
 }
+
+// alias method
+// https://en.wikipedia.org/wiki/Alias_method
+// potentially requires freed after usage using destroy_alias_method
+struct AliasMethod {
+  RNG rng;
+  u32 n;
+
+  f32 *probability_table;
+  u32 *alias_table;
+
+  f32 static_probability_table[STATIC_ALIAS_THRESHOLD];
+  u32 static_alias_table[STATIC_ALIAS_THRESHOLD];
+  u8 *dynamic_buffer;
+};
+
+u32 draw_alias_method(AliasMethod *alias_method);
+void destroy_alias_method(AliasMethod *alias_method);
+void init_alias_method(AliasMethod *alias_method, u32 n, const f32 *weights,
+                       u64 seed);
+void log_alias_method(const AliasMethod *alias_method);

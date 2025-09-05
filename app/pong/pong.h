@@ -10,6 +10,9 @@
 #include "tuke_engine.h"
 #include "vulkan_base.h"
 
+#define MAX_POWERUPS (8)
+#define POWERUP_MAX (MAX_POWERUPS - 1)
+
 // clang-format off
 // start with rectangles, TODO Pong: cube
 // TL, BL, BR, TR
@@ -44,7 +47,7 @@ enum EntityIndex {
   NUM_ENTITIES
 };
 
-const f64 powerup_draw_interval_in_sec = 5.0f;
+const f64 powerup_draw_interval_in_sec = 0.0000000001f;
 const f32 prob_powerup_spawns = 0.2f;
 
 const f32 speed0 = 12.5f;
@@ -135,6 +138,26 @@ struct RNGs {
   RNG powerup_spawn;
 };
 
+enum PowerUpType {
+  POWERUP_BIG_PADDLE,
+  POWERUP_KILL_OPPONENT,
+
+  NUM_POWERUPS
+};
+
+const f32 powerup_likelihoods[NUM_POWERUPS] = {
+    [POWERUP_BIG_PADDLE] = 1.0f,
+    [POWERUP_KILL_OPPONENT] = 0.5f,
+};
+
+const glm::vec3 powerup_scale{1.0f, 1.f, 1.0f};
+
+struct PowerUp {
+  PowerUpType type;
+  f32 time_remaining;
+  glm::vec4 position;
+};
+
 struct State {
   u32 right_score, left_score;
 
@@ -183,6 +206,12 @@ struct State {
 
   Camera camera;
   ScreenShake screen_shake;
+
+  u32 drawn0 = 0;
+  u32 drawn1 = 0;
+  PowerUp powerups[MAX_POWERUPS];
+  u32 current_powerup_index;
+  AliasMethod powerup_alias_table;
 };
 
 State setup_state(const char *title);

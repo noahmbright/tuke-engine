@@ -39,7 +39,6 @@ struct ScreenShake {
   bool active;
   f32 time_elapsed;
   f32 cutoff_duration; // seconds
-  f32 y_phase_shift;
 };
 
 Camera new_camera(CameraType type, const glm::vec3 &pos = {0.0, 0.0, 1.0},

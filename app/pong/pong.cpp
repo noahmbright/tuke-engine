@@ -269,6 +269,13 @@ State setup_state(const char *title) {
   state.screen_shake.time_elapsed = 0.0f;
   state.screen_shake.cutoff_duration = 0.5f;
 
+  init_alias_method(&state.powerup_alias_table, NUM_POWERUPS,
+                    powerup_likelihoods, 0x69420);
+  log_alias_method(&state.powerup_alias_table);
+
+  for (u32 i = 0; i < MAX_POWERUPS; i++) {
+  }
+
   return state;
 }
 
@@ -559,8 +566,7 @@ void update_game_state(State *state, const f32 dt) {
     f32 prob_to_spawn =
         random_f32_xoroshiro128_plus(&state->rngs.powerup_spawn);
     if (prob_to_spawn < prob_powerup_spawns) {
-      // TODO spawn powerup
-      (void)prob_to_spawn;
+      u32 powerup_index = draw_alias_method(&state->powerup_alias_table);
     }
   }
 
