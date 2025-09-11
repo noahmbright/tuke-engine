@@ -223,6 +223,18 @@ struct UniformBuffer {
   u32 size;
 };
 
+struct ReadOnlyStorageBuffer {
+  VulkanBuffer vulkan_buffer;
+  u8 *mapped;
+  u32 size;
+};
+
+struct ReadWriteStorageBuffer {
+  VulkanBuffer vulkan_buffer;
+  u8 *mapped;
+  u32 size;
+};
+
 struct ViewportState {
   VkViewport viewport;
   VkRect2D scissor;
@@ -262,6 +274,8 @@ enum BufferType {
   BUFFER_TYPE_INDEX,
   BUFFER_TYPE_UNIFORM,
   BUFFER_TYPE_COHERENT_STREAMING,
+  BUFFER_TYPE_READONLY_STORAGE,
+  BUFFER_TYPE_READ_WRITE_STORAGE,
 };
 
 struct StagingArena {
@@ -388,6 +402,19 @@ struct CoherentStreamingBuffer {
   u32 head;
 };
 
+struct ColorDepthFramebuffer {
+  VkRenderPass render_pass;
+  VkFramebuffer framebuffer;
+
+  VkImage color_image;
+  VkDeviceMemory color_image_device_memory;
+  VkImageView color_image_view;
+
+  VkImage depth_image;
+  VkDeviceMemory depth_image_device_memory;
+  VkImageView depth_image_view;
+};
+
 VulkanContext create_vulkan_context(const char *title);
 void destroy_vulkan_context(VulkanContext *);
 VulkanBuffer create_buffer_explicit(const VulkanContext *context,
@@ -405,12 +432,13 @@ void end_single_use_command_buffer(const VulkanContext *context,
 VkShaderModule create_shader_module(VkDevice device, const u32 *code,
                                     u32 code_size);
 
-VkPipeline create_graphics_pipeline(VkDevice device, PipelineConfig *config,
+VkPipeline create_graphics_pipeline(VkDevice device,
+                                    const PipelineConfig *config,
                                     VkPipelineCache pipeline_cache);
 
 VkPipeline create_default_graphics_pipeline(
-    const VulkanContext *context, const char *vertex_shader_name,
-    const char *fragment_shader_name,
+    const VulkanContext *context, VkRenderPass render_pass,
+    const char *vertex_shader_name, const char *fragment_shader_name,
     const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
     VkPipelineLayout pipeline_layout);
 
@@ -424,7 +452,8 @@ ViewportState create_viewport_state_xy(VkExtent2D swapchain_extent, u32 x,
                                        u32 y);
 
 void begin_render_pass(const VulkanContext *context,
-                       VkCommandBuffer command_buffer,
+                       VkCommandBuffer command_buffer, VkRenderPass render_pass,
+                       VkFramebuffer framebuffer,
                        const VkClearValue *clear_value, u32 clear_value_count,
                        VkOffset2D offset);
 void submit_and_present(const VulkanContext *context,
@@ -486,8 +515,8 @@ UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager,
                           u32 size);
 
 PipelineConfig create_default_graphics_pipeline_config(
-    const VulkanContext *context, const char *vertex_shader_name,
-    const char *fragment_shader_name,
+    const VulkanContext *context, VkRenderPass render_pass,
+    const char *vertex_shader_name, const char *fragment_shader_name,
     const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
     VkPipelineLayout pipeline_layout);
 
@@ -544,10 +573,10 @@ void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder,
                                        VkShaderStageFlags stage_flags,
                                        bool dynamic);
 
-void add_texture_descriptor_set(DescriptorSetBuilder *builder,
-                                VulkanTexture *texture, VkSampler sampler,
-                                u32 binding, u32 descriptor_count,
-                                VkShaderStageFlags stage_flags);
+void add_image_descriptor_set(DescriptorSetBuilder *builder,
+                              VkImageView image_view, VkSampler sampler,
+                              u32 binding, u32 descriptor_count,
+                              VkShaderStageFlags stage_flags);
 
 void destroy_descriptor_set_handle(VkDevice device,
                                    DescriptorSetHandle *handle);
@@ -575,3 +604,42 @@ CoherentStreamingBuffer
 create_coherent_streaming_buffer(const VulkanContext *ctx, u32 size);
 void write_to_streaming_buffer(
     CoherentStreamingBuffer *coherent_streaming_buffer, void *data, u32 size);
+
+VkRenderPass
+create_render_pass(VkDevice device, u32 num_attachment_descriptions,
+                   const VkAttachmentDescription *attachment_descriptions,
+                   u32 num_subpass_descriptions,
+                   const VkSubpassDescription *subpass_descriptions,
+                   u32 num_dependencies,
+                   const VkSubpassDependency *dependencies);
+
+VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat format);
+VkRenderPass create_color_render_pass(VkDevice device, VkFormat format);
+
+VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass render_pass,
+                                 u32 num_attachments,
+                                 VkImageView *image_view_attachments,
+                                 VkExtent2D extent);
+
+VkImage create_default_image(const VulkanContext *context, u32 width,
+                             u32 height, VkImageUsageFlags usage,
+                             VkFormat format);
+
+VkDeviceMemory allocate_and_bind_image_memory(const VulkanContext *context,
+                                              VkImage image);
+
+VkImageView create_default_image_view(const VulkanContext *context,
+                                      VkImage image, VkFormat format,
+                                      VkImageAspectFlags aspect_flags);
+
+ColorDepthFramebuffer
+create_color_depth_framebuffer(const VulkanContext *context, VkExtent2D extent,
+                               VkFormat color_format, VkFormat depth_format);
+
+void destroy_color_depth_framebuffer(
+    const VulkanContext *context,
+    ColorDepthFramebuffer *color_depth_framebuffer);
+
+void transition_image_layout(VkCommandBuffer command_buffer, VkImage image,
+                             VkImageLayout old_layout,
+                             VkImageLayout new_layout);

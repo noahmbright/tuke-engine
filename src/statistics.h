@@ -76,6 +76,7 @@ static inline f32 quintic_fade(f32 t) {
 // alias method
 // https://en.wikipedia.org/wiki/Alias_method
 // potentially requires freed after usage using destroy_alias_method
+// TODO reconsider how to manage the allocation of static storage
 struct AliasMethod {
   RNG rng;
   u32 n;

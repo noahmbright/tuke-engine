@@ -47,6 +47,7 @@ class TokenType(Enum):
     IMAGE2D = auto()
 
     FLOAT = auto()
+    UINT = auto()
     VEC2 = auto()
     VEC3 = auto()
     VEC4 = auto()
@@ -75,7 +76,9 @@ directives = {
 }
 
 SIZE_OF_FLOAT = 4
+SIZE_OF_UINT = 4
 glsl_types_to_sizes = {
+    TokenType.UINT: 1 * SIZE_OF_UINT,
     TokenType.FLOAT: 1 * SIZE_OF_FLOAT,
     TokenType.VEC2: 2 * SIZE_OF_FLOAT,
     TokenType.VEC3 : 3 * SIZE_OF_FLOAT,
@@ -86,6 +89,7 @@ glsl_types_to_sizes = {
 }
 
 glsl_types_to_alignments = {
+    TokenType.UINT: 4,
     TokenType.FLOAT: 4,
     TokenType.VEC2: 8,
     TokenType.VEC3 : 16,
@@ -96,6 +100,7 @@ glsl_types_to_alignments = {
 }
 
 glsl_types_to_c_types = {
+    TokenType.UINT: "u32",
     TokenType.FLOAT: "f32",
     TokenType.VEC2: "glm::vec2",
     TokenType.VEC3 : "glm::vec3",
@@ -116,6 +121,7 @@ text_to_glsl_keyword = {
     "texture2D": TokenType.TEXTURE2D,
     "image2D": TokenType.IMAGE2D,
 
+    "uint": TokenType.UINT,
     "float": TokenType.FLOAT,
     "vec2": TokenType.VEC2,
     "vec3": TokenType.VEC3,
@@ -334,6 +340,7 @@ def parse_tokens(tokens, stage, parser_error_reporter):
         slices.append(TemplateStringSlice(current_start, tokens[i].start, vulkan_version_string(), opengl_version_string()))
         current_start = tokens[i].start
 
+    # uniform uniform_structure_type_name { glsl_type name ([array_size]); };
     def parse_glsl_struct():
         nonlocal i
 
@@ -421,7 +428,7 @@ def parse_tokens(tokens, stage, parser_error_reporter):
             if size > final_offset:
                 bytes_to_pad = (size - final_offset)
                 num_floats =  bytes_to_pad // 4
-                members.append(StructMember(f"_pad[{num_floats}]", TokenType.FLOAT, final_offset, bytes_to_pad))
+                members.append(StructMember(f"_pad", TokenType.FLOAT, final_offset, bytes_to_pad, num_floats))
 
         return StructDescription(uniform_structure_type_name, identifier, size, members)
 

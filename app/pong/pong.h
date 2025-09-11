@@ -47,6 +47,12 @@ enum EntityIndex {
   NUM_ENTITIES
 };
 
+enum LastPaddle {
+  LAST_PADDLE_NEITHER,
+  LAST_PADDLE_LEFT,
+  LAST_PADDLE_RIGHT,
+};
+
 const f64 powerup_draw_interval_in_sec = 0.0000000001f;
 const f32 prob_powerup_spawns = 0.2f;
 
@@ -203,12 +209,13 @@ struct State {
   f32 ball_speed;
 
   f64 time_since_last_powerup_draw;
+  LastPaddle last_paddle_to_hit;
+  u32 left_paddle_powerup_flags;
+  u32 right_paddle_powerup_flags;
 
   Camera camera;
   ScreenShake screen_shake;
 
-  u32 drawn0 = 0;
-  u32 drawn1 = 0;
   PowerUp powerups[MAX_POWERUPS];
   u32 current_powerup_index;
   AliasMethod powerup_alias_table;

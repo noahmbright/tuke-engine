@@ -110,11 +110,6 @@ u32 draw_alias_method(AliasMethod *alias_method) {
   // 1. generate random x in [0, 1)
   f32 x = random_f32_xoroshiro128_plus(&alias_method->rng);
 
-  for (u32 j = 0; j < alias_method->n; j++) {
-    printf("%d ", alias_method->alias_table[j]);
-  }
-  printf("\n");
-
   // 2. let i = floor(n * x) and y = nx - i
   //    i uniform in [0, n - 1], y uniform in [0, 1)
   f32 nx = alias_method->n * x;

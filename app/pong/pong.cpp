@@ -61,9 +61,9 @@ void init_descriptor_sets(State *state) {
                                     state->uniform_writes.arena_model.size, 0,
                                     1, VK_SHADER_STAGE_VERTEX_BIT, false);
 
-  add_texture_descriptor_set(
-      &background_builder, &state->textures[TEXTURE_FIELD_BACKGROUND],
-      state->sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+  add_image_descriptor_set(&background_builder,
+                           state->textures[TEXTURE_FIELD_BACKGROUND].image_view,
+                           state->sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND] =
       build_descriptor_set(&background_builder, state->descriptor_pool);
@@ -97,8 +97,8 @@ void init_background_material(State *state) {
       create_pipeline_layout(state->context.device, layouts, 2);
 
   state->background_material.pipeline = create_default_graphics_pipeline(
-      &state->context, background_vert_spec.name, background_frag_spec.name,
-      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2),
+      &state->context, state->context.render_pass, background_vert_spec.name,
+      background_frag_spec.name, get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2),
       state->background_material.pipeline_layout);
 
   mat->render_call.instance_count = 1;
@@ -134,8 +134,8 @@ void init_paddles_material(State *state) {
       create_pipeline_layout(state->context.device, layouts, 2);
 
   state->paddle_material.pipeline = create_default_graphics_pipeline(
-      &state->context, paddle_vert_spec.name, paddle_frag_spec.name,
-      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2),
+      &state->context, state->context.render_pass, paddle_vert_spec.name,
+      paddle_frag_spec.name, get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2),
       state->paddle_material.pipeline_layout);
 
   mat->render_call.instance_count = InstanceDataUBO_model_array_size;
@@ -272,6 +272,9 @@ State setup_state(const char *title) {
   init_alias_method(&state.powerup_alias_table, NUM_POWERUPS,
                     powerup_likelihoods, 0x69420);
   log_alias_method(&state.powerup_alias_table);
+  state.left_paddle_powerup_flags = 0;
+  state.right_paddle_powerup_flags = 0;
+  state.last_paddle_to_hit = LAST_PADDLE_NEITHER;
 
   for (u32 i = 0; i < MAX_POWERUPS; i++) {
   }
@@ -315,7 +318,8 @@ void render(State *state) {
   }
 
   VkCommandBuffer command_buffer = begin_command_buffer(ctx);
-  begin_render_pass(ctx, command_buffer, state->clear_values, 2,
+  begin_render_pass(ctx, command_buffer, ctx->render_pass,
+                    ctx->framebuffers[ctx->image_index], state->clear_values, 2,
                     state->viewport_state.scissor.offset);
   vkCmdSetViewport(command_buffer, 0, 1, &state->viewport_state.viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &state->viewport_state.scissor);
@@ -519,9 +523,15 @@ void handle_collisions(State *state) {
   // TODO pong: do swept collision detection and debouncing
   // TODO pong: handle collisions with top and bottom of paddle
   if (aabb_collision(ball_pos, ball_scale, left_paddle_pos,
-                     left_paddle_scale) ||
-      aabb_collision(ball_pos, ball_scale, right_paddle_pos,
+                     left_paddle_scale)) {
+    state->last_paddle_to_hit = LAST_PADDLE_LEFT;
+    state->velocities[ENTITY_BALL].x = -state->velocities[ENTITY_BALL].x;
+    state->screen_shake.active = true;
+  }
+
+  if (aabb_collision(ball_pos, ball_scale, right_paddle_pos,
                      right_paddle_scale)) {
+    state->last_paddle_to_hit = LAST_PADDLE_RIGHT;
     state->velocities[ENTITY_BALL].x = -state->velocities[ENTITY_BALL].x;
     state->screen_shake.active = true;
   }
@@ -555,6 +565,7 @@ void update_screen_shake(State *state, f32 dt) {
 }
 
 void update_game_state(State *state, const f32 dt) {
+
   if (state->game_mode == GAMEMODE_PAUSED) {
     return;
   }

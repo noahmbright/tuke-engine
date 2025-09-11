@@ -16,6 +16,16 @@
 #include <stdio.h>
 #include <vulkan/vulkan_core.h>
 
+static const VkPipelineVertexInputStateCreateInfo empty_vertex_input_state = {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+    .pNext = NULL,
+    .flags = 0,
+    .vertexBindingDescriptionCount = 0,
+    .pVertexBindingDescriptions = NULL,
+    .vertexAttributeDescriptionCount = 0,
+    .pVertexAttributeDescriptions = NULL,
+};
+
 glm::vec4 movement_direction_from_inputs(const Inputs *inputs) {
   glm::vec4 res{0.0f, 0.0f, 0.0f, 1.0f};
 
@@ -54,6 +64,10 @@ int main() {
   VulkanTexture textures[NUM_TEXTURES];
   load_vulkan_textures(&context, texture_names, NUM_TEXTURES, textures);
   VkSampler sampler = create_sampler(context.device);
+
+  ColorDepthFramebuffer offscreen_framebuffer = create_color_depth_framebuffer(
+      &context, context.swapchain_extent, VK_FORMAT_R8G8B8A8_SRGB,
+      VK_FORMAT_D32_SFLOAT);
 
   BufferUploadQueue buffer_upload_queue = new_buffer_upload_queue();
   const BufferHandle *triangle_vertices_slice =
@@ -111,8 +125,8 @@ int main() {
   add_uniform_buffer_descriptor_set(&mvp_set_builder, &global_uniform_buffer,
                                     x_handle.offset, x_handle.size, 1, 1,
                                     VK_SHADER_STAGE_VERTEX_BIT, false);
-  add_texture_descriptor_set(&mvp_set_builder, &textures[2], sampler, 2, 1,
-                             VK_SHADER_STAGE_FRAGMENT_BIT);
+  add_image_descriptor_set(&mvp_set_builder, textures[2].image_view, sampler, 2,
+                           1, VK_SHADER_STAGE_FRAGMENT_BIT);
 
   DescriptorSetHandle mvp_descriptor =
       build_descriptor_set(&mvp_set_builder, descriptor_pool);
@@ -138,26 +152,49 @@ int main() {
   VkPipelineLayout cube_pipeline_layout = create_pipeline_layout(
       context.device, &cube_descriptor.descriptor_set_layout, 1);
 
+  // fullscreen quad descriptor set
+  DescriptorSetBuilder fullscreen_quad_set_builder =
+      create_descriptor_set_builder(&context);
+
+  add_image_descriptor_set(&fullscreen_quad_set_builder,
+                           offscreen_framebuffer.color_image_view, sampler, 0,
+                           1, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+  DescriptorSetHandle fullscreen_quad_descriptor =
+      build_descriptor_set(&fullscreen_quad_set_builder, descriptor_pool);
+
+  VkPipelineLayout fullscreen_quad_pipeline_layout = create_pipeline_layout(
+      context.device, &fullscreen_quad_descriptor.descriptor_set_layout, 1);
+
   // create pipelines
   VkPipeline triangle_pipeline = create_default_graphics_pipeline(
-      &context, simple_vert_spec.name, simple_frag_spec.name,
-      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3), x_pipeline_layout);
+      &context, offscreen_framebuffer.render_pass, simple_vert_spec.name,
+      simple_frag_spec.name, get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3),
+      x_pipeline_layout);
 
   VkPipeline square_pipeline = create_default_graphics_pipeline(
-      &context, simple_vert_spec.name, square_frag_spec.name,
-      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3), x_pipeline_layout);
+      &context, offscreen_framebuffer.render_pass, simple_vert_spec.name,
+      square_frag_spec.name, get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3),
+      x_pipeline_layout);
 
   VkPipeline instanced_quad_pipeline = create_default_graphics_pipeline(
-      &context, instanced_quad_vert_spec.name, instanced_quad_frag_spec.name,
+      &context, offscreen_framebuffer.render_pass,
+      instanced_quad_vert_spec.name, instanced_quad_frag_spec.name,
       get_vertex_layout(instanced_quad_vert_spec.vertex_layout_id),
       mvp_pipeline_layout);
 
   PipelineConfig cube_pipeline_config = create_default_graphics_pipeline_config(
-      &context, cube_vert_spec.name, cube_frag_spec.name,
-      get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3_VEC2), cube_pipeline_layout);
+      &context, offscreen_framebuffer.render_pass, cube_vert_spec.name,
+      cube_frag_spec.name, get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC3_VEC2),
+      cube_pipeline_layout);
   cube_pipeline_config.cull_mode = VK_CULL_MODE_FRONT_BIT;
   VkPipeline cube_pipeline = create_graphics_pipeline(
       context.device, &cube_pipeline_config, context.pipeline_cache);
+
+  VkPipeline fullscreen_quad_pipeline = create_default_graphics_pipeline(
+      &context, context.render_pass, fullscreen_quad_vert_spec.name,
+      fullscreen_quad_frag_spec.name, &empty_vertex_input_state,
+      fullscreen_quad_pipeline_layout);
 
   RenderCall triangle_render_call;
   triangle_render_call.num_vertices = 3;
@@ -212,6 +249,17 @@ int main() {
   instanced_render_call.index_buffer = index_buffer->buffer;
   instanced_render_call.index_buffer_offset = 0;
   instanced_render_call.is_indexed = true;
+
+  RenderCall fullscreen_quad_render_call;
+  fullscreen_quad_render_call.num_vertices = 3;
+  fullscreen_quad_render_call.instance_count = 1;
+  fullscreen_quad_render_call.graphics_pipeline = fullscreen_quad_pipeline;
+  fullscreen_quad_render_call.num_vertex_buffers = 0;
+  fullscreen_quad_render_call.pipeline_layout = fullscreen_quad_pipeline_layout;
+  fullscreen_quad_render_call.num_descriptor_sets = 1;
+  fullscreen_quad_render_call.descriptor_sets[0] =
+      fullscreen_quad_descriptor.descriptor_set;
+  fullscreen_quad_render_call.is_indexed = false;
 
   MVPUniform mvp;
   mvp.projection = glm::mat4(1.0f);
@@ -269,8 +317,17 @@ int main() {
                             camera_vp_handle);
 
     VkCommandBuffer command_buffer = begin_command_buffer(&context);
-    begin_render_pass(&context, command_buffer, clear_values, NUM_ATTACHMENTS,
-                      viewport_state.scissor.offset);
+
+    // transition to use as render target
+    transition_image_layout(command_buffer, offscreen_framebuffer.color_image,
+                            VK_IMAGE_LAYOUT_UNDEFINED,
+                            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+    begin_render_pass(&context, command_buffer,
+                      offscreen_framebuffer.render_pass,
+                      offscreen_framebuffer.framebuffer, clear_values,
+                      NUM_ATTACHMENTS, viewport_state.scissor.offset);
+
     vkCmdSetViewport(command_buffer, 0, 1, &viewport_state.viewport);
     vkCmdSetScissor(command_buffer, 0, 1, &viewport_state.scissor);
 
@@ -280,8 +337,21 @@ int main() {
     render_mesh(command_buffer, &cube_render_call);
 
     vkCmdEndRenderPass(command_buffer);
+
+    // transition to use as sampler
+    transition_image_layout(command_buffer, offscreen_framebuffer.color_image,
+                            VK_IMAGE_LAYOUT_UNDEFINED,
+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    begin_render_pass(&context, command_buffer, context.render_pass,
+                      context.framebuffers[context.image_index], clear_values,
+                      NUM_ATTACHMENTS, viewport_state.scissor.offset);
+    render_mesh(command_buffer, &fullscreen_quad_render_call);
+    vkCmdEndRenderPass(command_buffer);
+
     VK_CHECK(vkEndCommandBuffer(command_buffer),
              "Failed to end command buffer");
+
     submit_and_present(&context, command_buffer);
 
     context.current_frame++;
@@ -291,6 +361,11 @@ int main() {
     move_camera_3d(&camera, dt, speed * movement_direction);
 
 #if 0
+    printf("offscreen image addr %p\n",
+           (void *)offscreen_framebuffer.color_image);
+    printf("framebuffer image addr %p\n",
+           (void *)context.framebuffers[context.image_index]);
+
     if (context.current_frame % 120 == 0) {
       printf("dt %f\n", dt);
 
@@ -314,23 +389,28 @@ int main() {
     destroy_vulkan_texture(context.device, &textures[i]);
   }
 
+  destroy_color_depth_framebuffer(&context, &offscreen_framebuffer);
   destroy_descriptor_set_handle(context.device, &simple__descriptor);
   destroy_descriptor_set_handle(context.device, &mvp_descriptor);
   destroy_descriptor_set_handle(context.device, &cube_descriptor);
+  destroy_descriptor_set_handle(context.device, &fullscreen_quad_descriptor);
 
   vkDestroyPipelineLayout(context.device, x_pipeline_layout, NULL);
   vkDestroyPipelineLayout(context.device, mvp_pipeline_layout, NULL);
   vkDestroyPipelineLayout(context.device, cube_pipeline_layout, NULL);
+  vkDestroyPipelineLayout(context.device, fullscreen_quad_pipeline_layout,
+                          NULL);
+
   vkDestroyPipeline(context.device, square_pipeline, NULL);
   vkDestroyPipeline(context.device, triangle_pipeline, NULL);
   vkDestroyPipeline(context.device, instanced_quad_pipeline, NULL);
   vkDestroyPipeline(context.device, cube_pipeline, NULL);
+  vkDestroyPipeline(context.device, fullscreen_quad_pipeline, NULL);
 
   destroy_uniform_buffer(&context, &global_uniform_buffer);
-
   vkDestroyDescriptorPool(context.device, descriptor_pool, NULL);
-
   destroy_buffer_manager(&buffer_manager);
   destroy_vulkan_context(&context);
+
   return 0;
 }
