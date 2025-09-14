@@ -276,6 +276,9 @@ State setup_state(const char *title) {
   state.right_paddle_powerup_flags = 0;
   state.last_paddle_to_hit = LAST_PADDLE_NEITHER;
 
+  state.left_paddle_cooldown = 0.0f;
+  state.right_paddle_cooldown = 0.0f;
+
   for (u32 i = 0; i < MAX_POWERUPS; i++) {
   }
 
@@ -439,18 +442,22 @@ void process_inputs(State *state, const f32 dt) {
   }
 }
 
-void handle_collisions(State *state) {
+void handle_collisions(State *state, const f32 dt) {
   glm::vec3 *positions = state->positions;
   glm::vec3 *scales = state->scales;
+  glm::vec3 *velocities = state->velocities;
 
   glm::vec3 ball_pos = positions[ENTITY_BALL];
   glm::vec3 ball_scale = scales[ENTITY_BALL];
+  glm::vec3 ball_velocity = velocities[ENTITY_BALL];
 
   glm::vec3 left_paddle_pos = positions[ENTITY_LEFT_PADDLE];
   glm::vec3 left_paddle_scale = scales[ENTITY_LEFT_PADDLE];
+  glm::vec3 left_paddle_velocity = velocities[ENTITY_LEFT_PADDLE];
 
   glm::vec3 right_paddle_pos = positions[ENTITY_RIGHT_PADDLE];
   glm::vec3 right_paddle_scale = scales[ENTITY_RIGHT_PADDLE];
+  glm::vec3 right_paddle_velocity = velocities[ENTITY_RIGHT_PADDLE];
 
   // TODO Pong: Maybe have this resize dynamically
   f32 arena_horizontal_boundary = arena_dimensions_x0 / 2.0f;
@@ -471,11 +478,11 @@ void handle_collisions(State *state) {
   }
 
   if (ball_pos.y + 0.5f * ball_scale.y > arena_vertical_boundary) {
-    state->velocities[ENTITY_BALL].y = -state->velocities[ENTITY_BALL].y;
+    state->velocities[ENTITY_BALL].y = -fabs(state->velocities[ENTITY_BALL].y);
     ball_pos.y = arena_vertical_boundary - 0.5f * ball_scale.y;
   }
   if (ball_pos.y - 0.5f * ball_scale.y < -arena_vertical_boundary) {
-    state->velocities[ENTITY_BALL].y = -state->velocities[ENTITY_BALL].y;
+    state->velocities[ENTITY_BALL].y = fabs(state->velocities[ENTITY_BALL].y);
     ball_pos.y = -arena_vertical_boundary + 0.5f * ball_scale.y;
   }
 
@@ -520,20 +527,40 @@ void handle_collisions(State *state) {
         arena_vertical_boundary - 0.5f * right_paddle_scale.y;
   }
 
-  // TODO pong: do swept collision detection and debouncing
-  // TODO pong: handle collisions with top and bottom of paddle
-  if (aabb_collision(ball_pos, ball_scale, left_paddle_pos,
-                     left_paddle_scale)) {
-    state->last_paddle_to_hit = LAST_PADDLE_LEFT;
-    state->velocities[ENTITY_BALL].x = -state->velocities[ENTITY_BALL].x;
-    state->screen_shake.active = true;
+  if (state->left_paddle_cooldown <= 0.0f) {
+    // ball paddle collisions
+    SweptAABBCollisionCheck left_collision_check = swept_aabb_collision(
+        dt, left_paddle_pos, left_paddle_scale, left_paddle_velocity, ball_pos,
+        ball_scale, ball_velocity);
+
+    if (left_collision_check.did_collide) {
+      state->left_paddle_cooldown = 1.0f;
+      glm::vec3 normal = left_collision_check.normal;
+      log_vec3(&normal);
+      state->last_paddle_to_hit = LAST_PADDLE_LEFT;
+      // state->screen_shake.active = true;
+
+      // normal is from paddles's perspective
+      if (left_collision_check.was_overlapping) {
+        const glm::vec3 displacement =
+            normal * left_collision_check.penetration_depth;
+        state->positions[ENTITY_BALL] += displacement;
+      } else {
+        state->positions[ENTITY_BALL] += ball_velocity * left_collision_check.t;
+      }
+
+      state->velocities[ENTITY_BALL] =
+          ball_velocity - 2.0f * glm::dot(ball_velocity, normal) * normal;
+    }
+  } else {
+    state->left_paddle_cooldown -= dt;
   }
 
   if (aabb_collision(ball_pos, ball_scale, right_paddle_pos,
                      right_paddle_scale)) {
     state->last_paddle_to_hit = LAST_PADDLE_RIGHT;
     state->velocities[ENTITY_BALL].x = -state->velocities[ENTITY_BALL].x;
-    state->screen_shake.active = true;
+    // state->screen_shake.active = true;
   }
 }
 
@@ -566,7 +593,8 @@ void update_screen_shake(State *state, f32 dt) {
 
 void update_game_state(State *state, const f32 dt) {
 
-  if (state->game_mode == GAMEMODE_PAUSED) {
+  if (state->game_mode == GAMEMODE_PAUSED ||
+      state->game_mode == GAMEMODE_MAIN_MENU) {
     return;
   }
 
@@ -592,7 +620,7 @@ void update_game_state(State *state, const f32 dt) {
     state->positions[i] += dt * state->velocities[i];
   }
 
-  handle_collisions(state);
+  handle_collisions(state, dt);
 
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
     Transform *transform = &state->transforms[i];

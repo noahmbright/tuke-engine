@@ -43,7 +43,6 @@ enum EntityIndex {
   ENTITY_LEFT_PADDLE = 0,
   ENTITY_RIGHT_PADDLE,
   ENTITY_BALL,
-  // ENTITY_BACKGROUND,
   NUM_ENTITIES
 };
 
@@ -53,7 +52,7 @@ enum LastPaddle {
   LAST_PADDLE_RIGHT,
 };
 
-const f64 powerup_draw_interval_in_sec = 0.0000000001f;
+const f64 powerup_draw_interval_in_sec = 1.0f;
 const f32 prob_powerup_spawns = 0.2f;
 
 const f32 speed0 = 12.5f;
@@ -199,6 +198,9 @@ struct State {
   glm::vec3 positions[NUM_ENTITIES];
   glm::vec3 velocities[NUM_ENTITIES];
   glm::vec3 scales[NUM_ENTITIES];
+
+  f32 left_paddle_cooldown;
+  f32 right_paddle_cooldown;
 
   GameMode game_mode;
   MovementMode movement_mode;

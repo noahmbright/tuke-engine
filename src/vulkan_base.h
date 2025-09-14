@@ -169,8 +169,8 @@ struct VulkanContext {
   VkFramebuffer framebuffers[NUM_SWAPCHAIN_IMAGES];
 
   FrameSyncObjects frame_sync_objects[MAX_FRAMES_IN_FLIGHT];
-  u32 current_frame;
-  uint8_t current_frame_index;
+  u64 current_frame;
+  u8 current_frame_index;
 
   VkCommandBuffer graphics_command_buffers[NUM_SWAPCHAIN_IMAGES];
   VkCommandBuffer compute_command_buffers[NUM_SWAPCHAIN_IMAGES];
