@@ -5,7 +5,7 @@
 #include "utils.h"
 
 const char *read_file(const char *path, unsigned long *size) {
-  FILE *fp = fopen(path, "r");
+  FILE *fp = fopen(path, "rb");
   if (fp == NULL) {
     fprintf(stderr, "Failed to open %s\n", path);
     exit(1);

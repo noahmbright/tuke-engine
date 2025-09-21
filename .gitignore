@@ -6,3 +6,4 @@ dialogue
 textures
 notes.md
 __pycache__
+rust_reflector/target

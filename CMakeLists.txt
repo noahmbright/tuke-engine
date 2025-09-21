@@ -23,3 +23,10 @@ file(GLOB_RECURSE PONG_SOURCE_FILES
 
 add_executable(pong ${PONG_SOURCE_FILES})
 target_link_libraries(pong PRIVATE engine)
+
+file(GLOB_RECURSE REFLECTOR_SOURCE_FILES
+    ${CMAKE_SOURCE_DIR}/reflector/main.cpp
+    ${CMAKE_SOURCE_DIR}/reflector/filesystem_utils.cpp
+)
+
+add_executable(reflector ${REFLECTOR_SOURCE_FILES})
