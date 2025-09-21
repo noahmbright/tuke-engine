@@ -115,6 +115,7 @@ pub fn collect_shaders_to_compile(
                 subdirectory_path.display()
             );
 
+            // TODO adapt the / for windows to \ or whatever it is
             // turn e,g shaders/common/shader.stage.in into common/shader.stage.in
             let relative_path = match entry_path.strip_prefix("shaders/") {
                 Ok(stripped_name) => stripped_name,

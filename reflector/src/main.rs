@@ -1,4 +1,5 @@
 mod filesystem_utils;
+mod lexer;
 mod reflector;
 
 fn main() -> std::io::Result<()> {
