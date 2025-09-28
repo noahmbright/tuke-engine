@@ -14,3 +14,22 @@ using i64 = int64_t;
 
 using f32 = float;
 using f64 = double;
+
+enum ShaderStage {
+  SHADER_STAGE_VERTEX,
+  SHADER_STAGE_FRAGMENT,
+  SHADER_STAGE_COMPUTE,
+
+  NUM_SHADER_STAGES
+};
+
+static const char *shader_stage_to_string[NUM_SHADER_STAGES] = {
+    [SHADER_STAGE_VERTEX] = "vert",
+    [SHADER_STAGE_FRAGMENT] = "frag",
+    [SHADER_STAGE_COMPUTE] = "comp",
+};
+
+struct GLSLSource {
+  const char *string;
+  u32 length;
+};

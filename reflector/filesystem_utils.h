@@ -12,15 +12,10 @@ struct SubdirectoryList {
   char subdirectories[MAX_NUM_SUBDIRECTORIES][SUBDIRECTORY_PATH_BUFFER_LENGTH];
 };
 
-enum ShaderStage {
-  SHADER_STAGE_VERTEX,
-  SHADER_STAGE_FRAGMENT,
-  SHADER_STAGE_COMPUTE,
-};
-
 struct ShaderToCompile {
   ShaderStage stage;
   const char *source;
+  const char *name;
   u64 source_length;
 };
 
