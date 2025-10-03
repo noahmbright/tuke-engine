@@ -1,10 +1,23 @@
 #include "parser.h"
 #include "filesystem_utils.h"
+#include "reflection_data.h"
 #include "reflector.h"
 
 #include <assert.h>
+#include <cstring>
 #include <stdarg.h>
 #include <string.h>
+
+inline Token parser_get_current_token(const Parser *parser) { return parser->tokens.tokens[parser->token_index]; }
+
+inline void parser_advance(Parser *parser) { parser->token_index++; }
+
+inline Token parser_advance_and_get_next_token(Parser *parser) {
+  parser_advance(parser);
+  return parser_get_current_token(parser);
+}
+
+inline bool parser_still_valid(Parser *parser) { return parser->token_index < parser->tokens.size; }
 
 inline bool is_digit(char c) { return c >= '0' && c <= '9'; }
 
@@ -106,6 +119,42 @@ TokenType string_slice_to_keyword_or_identifier(const char *string, u32 length) 
   }
 
   return TOKEN_TYPE_TEXT;
+}
+
+VertexAttributeRate token_type_to_vertex_attribute_rate(TokenType type) {
+  switch (type) {
+  case TOKEN_TYPE_RATE_VERTEX:
+    return VERTEX_ATTRIBUTE_RATE_VERTEX;
+  case TOKEN_TYPE_RATE_INSTANCE:
+    return VERTEX_ATTRIBUTE_RATE_INSTANCE;
+  default:
+    fprintf(stderr, "Trying to convert token type %s to a vertex attribute rate\n", token_type_to_string[type]);
+    return NUM_VERTEX_ATTRIBUTE_RATES;
+  }
+}
+
+GLSLType token_type_to_glsl_type(TokenType type) {
+  switch (type) {
+  case TOKEN_TYPE_FLOAT:
+    return GLSL_TYPE_FLOAT;
+  case TOKEN_TYPE_UINT:
+    return GLSL_TYPE_UINT;
+  case TOKEN_TYPE_VEC2:
+    return GLSL_TYPE_VEC2;
+  case TOKEN_TYPE_VEC3:
+    return GLSL_TYPE_VEC3;
+  case TOKEN_TYPE_VEC4:
+    return GLSL_TYPE_VEC4;
+  case TOKEN_TYPE_MAT2:
+    return GLSL_TYPE_MAT2;
+  case TOKEN_TYPE_MAT3:
+    return GLSL_TYPE_MAT3;
+  case TOKEN_TYPE_MAT4:
+    return GLSL_TYPE_MAT4;
+  default:
+    fprintf(stderr, "Trying to convert token type %s to a glsl type\n", token_type_to_string[type]);
+    return GLSL_TYPE_NULL;
+  }
 }
 
 // return the number of chars consumed, i.e. length of lexed number looking
@@ -435,19 +484,30 @@ u32 parse_integer_token(Parser *parser, Token token) {
   return (int)strtol(buf, NULL, 10);
 }
 
-// {{ LOCATION 0 BINDING 0 RATE_VERTEX OFFSET TIGHTLY_PACKED }} (in | out) type
-// identifier;
+// {{ LOCATION 0 BINDING 0 RATE_VERTEX OFFSET TIGHTLY_PACKED }} in type identifier;
+// or
 // {{ LOCATION 0 }} - for fragment and compute shaders, or
-void parse_location_directive(Parser *parser, ShaderStage shader_stage, TemplateStringSlice *template_string_slice) {
+LocationDirectiveParse parse_location_directive(Parser *parser, ShaderStage shader_stage,
+                                                TemplateStringSlice *template_string_slice) {
   Token current_token = parser_get_current_token(parser);
   assert(current_token.type == TOKEN_TYPE_DIRECTIVE_LOCATION);
+
+  LocationDirectiveParse location_directive_parse;
+  location_directive_parse.next_glsl_source_start = NULL;
+
+  location_directive_parse.vertex_attribute.location = 0;
+  location_directive_parse.vertex_attribute.binding = 0;
+  location_directive_parse.vertex_attribute.offset = 0;
+  location_directive_parse.vertex_attribute.rate = VERTEX_ATTRIBUTE_RATE_VERTEX;
+  location_directive_parse.vertex_attribute.glsl_type = GLSL_TYPE_NULL;
+  location_directive_parse.vertex_attribute.is_tightly_packed = false;
 
   current_token = parser_advance_and_get_next_token(parser);
   if (current_token.type != TOKEN_TYPE_NUMBER) {
     report_parser_error(parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
                         "Expected numeric literal after LOCATION in location directive, got %s",
                         token_type_to_string[current_token.type]);
-    return;
+    return location_directive_parse;
   }
   u32 location = parse_integer_token(parser, current_token);
 
@@ -459,13 +519,13 @@ void parse_location_directive(Parser *parser, ShaderStage shader_stage, Template
                           "Expected DOUBLE_R_BRACE after location in location directive "
                           "for a non-vertex shader, got %s",
                           token_type_to_string[current_token.type]);
-      return;
+      return location_directive_parse;
     }
 
     // move past }} and mark one past the end of this slice
     current_token = parser_advance_and_get_next_token(parser);
     template_string_slice->end = current_token.start;
-    return;
+    return location_directive_parse;
   }
 
   // in a vertex shader, can have either out or BINDING + the rest of the binding
@@ -481,7 +541,8 @@ void parse_location_directive(Parser *parser, ShaderStage shader_stage, Template
 
     // move past }} and mark one past the end of this slice
     template_string_slice->end = current_token.start;
-    return;
+    location_directive_parse.next_glsl_source_start = current_token.start;
+    return location_directive_parse;
   }
 
   // BINDING
@@ -489,7 +550,7 @@ void parse_location_directive(Parser *parser, ShaderStage shader_stage, Template
     report_parser_error(parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
                         "Expected BINDING after location in location directive, got %s",
                         token_type_to_string[current_token.type]);
-    return;
+    return location_directive_parse;
   }
 
   current_token = parser_advance_and_get_next_token(parser);
@@ -497,7 +558,7 @@ void parse_location_directive(Parser *parser, ShaderStage shader_stage, Template
     report_parser_error(parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
                         "Expected numeric literal after BINDING in location directive, got %s",
                         token_type_to_string[current_token.type]);
-    return;
+    return location_directive_parse;
   }
   u32 binding = parse_integer_token(parser, current_token);
 
@@ -509,8 +570,9 @@ void parse_location_directive(Parser *parser, ShaderStage shader_stage, Template
                         "Expected rate (vertex/instance) after binding in "
                         "location directive, got %s",
                         token_type_to_string[current_token.type]);
-    return;
+    return location_directive_parse;
   }
+  VertexAttributeRate vertex_attribute_rate = token_type_to_vertex_attribute_rate(current_token.type);
 
   // offset
   current_token = parser_advance_and_get_next_token(parser);
@@ -518,7 +580,7 @@ void parse_location_directive(Parser *parser, ShaderStage shader_stage, Template
     report_parser_error(parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
                         "Expected OFFSET after rate in location directive, got %s",
                         token_type_to_string[current_token.type]);
-    return;
+    return location_directive_parse;
   }
 
   current_token = parser_advance_and_get_next_token(parser);
@@ -528,7 +590,12 @@ void parse_location_directive(Parser *parser, ShaderStage shader_stage, Template
                         "Expected rate offset or TIGHTlY_PACKED after OFFSET in "
                         "location directive, got %s",
                         token_type_to_string[current_token.type]);
-    return;
+    return location_directive_parse;
+  }
+  if (current_token.type == TOKEN_TYPE_NUMBER) {
+    location_directive_parse.vertex_attribute.offset = parse_integer_token(parser, current_token);
+  } else {
+    location_directive_parse.vertex_attribute.is_tightly_packed = true;
   }
 
   // }}
@@ -537,14 +604,141 @@ void parse_location_directive(Parser *parser, ShaderStage shader_stage, Template
     report_parser_error(parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
                         "Expected }} after offset in location directive, got %s",
                         token_type_to_string[current_token.type]);
-    return;
+    return location_directive_parse;
   }
 
-  printf("got location %d and binding %d\n", location, binding);
+  // printf("got location %d and binding %d\n", location, binding);
   template_string_slice->location = location;
   template_string_slice->binding = binding;
-  current_token = parser_advance_and_get_next_token(parser);
   template_string_slice->end = current_token.start;
+
+  // in
+  current_token = parser_advance_and_get_next_token(parser);
+  if (current_token.type != TOKEN_TYPE_IN) {
+    report_parser_error(parser, current_token.start, TOKEN_TYPE_SEMICOLON,
+                        "Expected in (glsl keyword) after double R braces ending location directive, got %s",
+                        token_type_to_string[current_token.type]);
+    return location_directive_parse;
+  }
+  location_directive_parse.next_glsl_source_start = current_token.start;
+
+  // type
+  current_token = parser_advance_and_get_next_token(parser);
+  GLSLType glsl_type = token_type_to_glsl_type(current_token.type);
+  if (glsl_type == GLSL_TYPE_NULL) {
+    report_parser_error(parser, current_token.start, TOKEN_TYPE_SEMICOLON,
+                        "Expected glsl type after in (glsl keyword) in location directive, got %s",
+                        token_type_to_string[current_token.type]);
+    return location_directive_parse;
+  }
+
+  // identifier
+  current_token = parser_advance_and_get_next_token(parser);
+  if (current_token.type != TOKEN_TYPE_TEXT) {
+    report_parser_error(parser, current_token.start, TOKEN_TYPE_SEMICOLON,
+                        "Expected identifier after glsl type in location directive, got %s",
+                        token_type_to_string[current_token.type]);
+    return location_directive_parse;
+  }
+
+  // ;
+  current_token = parser_advance_and_get_next_token(parser);
+  if (current_token.type != TOKEN_TYPE_SEMICOLON) {
+    report_parser_error(parser, current_token.start, TOKEN_TYPE_SEMICOLON,
+                        "Expected ; after identifier in location directive, got %s",
+                        token_type_to_string[current_token.type]);
+    return location_directive_parse;
+  }
+
+  location_directive_parse.vertex_attribute.location = location;
+  location_directive_parse.vertex_attribute.binding = binding;
+  location_directive_parse.vertex_attribute.rate = vertex_attribute_rate;
+  location_directive_parse.vertex_attribute.glsl_type = glsl_type;
+
+  current_token = parser_advance_and_get_next_token(parser);
+  return location_directive_parse;
+}
+
+bool token_type_is_glsl_type(TokenType type) {
+  return type == TOKEN_TYPE_FLOAT || type == TOKEN_TYPE_UINT || type == TOKEN_TYPE_VEC2 || type == TOKEN_TYPE_VEC3 ||
+         type == TOKEN_TYPE_VEC4 || type == TOKEN_TYPE_MAT2 || type == TOKEN_TYPE_MAT3 || type == TOKEN_TYPE_MAT4;
+}
+
+// { typename identifier([N]); }
+GLSLStructMemberList parse_glsl_struct_member_list(Parser *parser) {
+  GLSLStructMemberList glsl_struct_member_list;
+  memset(&glsl_struct_member_list, 0, sizeof(glsl_struct_member_list));
+
+  assert(parser_get_current_token(parser).type == TOKEN_TYPE_L_BRACE);
+
+  Token current_token = parser_advance_and_get_next_token(parser);
+  while (parser_still_valid(parser)) {
+    GLSLStructMember glsl_struct_member;
+    glsl_struct_member.array_length = 0;
+
+    if (!token_type_is_glsl_type(current_token.type)) {
+      report_parser_error(parser, current_token.start, TOKEN_TYPE_R_BRACE, "Expected glsl type in glsl struct, got %s",
+                          token_type_to_string[current_token.type]);
+      return glsl_struct_member_list;
+    }
+    glsl_struct_member.type = token_type_to_glsl_type(current_token.type);
+
+    current_token = parser_advance_and_get_next_token(parser);
+    if (current_token.type != TOKEN_TYPE_TEXT) {
+      report_parser_error(parser, current_token.start, TOKEN_TYPE_R_BRACE,
+                          "Expected identifier after glsl type in struct, got %s",
+                          token_type_to_string[current_token.type]);
+      return glsl_struct_member_list;
+    }
+    glsl_struct_member.identifier = current_token.start;
+    glsl_struct_member.identifier_length = current_token.text_length;
+
+    // current token could either be opening bracket for array or semicolon
+    // [
+    current_token = parser_advance_and_get_next_token(parser);
+    if (current_token.type == TOKEN_TYPE_L_BRACKET) {
+      current_token = parser_advance_and_get_next_token(parser);
+
+      // N
+      if (current_token.type != TOKEN_TYPE_NUMBER) {
+        report_parser_error(parser, current_token.start, TOKEN_TYPE_R_BRACE,
+                            "Expected number after opening bracket in array in glsl struct, got %s",
+                            token_type_to_string[current_token.type]);
+        return glsl_struct_member_list;
+      }
+      glsl_struct_member.array_length = parse_integer_token(parser, current_token);
+
+      // ]
+      current_token = parser_advance_and_get_next_token(parser);
+      if (current_token.type != TOKEN_TYPE_R_BRACKET) {
+        report_parser_error(parser, current_token.start, TOKEN_TYPE_R_BRACE,
+                            "Expected closing bracket after array size in glsl struct, got %s",
+                            token_type_to_string[current_token.type]);
+        return glsl_struct_member_list;
+      }
+
+      current_token = parser_advance_and_get_next_token(parser);
+    }
+
+    if (current_token.type != TOKEN_TYPE_SEMICOLON) {
+      report_parser_error(parser, current_token.start, TOKEN_TYPE_R_BRACE,
+                          "Expected semicolon after identifier in glsl struct, got %s",
+                          token_type_to_string[current_token.type]);
+      return glsl_struct_member_list;
+    }
+    current_token = parser_advance_and_get_next_token(parser);
+
+    assert(glsl_struct_member_list.num_members < MAX_NUM_STRUCT_MEMBERS);
+    glsl_struct_member_list.members[glsl_struct_member_list.num_members++] = glsl_struct_member;
+
+    if (current_token.type == TOKEN_TYPE_R_BRACE) {
+      parser_advance(parser);
+      return glsl_struct_member_list;
+    }
+  }
+
+  report_parser_error(parser, current_token.start, TOKEN_TYPE_R_BRACE, "Reached EOF while parsing struct members");
+  return glsl_struct_member_list;
 }
 
 //{{ SET_BINDING set binding }} uniform sampler2D identifier;
@@ -609,7 +803,7 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     }
 
     current_token = parser_advance_and_get_next_token(parser);
-    if (current_token.type != TOKEN_TYPE_TEXT) {
+    if (current_token.type != TOKEN_TYPE_SEMICOLON) {
       report_parser_error(parser, current_token.start, TOKEN_TYPE_SEMICOLON,
                           "In SET_BINDING for sampler, expected semicolon after identifier, got %s",
                           token_type_to_string[current_token.type]);
@@ -638,6 +832,7 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     return directive_parse;
   }
   Token buffer_label_token = current_token;
+  (void)buffer_label_token;
 
   current_token = parser_advance_and_get_next_token(parser);
   if (current_token.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
@@ -657,6 +852,7 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
   template_string_slice->end = current_token.start;
   directive_parse.next_glsl_source_start = current_token.start;
 
+  // struct's typename
   current_token = parser_advance_and_get_next_token(parser);
   if (current_token.type != TOKEN_TYPE_TEXT) {
     report_parser_error(parser, current_token.start, TOKEN_TYPE_SEMICOLON,
@@ -665,14 +861,28 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     return directive_parse;
   }
 
-  // TODO PARSE MEMBERS
+  GLSLStruct glsl_struct;
+  glsl_struct.type_name = current_token.start;
+  glsl_struct.type_name_length = current_token.text_length;
 
-  printf("got set %d and binding %d\n", set, binding);
-  printf("buffer label is %.*s\n", buffer_label_token.text_length, buffer_label_token.start);
+  // opening brace
+  current_token = parser_advance_and_get_next_token(parser);
+  if (current_token.type != TOKEN_TYPE_L_BRACE) {
+    report_parser_error(parser, current_token.start, TOKEN_TYPE_SEMICOLON,
+                        "In SET_BINDING for uniform buffer, expected left brace after struct typename, got %s",
+                        token_type_to_string[current_token.type]);
+    return directive_parse;
+  }
+  // parsing members expects the closing brace
+  glsl_struct.member_list = parse_glsl_struct_member_list(parser);
+
   template_string_slice->set = set;
   template_string_slice->binding = binding;
+
   current_token = parser_advance_and_get_next_token(parser);
+
   directive_parse.was_successful = true;
+  directive_parse.glsl_struct = glsl_struct;
   return directive_parse;
 }
 
@@ -683,8 +893,7 @@ void parse_push_constant_directive(Parser *parser, TemplateStringSlice *template
   return;
 }
 
-void parse_shader(ShaderToCompile shader_to_compile, TemplateStringSlice *out_string_slices,
-                  u32 *out_num_string_slices) {
+ParsedShader parse_shader(ShaderToCompile shader_to_compile) {
 
   Parser parser;
   parser.tokens = lex_string(shader_to_compile.source, shader_to_compile.source_length);
@@ -694,11 +903,8 @@ void parse_shader(ShaderToCompile shader_to_compile, TemplateStringSlice *out_st
 
   u32 string_slice_index = 0;
 
-#if 0
-  for (u32 i = 0; i < 5; i++) {
-    printf("%s\n", token_type_to_string[parser.tokens.tokens[i].type]);
-  }
-#endif
+  ParsedShader parsed_shader;
+  memset(&parsed_shader, 0, sizeof(parsed_shader));
 
   TemplateStringSlice glsl_string_slice = new_template_string_slice(shader_to_compile.source);
   glsl_string_slice.type = DIRECTIVE_TYPE_GLSL_SOURCE;
@@ -713,7 +919,7 @@ void parse_shader(ShaderToCompile shader_to_compile, TemplateStringSlice *out_st
     // on a double L brace, end the glsl slice
     glsl_string_slice.end = current_token.start;
     if (glsl_string_slice.start != glsl_string_slice.end) {
-      out_string_slices[string_slice_index++] = glsl_string_slice;
+      parsed_shader.template_slices[string_slice_index++] = glsl_string_slice;
     }
 
     TemplateStringSlice template_string_slice = new_template_string_slice(current_token.start);
@@ -726,19 +932,32 @@ void parse_shader(ShaderToCompile shader_to_compile, TemplateStringSlice *out_st
       glsl_string_slice.start = parser_get_current_token(&parser).start;
       break;
     }
+
     case TOKEN_TYPE_DIRECTIVE_LOCATION: {
       template_string_slice.type = DIRECTIVE_TYPE_LOCATION;
-      parse_location_directive(&parser, shader_to_compile.stage, &template_string_slice);
-      glsl_string_slice.start = parser_get_current_token(&parser).start;
+      LocationDirectiveParse location_directive_parse =
+          parse_location_directive(&parser, shader_to_compile.stage, &template_string_slice);
+
+      if (location_directive_parse.vertex_attribute.glsl_type != GLSL_TYPE_NULL) {
+        assert(shader_to_compile.stage == SHADER_STAGE_VERTEX);
+        parsed_shader.vertex_layout.attributes[parsed_shader.vertex_layout.num_attributes++] =
+            location_directive_parse.vertex_attribute;
+      }
+
+      log_vertex_attribute(location_directive_parse.vertex_attribute);
+      glsl_string_slice.start = location_directive_parse.next_glsl_source_start;
       break;
     }
+
     case TOKEN_TYPE_DIRECTIVE_SET_BINDING: {
       template_string_slice.type = DIRECTIVE_TYPE_SET_BINDING;
       SetBindingDirectiveParse set_binding_directive_parse =
           parse_set_binding_directive(&parser, &template_string_slice);
+      log_glsl_struct(&set_binding_directive_parse.glsl_struct);
       glsl_string_slice.start = set_binding_directive_parse.next_glsl_source_start;
       break;
     }
+
     case TOKEN_TYPE_DIRECTIVE_PUSH_CONSTANT: {
       template_string_slice.type = DIRECTIVE_TYPE_PUSH_CONSTANT;
       parse_push_constant_directive(&parser, &template_string_slice);
@@ -749,12 +968,30 @@ void parse_shader(ShaderToCompile shader_to_compile, TemplateStringSlice *out_st
       assert(false);
     };
 
-    out_string_slices[string_slice_index++] = template_string_slice;
+    parsed_shader.template_slices[string_slice_index++] = template_string_slice;
   }
 
   glsl_string_slice.end = shader_to_compile.source + shader_to_compile.source_length;
   if (glsl_string_slice.start != glsl_string_slice.end) {
-    out_string_slices[string_slice_index++] = glsl_string_slice;
+    parsed_shader.template_slices[string_slice_index++] = glsl_string_slice;
   }
-  *out_num_string_slices = string_slice_index;
+
+  parsed_shader.num_template_slices = string_slice_index;
+  token_vector_free(&parser.tokens);
+  return parsed_shader;
+}
+
+ParsedShadersIR parse_all_shaders_and_populate_global_tables(const ShaderToCompileList *shader_to_compile_list) {
+  ParsedShadersIR parsed_shaders_ir;
+  memset(&parsed_shaders_ir, 0, sizeof(parsed_shaders_ir));
+  parsed_shaders_ir.num_sliced_shaders = shader_to_compile_list->num_shaders;
+
+  for (u32 i = 0; i < parsed_shaders_ir.num_sliced_shaders; i++) {
+    const ShaderToCompile *shader_to_compile = &shader_to_compile_list->shaders[i];
+    parsed_shaders_ir.sliced_shaders[i] = parse_shader(*shader_to_compile);
+    parsed_shaders_ir.sliced_shaders[i].name = shader_to_compile->name;
+    parsed_shaders_ir.sliced_shaders[i].stage = shader_to_compile->stage;
+  }
+
+  return parsed_shaders_ir;
 }

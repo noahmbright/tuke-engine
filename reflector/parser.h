@@ -1,15 +1,15 @@
 #pragma once
 
 #include "filesystem_utils.h"
+#include "reflection_data.h"
 #include "reflector.h"
 
-#include <malloc/_malloc.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define TOKEN_VECTOR_INITIAL_CAPACITY 64
-#define MAX_NUM_STRING_SLICES 16
+#define MAX_NUM_STRING_SLICES 64
 
 static const char *RED = "\033[31m";
 static const char *RESET = "\033[0m";
@@ -137,11 +137,6 @@ enum DirectiveType {
   DIRECTIVE_TYPE_GLSL_SOURCE // not really a directive, but the stuff that comes between the directives
 };
 
-struct TemplateStringReplacement {
-  const char *string;
-  u32 length;
-};
-
 enum GraphicsBackend { GRAPHICS_BACKEND_VULKAN, GRAPHICS_BACKEND_OPENGL, NUM_GRAPHICS_BACKENDS };
 
 // template string slices start on the first { of {{ and end on the first char of the next token
@@ -155,8 +150,6 @@ struct TemplateStringSlice {
   u32 location;
   u32 set;
   u32 binding;
-
-  TemplateStringReplacement replacements[NUM_GRAPHICS_BACKENDS];
 };
 
 inline TemplateStringSlice new_template_string_slice(const char *start) {
@@ -167,13 +160,37 @@ inline TemplateStringSlice new_template_string_slice(const char *start) {
   template_string_slice.set = 0;
   template_string_slice.binding = 0;
 
-  memset(template_string_slice.replacements, 0, sizeof(template_string_slice.replacements));
   return template_string_slice;
+}
+
+inline void log_string_slices(const TemplateStringSlice *template_string_slices, u32 num_string_slices) {
+  for (u32 i = 0; i < num_string_slices; i++) {
+    TemplateStringSlice slice = template_string_slices[i];
+
+    const char *start = slice.start;
+    const char *end = slice.end;
+    i32 length = (i32)(end - start);
+    if (length < 0) {
+      printf("Found a string slice with an end pointer preceding the beginning pointer\n");
+    }
+
+    if (slice.type == DIRECTIVE_TYPE_GLSL_SOURCE) {
+      printf("GLSL source slice of length %d:\n%.*s\n", length, length, start);
+    } else {
+      printf("String slice of length %d:\n%.*s\n", length, length, start);
+    }
+  }
 }
 
 struct SetBindingDirectiveParse {
   const char *next_glsl_source_start;
+  GLSLStruct glsl_struct;
   bool was_successful;
+};
+
+struct LocationDirectiveParse {
+  const char *next_glsl_source_start;
+  VertexAttribute vertex_attribute;
 };
 
 // Token definitions
@@ -242,7 +259,7 @@ inline void token_vector_free(TokenVector *token_vector) {
   token_vector->tokens = NULL;
 }
 
-// parser state and inline helpers
+// parser state and APIs
 struct Parser {
   const char *source;
   u32 source_length;
@@ -250,17 +267,23 @@ struct Parser {
   u32 token_index;
 };
 
-inline Token parser_get_current_token(const Parser *parser) { return parser->tokens.tokens[parser->token_index]; }
+// ParsedShader not responsible for freeing name, that belongs to ShaderToCompile
+// parsed shader not responsible for freeing anything
+struct ParsedShader {
+  ShaderStage stage;
+  const char *name;
 
-inline void parser_advance(Parser *parser) { parser->token_index++; }
+  VertexLayout vertex_layout;
 
-inline Token parser_advance_and_get_next_token(Parser *parser) {
-  parser_advance(parser);
-  return parser_get_current_token(parser);
-}
+  TemplateStringSlice template_slices[MAX_NUM_STRING_SLICES];
+  u32 num_template_slices;
+};
 
-inline bool parser_still_valid(Parser *parser) { return parser->token_index < parser->tokens.size; }
+struct ParsedShadersIR {
+  ParsedShader sliced_shaders[MAX_NUM_SHADERS];
+  u32 num_sliced_shaders;
+};
 
 TokenVector lex_string(const char *string, u32 string_length);
-void parse_shader(ShaderToCompile shader_to_compile, TemplateStringSlice *out_string_slices,
-                  u32 *out_num_string_slices);
+ParsedShader parse_shader(ShaderToCompile shader_to_compile);
+ParsedShadersIR parse_all_shaders_and_populate_global_tables(const ShaderToCompileList *shader_to_compile_list);

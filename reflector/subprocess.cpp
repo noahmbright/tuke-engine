@@ -185,7 +185,9 @@ SpirVBytesArray compile_vulkan_source_to_glsl(GLSLSource glsl_source, ShaderStag
 
   // invoke compiler
   int glslangValidator_rc = invoke_glslValidator(glsl_source_path, spirv_bytecode_path, stage);
-  (void)glslangValidator_rc;
+  if (glslangValidator_rc != 0) {
+    printf("Shader compilation failed, source dump:\n%s\n", glsl_source.string);
+  }
 
   // TODO hereafter copied and needs reviewed
   // Read SPIR-V

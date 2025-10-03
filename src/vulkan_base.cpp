@@ -2235,8 +2235,8 @@ void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data,
          uniform_write.size);
 }
 
-VertexLayoutBuilder create_vertex_layout_builder() {
-  VertexLayoutBuilder builder;
+VertexLayout create_vertex_layout_builder() {
+  VertexLayout builder;
   builder.binding_description_count = 0;
   memset(builder.binding_descriptions, 0, sizeof(builder.binding_descriptions));
   builder.attribute_description_count = 0;
@@ -2262,7 +2262,7 @@ create_readonly_storage_buffer(const VulkanContext *context, u32 buffer_size) {
   return readonly_storage_buffer;
 }
 
-void push_vertex_binding(VertexLayoutBuilder *builder, u32 binding, u32 stride,
+void push_vertex_binding(VertexLayout *builder, u32 binding, u32 stride,
                          VkVertexInputRate input_rate) {
   assert(builder->binding_description_count < MAX_VERTEX_BINDINGS);
 
@@ -2275,8 +2275,8 @@ void push_vertex_binding(VertexLayoutBuilder *builder, u32 binding, u32 stride,
   builder->binding_description_count++;
 }
 
-void push_vertex_attribute(VertexLayoutBuilder *builder, u32 location,
-                           u32 binding, VkFormat format, u32 offset) {
+void push_vertex_attribute(VertexLayout *builder, u32 location, u32 binding,
+                           VkFormat format, u32 offset) {
 
   assert(builder->attribute_description_count < MAX_VERTEX_ATTRIBUTES);
 
@@ -2291,7 +2291,7 @@ void push_vertex_attribute(VertexLayoutBuilder *builder, u32 location,
 }
 
 void push_vertex_attributes_and_bindings_and_finalize(
-    VertexLayoutBuilder *builder, const VulkanVertexLayout layout) {
+    VertexLayout *builder, const VulkanVertexLayout layout) {
 
   assert(builder->attribute_description_count == 0);
   assert(builder->binding_description_count == 0);
@@ -2318,13 +2318,13 @@ void push_vertex_attributes_and_bindings_and_finalize(
 }
 
 VkPipelineVertexInputStateCreateInfo
-build_vertex_input_state(VertexLayoutBuilder *builder) {
+build_vertex_input_state(VertexLayout *builder) {
   return create_vertex_input_state(
       builder->binding_description_count, builder->binding_descriptions,
       builder->attribute_description_count, builder->attribute_descriptions);
 }
 
-void finalize_vertex_input_state(VertexLayoutBuilder *builder) {
+void finalize_vertex_input_state(VertexLayout *builder) {
   builder->vertex_input_state = create_vertex_input_state(
       builder->binding_description_count, builder->binding_descriptions,
       builder->attribute_description_count, builder->attribute_descriptions);

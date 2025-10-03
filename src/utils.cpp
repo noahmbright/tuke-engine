@@ -16,7 +16,7 @@ const char *read_file(const char *path, unsigned long *size) {
   rewind(fp);
   char *buffer = (char *)malloc(file_size + 1);
   if (buffer == NULL) {
-    fprintf(stderr, "Failed to allocte buffer for %s\n", path);
+    fprintf(stderr, "Failed to allocate buffer for %s\n", path);
     exit(1);
   }
 
@@ -37,8 +37,7 @@ const char *read_file(const char *path, unsigned long *size) {
 STBHandle load_texture_metadata(const char *path) {
   STBHandle handle;
   if (!stbi_info(path, &handle.width, &handle.height, &handle.n_channels)) {
-    fprintf(stderr, "load_texture_metadata: Failed to load %s, for reason %s\n",
-            path, stbi_failure_reason());
+    fprintf(stderr, "load_texture_metadata: Failed to load %s, for reason %s\n", path, stbi_failure_reason());
   }
   handle.data = NULL;
   return handle;
@@ -47,8 +46,7 @@ STBHandle load_texture_metadata(const char *path) {
 STBHandle load_texture(const char *path) {
   STBHandle handle;
   stbi_set_flip_vertically_on_load(true);
-  handle.data =
-      stbi_load(path, &handle.width, &handle.height, &handle.n_channels, 4);
+  handle.data = stbi_load(path, &handle.width, &handle.height, &handle.n_channels, 4);
   handle.n_channels = 4;
   if (!handle.data) {
     fprintf(stderr, "load_texture: Failed to stbi_load %s\n", path);
@@ -74,12 +72,10 @@ unsigned load_texture_opengl(const char *path) {
   glBindTexture(GL_TEXTURE_2D, texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
-                  GL_LINEAR_MIPMAP_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   if (handle.data) {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, handle.width, handle.height, 0,
-                 GL_RGB, GL_UNSIGNED_BYTE, handle.data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, handle.width, handle.height, 0, GL_RGB, GL_UNSIGNED_BYTE, handle.data);
     glGenerateMipmap(GL_TEXTURE_2D);
   } else {
     fprintf(stderr, "stbi_load returned nullptr\n");

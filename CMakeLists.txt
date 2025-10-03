@@ -27,6 +27,12 @@ target_link_libraries(pong PRIVATE engine)
 file(GLOB_RECURSE REFLECTOR_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/reflector/main.cpp
     ${CMAKE_SOURCE_DIR}/reflector/filesystem_utils.cpp
+    ${CMAKE_SOURCE_DIR}/reflector/parser.cpp
+    ${CMAKE_SOURCE_DIR}/reflector/codegen.cpp
+    ${CMAKE_SOURCE_DIR}/reflector/subprocess.cpp
 )
 
 add_executable(reflector ${REFLECTOR_SOURCE_FILES})
+target_compile_options(reflector PRIVATE 
+    -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address)
+target_link_options(reflector PUBLIC -fsanitize=address)
