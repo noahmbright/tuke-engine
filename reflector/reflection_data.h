@@ -3,8 +3,11 @@
 #include "reflector.h"
 #include <stdio.h>
 
-#define MAX_NUM_VERTEX_ATTRIBUTES 8
+#define MAX_NUM_VERTEX_ATTRIBUTES 32
+#define MAX_NUM_VERTEX_BINDINGS 32
 #define MAX_NUM_STRUCT_MEMBERS 8
+#define MAX_NUM_DESCRIPTOR_BINDINGS 8
+#define MAX_VERTEX_LAYOUT_NAME_LENGTH 128
 
 enum GLSLType {
   GLSL_TYPE_NULL,
@@ -24,11 +27,21 @@ enum GLSLType {
 static const char *glsl_type_to_string[NUM_GLSL_TYPES]{
     [GLSL_TYPE_NULL] = "null", [GLSL_TYPE_FLOAT] = "float", [GLSL_TYPE_UINT] = "uint",
     [GLSL_TYPE_VEC2] = "vec2", [GLSL_TYPE_VEC3] = "vec3",   [GLSL_TYPE_VEC4] = "vec4",
-    [GLSL_TYPE_MAT2] = "mac2", [GLSL_TYPE_MAT3] = "mac3",   [GLSL_TYPE_MAT4] = "mac4",
-
+    [GLSL_TYPE_MAT2] = "mat2", [GLSL_TYPE_MAT3] = "mat3",   [GLSL_TYPE_MAT4] = "mat4",
 };
 
-enum VertexAttributeRate { VERTEX_ATTRIBUTE_RATE_VERTEX, VERTEX_ATTRIBUTE_RATE_INSTANCE, NUM_VERTEX_ATTRIBUTE_RATES };
+static const u32 glsl_type_to_size[NUM_GLSL_TYPES]{
+    [GLSL_TYPE_NULL] = 0,     [GLSL_TYPE_FLOAT] = 4,    [GLSL_TYPE_UINT] = 0,
+    [GLSL_TYPE_VEC2] = 8,     [GLSL_TYPE_VEC3] = 12,    [GLSL_TYPE_VEC4] = 16,
+    [GLSL_TYPE_MAT2] = 4 * 4, [GLSL_TYPE_MAT3] = 9 * 4, [GLSL_TYPE_MAT4] = 16 * 4,
+};
+
+enum VertexAttributeRate {
+  VERTEX_ATTRIBUTE_RATE_NULL,
+  VERTEX_ATTRIBUTE_RATE_VERTEX,
+  VERTEX_ATTRIBUTE_RATE_INSTANCE,
+  NUM_VERTEX_ATTRIBUTE_RATES,
+};
 
 // a vertex attribute is a single variable, like a vec3 for position
 struct VertexAttribute {
@@ -38,6 +51,8 @@ struct VertexAttribute {
   VertexAttributeRate rate;
   GLSLType glsl_type;
   bool is_tightly_packed;
+  // treat a vertex layout as a list of MAX_NUM_VERTEX_ATTRIBUTES attributes, and only emit code for the valid ones
+  bool is_valid;
 };
 
 inline void log_vertex_attribute(VertexAttribute vertex_attribute) {
@@ -54,21 +69,55 @@ inline void log_vertex_attribute(VertexAttribute vertex_attribute) {
          glsl_type_to_string[vertex_attribute.glsl_type]);
 }
 
-inline bool vertex_attribute_equal(VertexAttribute left, VertexAttribute right) {
-  bool location_equals = (left.location == right.location);
-  bool binding_equals = (left.binding == right.binding);
-  bool offset_equals = (left.offset == right.offset);
-  bool glsl_type_equals = (left.glsl_type == right.glsl_type);
-  bool rate_equals = (left.rate == right.rate);
-  return location_equals && binding_equals && offset_equals && glsl_type_equals && rate_equals;
-}
-
 // the vertex layout is the collection of all the attributes
 // this is how we tell the shader how to interpret incoming data
 struct VertexLayout {
   VertexAttribute attributes[MAX_NUM_VERTEX_ATTRIBUTES];
-  u8 num_attributes;
+  char name[MAX_VERTEX_LAYOUT_NAME_LENGTH];
+  u8 name_length;
 };
+
+inline void log_vertex_layout(const VertexLayout *vertex_layout) {
+  bool found_valid = false;
+  for (u32 i = 0; i < MAX_NUM_VERTEX_ATTRIBUTES; i++) {
+    if (vertex_layout->attributes[i].is_valid) {
+      if (!found_valid) {
+        found_valid = true;
+        if (vertex_layout->name_length > 0) {
+          printf("Logging Vertex Layout %s:\n", vertex_layout->name);
+        } else {
+          printf("Logging Vertex Layout with uninitialized name:\n");
+        }
+      }
+      log_vertex_attribute(vertex_layout->attributes[i]);
+    }
+  }
+  if (!found_valid) {
+    printf("log_vertex_layout: vertex layout has no valid entries\n");
+  }
+}
+
+inline bool vertex_layout_equals(const VertexLayout *left, const VertexLayout *right) {
+  for (u32 i = 0; i < MAX_NUM_VERTEX_ATTRIBUTES; i++) {
+    bool left_valid = left->attributes[i].is_valid;
+    bool right_valid = right->attributes[i].is_valid;
+    if (left_valid != right_valid) {
+      return false;
+    }
+
+    if (left_valid == false) {
+      continue;
+    }
+
+    bool same_location = (left->attributes[i].location == right->attributes[i].location);
+    bool same_type = (left->attributes[i].glsl_type == right->attributes[i].glsl_type);
+    if (!(same_type && same_location)) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 // only supporting native GLSL types, no nested structs
 struct GLSLStructMember {
@@ -98,3 +147,23 @@ inline void log_glsl_struct(const GLSLStruct *glsl_struct) {
            current_member.identifier);
   }
 }
+
+// descriptor sets
+struct DescriptorBinding {
+  u32 set;
+  u32 binding;
+};
+
+// these lists of bindings describe what a shader needs. these are data formats
+// these can be reused across pipelines. but the descriptor set itself must know
+// what numerical set index it corresponds to for vulkan API calls
+struct DescriptorBindingList {
+  DescriptorBinding bindings[MAX_NUM_DESCRIPTOR_BINDINGS];
+  u32 num_bindings;
+};
+
+// a descriptor set is a set of all the bindings with the same set id
+struct DescriptorSet {
+  u32 set_index;
+  DescriptorBindingList *binding_list;
+};

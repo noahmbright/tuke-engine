@@ -501,6 +501,7 @@ LocationDirectiveParse parse_location_directive(Parser *parser, ShaderStage shad
   location_directive_parse.vertex_attribute.rate = VERTEX_ATTRIBUTE_RATE_VERTEX;
   location_directive_parse.vertex_attribute.glsl_type = GLSL_TYPE_NULL;
   location_directive_parse.vertex_attribute.is_tightly_packed = false;
+  location_directive_parse.vertex_attribute.is_valid = false;
 
   current_token = parser_advance_and_get_next_token(parser);
   if (current_token.type != TOKEN_TYPE_NUMBER) {
@@ -510,6 +511,7 @@ LocationDirectiveParse parse_location_directive(Parser *parser, ShaderStage shad
     return location_directive_parse;
   }
   u32 location = parse_integer_token(parser, current_token);
+  template_string_slice->location = location;
 
   // either BINDING or the end for outs/fragment/compute
   current_token = parser_advance_and_get_next_token(parser);
@@ -522,14 +524,15 @@ LocationDirectiveParse parse_location_directive(Parser *parser, ShaderStage shad
       return location_directive_parse;
     }
 
-    // move past }} and mark one past the end of this slice
+    // move past double r brace and mark one past the end of this slice
     current_token = parser_advance_and_get_next_token(parser);
+    location_directive_parse.next_glsl_source_start = current_token.start;
     template_string_slice->end = current_token.start;
     return location_directive_parse;
   }
 
   // in a vertex shader, can have either out or BINDING + the rest of the binding
-  // check for }} and out
+  // check for double r brace and out
   if (current_token.type == TOKEN_TYPE_DOUBLE_R_BRACE) {
     current_token = parser_advance_and_get_next_token(parser);
 
@@ -539,7 +542,7 @@ LocationDirectiveParse parse_location_directive(Parser *parser, ShaderStage shad
                           token_type_to_string[current_token.type]);
     }
 
-    // move past }} and mark one past the end of this slice
+    // move past double r brace and mark one past the end of this slice
     template_string_slice->end = current_token.start;
     location_directive_parse.next_glsl_source_start = current_token.start;
     return location_directive_parse;
@@ -598,11 +601,11 @@ LocationDirectiveParse parse_location_directive(Parser *parser, ShaderStage shad
     location_directive_parse.vertex_attribute.is_tightly_packed = true;
   }
 
-  // }}
+  // double r brace
   current_token = parser_advance_and_get_next_token(parser);
   if (current_token.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
     report_parser_error(parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
-                        "Expected }} after offset in location directive, got %s",
+                        "Expected DOUBLE_R_BRACE after offset in location directive, got %s",
                         token_type_to_string[current_token.type]);
     return location_directive_parse;
   }
@@ -616,7 +619,7 @@ LocationDirectiveParse parse_location_directive(Parser *parser, ShaderStage shad
   current_token = parser_advance_and_get_next_token(parser);
   if (current_token.type != TOKEN_TYPE_IN) {
     report_parser_error(parser, current_token.start, TOKEN_TYPE_SEMICOLON,
-                        "Expected in (glsl keyword) after double R braces ending location directive, got %s",
+                        "Expected in (glsl keyword) after DOUBLE_R_BRACE ending location directive, got %s",
                         token_type_to_string[current_token.type]);
     return location_directive_parse;
   }
@@ -654,6 +657,7 @@ LocationDirectiveParse parse_location_directive(Parser *parser, ShaderStage shad
   location_directive_parse.vertex_attribute.binding = binding;
   location_directive_parse.vertex_attribute.rate = vertex_attribute_rate;
   location_directive_parse.vertex_attribute.glsl_type = glsl_type;
+  location_directive_parse.vertex_attribute.is_valid = true;
 
   current_token = parser_advance_and_get_next_token(parser);
   return location_directive_parse;
@@ -737,6 +741,7 @@ GLSLStructMemberList parse_glsl_struct_member_list(Parser *parser) {
     }
   }
 
+  // should be unreachable under normal circumstances
   report_parser_error(parser, current_token.start, TOKEN_TYPE_R_BRACE, "Reached EOF while parsing struct members");
   return glsl_struct_member_list;
 }
@@ -893,7 +898,173 @@ void parse_push_constant_directive(Parser *parser, TemplateStringSlice *template
   return;
 }
 
-ParsedShader parse_shader(ShaderToCompile shader_to_compile) {
+static inline const char *glsl_type_to_vertex_layout_enum_slice(GLSLType type) {
+  switch (type) {
+  case GLSL_TYPE_NULL:
+    fprintf(stderr, "Vertex Attribute has GLSL_TYPE_NULL, but attempting to convert to VertexLayout name slice.\n");
+    return NULL;
+  case GLSL_TYPE_FLOAT:
+    return "FLOAT";
+  case GLSL_TYPE_UINT:
+    return "UINT";
+  case GLSL_TYPE_VEC2:
+    return "VEC2";
+  case GLSL_TYPE_VEC3:
+    return "VEC3";
+  case GLSL_TYPE_VEC4:
+    return "VEC4";
+  case GLSL_TYPE_MAT2:
+    return "MAT2";
+  case GLSL_TYPE_MAT3:
+    return "MAT3";
+  case GLSL_TYPE_MAT4:
+    return "MAT4";
+  default:
+    fprintf(stderr, "Vertex Attribute has GLSL_TYPE_NULL, but attempting to convert to VertexLayout name slice.\n");
+    return NULL;
+  }
+}
+
+// assumption is that the vertex layout is valid, one of the stuipulations for which is
+// that all attributes are at locations in consecutive order, starting from 0
+// can use that assumption to impose a stopiing condition (or second validation condition)
+static inline void populate_vertex_layout_name(VertexLayout *vertex_layout) {
+  bool found_invalid = false;
+  const char *prefix = "VERTEX_LAYOUT";
+  memcpy(vertex_layout->name, prefix, strlen(prefix));
+  u32 current_length = strlen(prefix);
+
+  for (u32 i = 0; i < MAX_NUM_VERTEX_ATTRIBUTES; i++) {
+    if (vertex_layout->attributes[i].is_valid) {
+
+      // double checking no nonconsecutive valids
+      if (found_invalid) {
+        fprintf(stderr,
+                "Attempting to populate Vertex Layout name, but found nonconsecutive valid entries. Stopping.\n");
+        return;
+      }
+
+      // need to append underscore and next type's slice
+      const char *next_slice = glsl_type_to_vertex_layout_enum_slice(vertex_layout->attributes[i].glsl_type);
+      u32 slice_length = strlen(next_slice);
+      u32 next_length = slice_length + 1;
+      // need to keep a null terminator, so stop at  max length - 1
+      if (current_length + next_length >= MAX_VERTEX_LAYOUT_NAME_LENGTH - 1) {
+        fprintf(stderr, "Not enough space to add next glsl type to vertex layout name, which currently is %s.\n",
+                vertex_layout->name);
+        return;
+      }
+
+      vertex_layout->name[current_length] = '_';
+      memcpy(vertex_layout->name + current_length + 1, next_slice, slice_length);
+      current_length += next_length;
+    } else {
+      found_invalid = true;
+    }
+  }
+
+  // the assumption here is that the vertex layout we're populating was 0'd out at init time,
+  // so this null terminator shouldn't be necessary. add out of abundance of caution
+  vertex_layout->name[current_length] = '\0';
+  vertex_layout->name_length = current_length;
+}
+
+static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layout) {
+
+  bool found_first_invalid_after_valids = false;
+  u64 found_locations = 0;
+
+  VertexAttributeRate offset_rates[MAX_NUM_VERTEX_BINDINGS];
+  for (u32 i = 0; i < MAX_NUM_VERTEX_BINDINGS; i++) {
+    offset_rates[i] = VERTEX_ATTRIBUTE_RATE_NULL;
+  }
+
+  // we only accept vertex attribute locations in consecutive, ascending order, starting from 0
+  // the edge case here is that the vertex layout has no in attributes, this loop checks that
+  // if the first attribute is not present, then no attributes are present
+  if (!vertex_layout->attributes[0].is_valid) {
+    for (u32 i = 1; i < MAX_NUM_VERTEX_ATTRIBUTES; i++) {
+      if (vertex_layout->attributes[i].is_valid) {
+        fprintf(stderr, "Found vertex attribute with valid entries, but not starting at 0, stopping.\n");
+        return false;
+      }
+    }
+
+    // no valid entries to do anything for, valid null layout, just nane it
+    const char *null_name = "VERTEX_LAYOUT_NULL";
+    vertex_layout->name_length = strlen(null_name);
+    memcpy(vertex_layout->name, null_name, vertex_layout->name_length);
+    vertex_layout->name[vertex_layout->name_length] = '\0';
+    return true;
+  }
+
+  bool is_tightly_packed = vertex_layout->attributes[0].is_tightly_packed;
+  // we have at least one valid entry at 0. Still need to validate that all other valid entries
+  // are in consecutive order
+  for (u32 i = 1; i < MAX_NUM_VERTEX_ATTRIBUTES; i++) {
+    if (!vertex_layout->attributes[i].is_valid) {
+      found_first_invalid_after_valids = true;
+      continue;
+    } else {
+      // in the valid case, just confirm that we haven't already found invalid attributes
+      if (found_first_invalid_after_valids) {
+        fprintf(stderr, "Found vertex attribute with non-consecutive attribute locations, stopping.\n");
+        return false;
+      }
+    }
+
+    // validate rates are consistent per binding
+    VertexAttributeRate rate = vertex_layout->attributes[i].rate;
+    if (rate != VERTEX_ATTRIBUTE_RATE_NULL) {
+      if (offset_rates[vertex_layout->attributes[i].binding] == VERTEX_ATTRIBUTE_RATE_NULL) {
+        offset_rates[vertex_layout->attributes[i].binding] = rate;
+      } else {
+        if (offset_rates[vertex_layout->attributes[i].binding] != rate) {
+          fprintf(stderr, "In vertex layout, found binding %u with inconsistent rate.\n",
+                  vertex_layout->attributes[i].binding);
+          return false;
+        }
+      }
+    }
+
+    // validate no double locations
+    // this will probably never fire, because we always write entries into their [location] entry
+    // into the vertexlayout array. need to validate at insertion time
+    u64 location_flag = (1ull << vertex_layout->attributes[i].location);
+    if ((found_locations & location_flag) != 0) {
+      fprintf(stderr, "In vertex layout, found location %u is double counted\n", vertex_layout->attributes[i].location);
+      return false;
+    }
+    found_locations |= location_flag;
+
+    // 2nd+ entry, look for inconsistencies in tight packing
+    if (vertex_layout->attributes[i].is_tightly_packed != is_tightly_packed) {
+      fprintf(stderr, "Found inconsistency in packing for vertex layout\n");
+      return false;
+    }
+  }
+
+  populate_vertex_layout_name(vertex_layout);
+  // offsets were already given manually in the shader, done
+  if (!is_tightly_packed) {
+    return true;
+  }
+
+  u32 running_binding_offsets[MAX_NUM_VERTEX_BINDINGS];
+  memset(running_binding_offsets, 0, sizeof(running_binding_offsets));
+  for (u32 i = 0; i < MAX_NUM_VERTEX_ATTRIBUTES; i++) {
+    if (!vertex_layout->attributes[i].is_valid) {
+      continue;
+    }
+    u32 current_binding = vertex_layout->attributes[i].binding;
+    vertex_layout->attributes[i].offset = running_binding_offsets[current_binding];
+    running_binding_offsets[current_binding] += glsl_type_to_size[vertex_layout->attributes[i].glsl_type];
+  }
+
+  return true;
+}
+
+void parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_shaders_ir) {
 
   Parser parser;
   parser.tokens = lex_string(shader_to_compile.source, shader_to_compile.source_length);
@@ -905,6 +1076,14 @@ ParsedShader parse_shader(ShaderToCompile shader_to_compile) {
 
   ParsedShader parsed_shader;
   memset(&parsed_shader, 0, sizeof(parsed_shader));
+  parsed_shader.name = shader_to_compile.name;
+  parsed_shader.stage = shader_to_compile.stage;
+
+  DescriptorBindingList descriptor_binding_list;
+  memset(&descriptor_binding_list, 0, sizeof(descriptor_binding_list));
+
+  VertexLayout vertex_layout;
+  memset(&vertex_layout, 0, sizeof(vertex_layout));
 
   TemplateStringSlice glsl_string_slice = new_template_string_slice(shader_to_compile.source);
   glsl_string_slice.type = DIRECTIVE_TYPE_GLSL_SOURCE;
@@ -938,13 +1117,20 @@ ParsedShader parse_shader(ShaderToCompile shader_to_compile) {
       LocationDirectiveParse location_directive_parse =
           parse_location_directive(&parser, shader_to_compile.stage, &template_string_slice);
 
+      // should I move this to an out parameter to ensure the vertex attribute is built in place?
+      // can the compiler do that for me with some kind of RVO?
       if (location_directive_parse.vertex_attribute.glsl_type != GLSL_TYPE_NULL) {
         assert(shader_to_compile.stage == SHADER_STAGE_VERTEX);
-        parsed_shader.vertex_layout.attributes[parsed_shader.vertex_layout.num_attributes++] =
-            location_directive_parse.vertex_attribute;
+        if (vertex_layout.attributes[location_directive_parse.vertex_attribute.location].is_valid) {
+          fprintf(stderr, "Found repeat location %u for vertex layout in %s.\n",
+                  location_directive_parse.vertex_attribute.location, shader_to_compile.name);
+        } else {
+          vertex_layout.attributes[location_directive_parse.vertex_attribute.location] =
+              location_directive_parse.vertex_attribute;
+        }
       }
 
-      log_vertex_attribute(location_directive_parse.vertex_attribute);
+      // log_vertex_attribute(location_directive_parse.vertex_attribute);
       glsl_string_slice.start = location_directive_parse.next_glsl_source_start;
       break;
     }
@@ -953,7 +1139,7 @@ ParsedShader parse_shader(ShaderToCompile shader_to_compile) {
       template_string_slice.type = DIRECTIVE_TYPE_SET_BINDING;
       SetBindingDirectiveParse set_binding_directive_parse =
           parse_set_binding_directive(&parser, &template_string_slice);
-      log_glsl_struct(&set_binding_directive_parse.glsl_struct);
+      // log_glsl_struct(&set_binding_directive_parse.glsl_struct);
       glsl_string_slice.start = set_binding_directive_parse.next_glsl_source_start;
       break;
     }
@@ -970,27 +1156,52 @@ ParsedShader parse_shader(ShaderToCompile shader_to_compile) {
 
     parsed_shader.template_slices[string_slice_index++] = template_string_slice;
   }
+  // finished parsing
 
   glsl_string_slice.end = shader_to_compile.source + shader_to_compile.source_length;
   if (glsl_string_slice.start != glsl_string_slice.end) {
     parsed_shader.template_slices[string_slice_index++] = glsl_string_slice;
   }
 
+  // TODO rwlocks
+  if (shader_to_compile.stage == SHADER_STAGE_VERTEX) {
+
+    bool found_matching_vertex_layout = false;
+    const VertexLayout *matching_vertex_layout_index = NULL;
+    for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
+      if (vertex_layout_equals(&vertex_layout, &parsed_shaders_ir->vertex_layouts[i])) {
+        found_matching_vertex_layout = true;
+        matching_vertex_layout_index = &parsed_shaders_ir->vertex_layouts[i];
+        break;
+      }
+    }
+
+    if (found_matching_vertex_layout) {
+      parsed_shader.vertex_layout = matching_vertex_layout_index;
+    } else {
+      if (vertex_layout_validate_and_compute_offsets(&vertex_layout)) {
+        parsed_shaders_ir->vertex_layouts[parsed_shaders_ir->num_vertex_layouts++] = vertex_layout;
+        parsed_shader.vertex_layout = &parsed_shaders_ir->vertex_layouts[parsed_shaders_ir->num_vertex_layouts - 1];
+      } else {
+        // release locks?
+        fprintf(stderr, "Failed to validate vertex layout for %s.\n", shader_to_compile.name);
+        return;
+      }
+    }
+    // log_vertex_layout(&vertex_layout);
+  }
+
   parsed_shader.num_template_slices = string_slice_index;
+  parsed_shaders_ir->parsed_shaders[parsed_shaders_ir->num_parsed_shaders++] = parsed_shader;
   token_vector_free(&parser.tokens);
-  return parsed_shader;
 }
 
 ParsedShadersIR parse_all_shaders_and_populate_global_tables(const ShaderToCompileList *shader_to_compile_list) {
   ParsedShadersIR parsed_shaders_ir;
   memset(&parsed_shaders_ir, 0, sizeof(parsed_shaders_ir));
-  parsed_shaders_ir.num_sliced_shaders = shader_to_compile_list->num_shaders;
 
-  for (u32 i = 0; i < parsed_shaders_ir.num_sliced_shaders; i++) {
-    const ShaderToCompile *shader_to_compile = &shader_to_compile_list->shaders[i];
-    parsed_shaders_ir.sliced_shaders[i] = parse_shader(*shader_to_compile);
-    parsed_shaders_ir.sliced_shaders[i].name = shader_to_compile->name;
-    parsed_shaders_ir.sliced_shaders[i].stage = shader_to_compile->stage;
+  for (u32 i = 0; i < shader_to_compile_list->num_shaders; i++) {
+    parse_shader(shader_to_compile_list->shaders[i], &parsed_shaders_ir);
   }
 
   return parsed_shaders_ir;

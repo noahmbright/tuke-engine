@@ -10,6 +10,9 @@
 
 #define TOKEN_VECTOR_INITIAL_CAPACITY 64
 #define MAX_NUM_STRING_SLICES 64
+#define MAX_NUM_VERTEX_LAYOUTS 32
+#define MAX_NUM_DESCRIPTOR_SET_LISTS 32
+#define MAX_NUM_DESCRIPTOR_SETS 8
 
 static const char *RED = "\033[31m";
 static const char *RESET = "\033[0m";
@@ -273,15 +276,25 @@ struct ParsedShader {
   ShaderStage stage;
   const char *name;
 
-  VertexLayout vertex_layout;
-
   TemplateStringSlice template_slices[MAX_NUM_STRING_SLICES];
   u32 num_template_slices;
+
+  const VertexLayout *vertex_layout;
+  DescriptorSet descriptor_sets[MAX_NUM_DESCRIPTOR_SETS];
 };
 
+// the IR contains the shaders after parsing, which all have their slices and pointers to their descriptor sets and
+// vertex layouts
+// it also holds the global list of descriptor sets and vertex layouts that the slices shaders point into
 struct ParsedShadersIR {
-  ParsedShader sliced_shaders[MAX_NUM_SHADERS];
-  u32 num_sliced_shaders;
+  ParsedShader parsed_shaders[MAX_NUM_SHADERS];
+  u32 num_parsed_shaders;
+
+  DescriptorBindingList descriptor_binding_lists[MAX_NUM_DESCRIPTOR_SET_LISTS];
+  u32 num_descriptor_binding_lists;
+
+  VertexLayout vertex_layouts[MAX_NUM_VERTEX_LAYOUTS];
+  u32 num_vertex_layouts;
 };
 
 TokenVector lex_string(const char *string, u32 string_length);

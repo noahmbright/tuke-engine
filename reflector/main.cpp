@@ -26,7 +26,7 @@ int main() {
     exit(0);
   } else {
     // debug hack
-    shader_to_compile_list.num_shaders = 1;
+    // shader_to_compile_list.num_shaders = 1;
   }
 
   printf("Collected %d shaders to compile\n", shader_to_compile_list.num_shaders);
@@ -41,7 +41,6 @@ int main() {
   // 4) codegen
   FILE *output_file = fopen("c_reflector_bringup.h", "w");
   codegen(output_file, &parsed_shaders_ir);
-  // SpirVBytesArray bytes_array = compile_vulkan_source_to_glsl(glsl_source, shader_to_compile_list.shaders[0].stage);
 
   // (5) cleanup
   free_shader_to_compile_list(&shader_to_compile_list);

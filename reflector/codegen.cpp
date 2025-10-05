@@ -182,7 +182,7 @@ void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
   memset(glsl_sources, 0, sizeof(glsl_sources));
   SpirVBytesArray spirv_bytes_arrays[MAX_NUM_SHADERS];
   memset(spirv_bytes_arrays, 0, sizeof(spirv_bytes_arrays));
-  u32 num_shaders = parsed_shaders_ir->num_sliced_shaders;
+  u32 num_shaders = parsed_shaders_ir->num_parsed_shaders;
 
   codegen_compiled_shader_header(destination);
 
@@ -190,25 +190,36 @@ void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
   fprintf(destination, "enum ShaderHandle {\n");
 
   for (u32 shaders_index = 0; shaders_index < num_shaders; shaders_index++) {
-    const ParsedShader *current_sliced_shader = &parsed_shaders_ir->sliced_shaders[shaders_index];
+    const ParsedShader *current_parsed_shader = &parsed_shaders_ir->parsed_shaders[shaders_index];
     // printf("replacing and compiling %s\n\n", current_sliced_shader->name);
 
     // compile all backends
     for (u32 backend_index = 0; backend_index < NUM_GRAPHICS_BACKENDS; backend_index++) {
       glsl_sources[shaders_index][backend_index] =
-          replace_string_slices(current_sliced_shader, (GraphicsBackend)backend_index);
+          replace_string_slices(current_parsed_shader, (GraphicsBackend)backend_index);
       // printf("%s\n\n", glsl_sources[shaders_index][backend_index].string);
     }
 
     spirv_bytes_arrays[shaders_index] = compile_vulkan_source_to_glsl(
-        glsl_sources[shaders_index][GRAPHICS_BACKEND_VULKAN], current_sliced_shader->stage);
+        glsl_sources[shaders_index][GRAPHICS_BACKEND_VULKAN], current_parsed_shader->stage);
+    if (spirv_bytes_arrays[shaders_index].bytes == NULL) {
+      printf("Compilation for %s failed.\n", current_parsed_shader->name);
+    }
 
     fputs("\tSHADER_HANDLE_", destination);
-    print_name_in_caps(destination, current_sliced_shader->name);
+    print_name_in_caps(destination, current_parsed_shader->name);
     fputs(",\n", destination);
   }
-  // close enum
-  fprintf(destination, "\tNUM_SHADER_HANDLES\n};\n\n");
+  fprintf(destination, "\n\tNUM_SHADER_HANDLES\n};\n\n");
+
+  // codegen for vertex layouts
+  // enum
+  fprintf(destination, "enum VertexLayoutID{\n");
+  for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
+    const VertexLayout *vertex_layout = &parsed_shaders_ir->vertex_layouts[i];
+    fprintf(destination, "\t%s,\n", vertex_layout->name);
+  }
+  fprintf(destination, "\n\tNUM_VERTEX_LAYOUT_IDS\n};\n\n");
 
   // for individual shaders, the spirv bytes, the opengl glsl
 }
