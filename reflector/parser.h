@@ -281,6 +281,10 @@ struct ParsedShader {
 
   const VertexLayout *vertex_layout;
   DescriptorSet descriptor_sets[MAX_NUM_DESCRIPTOR_SETS];
+
+  VertexAttributeRate binding_rates[MAX_NUM_VERTEX_BINDINGS];
+  u16 binding_strides[MAX_NUM_VERTEX_BINDINGS];
+  u8 binding_count;
 };
 
 // the IR contains the shaders after parsing, which all have their slices and pointers to their descriptor sets and

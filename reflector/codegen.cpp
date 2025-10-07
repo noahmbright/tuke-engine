@@ -1,6 +1,7 @@
 #include "codegen.h"
 #include "filesystem_utils.h"
 #include "parser.h"
+#include "reflection_data.h"
 #include "subprocess.h"
 
 #include <assert.h>
@@ -174,6 +175,29 @@ inline void print_name_in_caps(FILE *destination, const char *name) {
   }
 }
 
+const char *glsl_type_to_vulkan_format(GLSLType type) {
+  switch (type) {
+
+  case GLSL_TYPE_VEC2:
+    return "VK_FORMAT_R32G32_SFLOAT";
+  case GLSL_TYPE_VEC3:
+    return "VK_FORMAT_R32G32B32_SFLOAT";
+
+    // TODO?
+  case GLSL_TYPE_FLOAT:
+  case GLSL_TYPE_UINT:
+  case GLSL_TYPE_VEC4:
+  case GLSL_TYPE_MAT2:
+  case GLSL_TYPE_MAT3:
+  case GLSL_TYPE_MAT4:
+
+  case GLSL_TYPE_NULL:
+  default:
+    fprintf(stderr, "vertex_attribute_rate_to_vulkan_enum_string got an invalid rate enum.\n");
+    return NULL;
+  }
+}
+
 // the real deal
 void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
 
@@ -220,6 +244,50 @@ void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
     fprintf(destination, "\t%s,\n", vertex_layout->name);
   }
   fprintf(destination, "\n\tNUM_VERTEX_LAYOUT_IDS\n};\n\n");
+
+  // vulkan vertex layout array
+  fprintf(destination, "const VulkanVertexLayout generated_vulkan_vertex_layouts[NUM_VERTEX_LAYOUT_IDS] = {\n");
+  for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
+    const VertexLayout *vertex_layout = &parsed_shaders_ir->vertex_layouts[i];
+    fprintf(destination, "\t[%s] = {\n", vertex_layout->name);
+
+    // bindings
+    fprintf(destination, "\t\t.binding_count = %u,\n", vertex_layout->binding_count);
+    fprintf(destination, "\t\t.bindings = {\n");
+    for (u32 i = 0; i < MAX_NUM_VERTEX_BINDINGS; i++) {
+      bool has_stride = (vertex_layout->binding_strides[i] > 0);
+      bool has_rate = (vertex_layout->binding_rates[i] != VERTEX_ATTRIBUTE_RATE_NULL);
+      if (has_stride != has_rate) {
+        fprintf(stderr, "Generating binding code for vertex layout %s, but rate and stride are not both present.\n",
+                vertex_layout->name);
+        continue;
+      }
+
+      if (!has_rate) {
+        continue;
+      }
+
+      fprintf(destination, "\t\t\t{ .binding = %u,\n", i);
+      fprintf(destination, "\t\t\t.stride = %u,\n", vertex_layout->binding_strides[i]);
+      fprintf(destination, "\t\t\t.inputRate = %s },\n",
+              vertex_attribute_rate_to_vulkan_enum_string(vertex_layout->binding_rates[i]));
+    }
+    fprintf(destination, "\t\t},\n"); // close array of bindings
+
+    // attributes
+    fprintf(destination, "\t\t.attribute_count = %u,\n", vertex_layout->attribute_count);
+    fprintf(destination, "\t\t.attributes = {\n");
+    for (u32 i = 0; i < vertex_layout->attribute_count; i++) {
+      fprintf(destination, "\t\t\t{ .binding = %u,\n", vertex_layout->attributes[i].binding);
+      fprintf(destination, "\t\t\t.location = %u,\n", vertex_layout->attributes[i].location);
+      fprintf(destination, "\t\t\t.offset = %u,\n", vertex_layout->attributes[i].offset);
+      fprintf(destination, "\t\t\t.format = %s },\n",
+              glsl_type_to_vulkan_format(vertex_layout->attributes[i].glsl_type));
+    }
+    fprintf(destination, "\t\t}\n"); // close attributes
+    fprintf(destination, "\t},\n");  // close this vertex layout
+  }
+  fprintf(destination, "};\n\n"); // close entire vulkan vertex layout array init
 
   // for individual shaders, the spirv bytes, the opengl glsl
 }

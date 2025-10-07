@@ -1030,7 +1030,7 @@ def vertex_layout_codegen(global_vertex_layouts, enum_names):
             if binding.rate == TokenType.RATE_INSTANCE:
                 rate_string = "VK_VERTEX_INPUT_RATE_INSTANCE"
 
-            code += f"      {{ .binding = {binding.binding}, .stride = {binding.stride}, .input_rate = {rate_string} }},\n"
+            code += f"      {{ .binding = {binding.binding}, .stride = {binding.stride}, .inputRate = {rate_string} }},\n"
 
         code += f"    }},\n"
 

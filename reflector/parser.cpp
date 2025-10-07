@@ -4,6 +4,7 @@
 #include "reflector.h"
 
 #include <assert.h>
+#include <cstdio>
 #include <cstring>
 #include <stdarg.h>
 #include <string.h>
@@ -776,6 +777,12 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     return directive_parse;
   }
   u32 binding = parse_integer_token(parser, current_token);
+  if (binding >= MAX_NUM_VERTEX_BINDINGS) {
+    report_parser_error(parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+                        "Found invalid binding in location directive. Binding is %u but maximum num bindings is %u\n.",
+                        binding, MAX_NUM_VERTEX_BINDINGS);
+    return directive_parse;
+  }
 
   // if we get a sampler, the double R braces come here
   current_token = parser_advance_and_get_next_token(parser);
@@ -925,42 +932,90 @@ static inline const char *glsl_type_to_vertex_layout_enum_slice(GLSLType type) {
   }
 }
 
+inline u32 num_digits(u32 n) {
+  u32 res = 0;
+  if (n == 0)
+    return 1;
+
+  while (n) {
+    res++;
+    n /= 10;
+  }
+  return res;
+}
+
+static inline const char *vertex_attribute_rate_to_string(VertexAttributeRate rate) {
+  switch (rate) {
+  case VERTEX_ATTRIBUTE_RATE_VERTEX:
+    return "VERTEX";
+  case VERTEX_ATTRIBUTE_RATE_INSTANCE:
+    return "INSTANCE";
+
+  case VERTEX_ATTRIBUTE_RATE_NULL:
+  default:
+    fprintf(stderr, "vertex_attribute_rate_to_string got an invalid rate enum.\n");
+    return NULL;
+  }
+}
+
 // assumption is that the vertex layout is valid, one of the stuipulations for which is
 // that all attributes are at locations in consecutive order, starting from 0
 // can use that assumption to impose a stopiing condition (or second validation condition)
 static inline void populate_vertex_layout_name(VertexLayout *vertex_layout) {
+  if (vertex_layout == NULL) {
+    fprintf(stderr, "Tried to populate name for null vertex layout, returning.\n");
+    return;
+  }
+
   bool found_invalid = false;
   const char *prefix = "VERTEX_LAYOUT";
   memcpy(vertex_layout->name, prefix, strlen(prefix));
   u32 current_length = strlen(prefix);
+  u32 current_binding = MAX_NUM_VERTEX_BINDINGS + 1; // init to impossible value so first comparison in loop is false
 
   for (u32 i = 0; i < MAX_NUM_VERTEX_ATTRIBUTES; i++) {
-    if (vertex_layout->attributes[i].is_valid) {
+    if (!vertex_layout->attributes[i].is_valid) {
+      found_invalid = true;
+      continue;
+    }
 
-      // double checking no nonconsecutive valids
-      if (found_invalid) {
-        fprintf(stderr,
-                "Attempting to populate Vertex Layout name, but found nonconsecutive valid entries. Stopping.\n");
-        return;
-      }
+    // double checking no nonconsecutive valids
+    if (found_invalid) {
+      fprintf(stderr,
+              "Attempting to populate Vertex Layout name, but found nonconsecutive valid attributes. Stopping.\n");
+      return;
+    }
 
-      // need to append underscore and next type's slice
-      const char *next_slice = glsl_type_to_vertex_layout_enum_slice(vertex_layout->attributes[i].glsl_type);
-      u32 slice_length = strlen(next_slice);
-      u32 next_length = slice_length + 1;
-      // need to keep a null terminator, so stop at  max length - 1
-      if (current_length + next_length >= MAX_VERTEX_LAYOUT_NAME_LENGTH - 1) {
-        fprintf(stderr, "Not enough space to add next glsl type to vertex layout name, which currently is %s.\n",
+    if (vertex_layout->attributes[i].binding != current_binding) {
+      current_binding = vertex_layout->attributes[i].binding;
+      const char *binding_string = "_BINDING";
+      const char *rate_string = vertex_attribute_rate_to_string(vertex_layout->attributes[i].rate);
+      u32 remaining_length = MAX_VERTEX_LAYOUT_NAME_LENGTH - current_length - 1;
+      u32 next_slice_length = snprintf(NULL, 0, "%s%u%s", binding_string, current_binding, rate_string);
+      if (next_slice_length >= remaining_length) {
+        fprintf(stderr, "Not enough space to add next binding to vertex layout name, which currently is %s.\n",
                 vertex_layout->name);
         return;
       }
 
-      vertex_layout->name[current_length] = '_';
-      memcpy(vertex_layout->name + current_length + 1, next_slice, slice_length);
-      current_length += next_length;
-    } else {
-      found_invalid = true;
+      current_length += snprintf(vertex_layout->name + current_length, remaining_length, "%s%u%s", binding_string,
+                                 current_binding, rate_string);
     }
+
+    // need to append underscore and next type's slice
+    const char *next_slice = glsl_type_to_vertex_layout_enum_slice(vertex_layout->attributes[i].glsl_type);
+    u32 slice_length = strlen(next_slice);
+    u32 next_length = slice_length + 1;
+    // need to keep a null terminator, so stop at  max length - 1
+    if (current_length + next_length >= MAX_VERTEX_LAYOUT_NAME_LENGTH - 1) {
+      fprintf(stderr, "Not enough space to add next glsl type to vertex layout name, which currently is %s.\n",
+              vertex_layout->name);
+      return;
+    }
+
+    vertex_layout->name[current_length] = '_';
+    memcpy(vertex_layout->name + current_length + 1, next_slice, slice_length);
+    current_length += next_length;
   }
 
   // the assumption here is that the vertex layout we're populating was 0'd out at init time,
@@ -974,9 +1029,8 @@ static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layo
   bool found_first_invalid_after_valids = false;
   u64 found_locations = 0;
 
-  VertexAttributeRate offset_rates[MAX_NUM_VERTEX_BINDINGS];
   for (u32 i = 0; i < MAX_NUM_VERTEX_BINDINGS; i++) {
-    offset_rates[i] = VERTEX_ATTRIBUTE_RATE_NULL;
+    vertex_layout->binding_rates[i] = VERTEX_ATTRIBUTE_RATE_NULL;
   }
 
   // we only accept vertex attribute locations in consecutive, ascending order, starting from 0
@@ -990,7 +1044,7 @@ static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layo
       }
     }
 
-    // no valid entries to do anything for, valid null layout, just nane it
+    // no valid entries to do anything for, valid null layout, just name it
     const char *null_name = "VERTEX_LAYOUT_NULL";
     vertex_layout->name_length = strlen(null_name);
     memcpy(vertex_layout->name, null_name, vertex_layout->name_length);
@@ -998,9 +1052,10 @@ static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layo
     return true;
   }
 
-  bool is_tightly_packed = vertex_layout->attributes[0].is_tightly_packed;
   // we have at least one valid entry at 0. Still need to validate that all other valid entries
   // are in consecutive order
+  bool is_tightly_packed = vertex_layout->attributes[0].is_tightly_packed;
+  u32 tentative_attribute_count = 1;
   for (u32 i = 1; i < MAX_NUM_VERTEX_ATTRIBUTES; i++) {
     if (!vertex_layout->attributes[i].is_valid) {
       found_first_invalid_after_valids = true;
@@ -1011,15 +1066,16 @@ static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layo
         fprintf(stderr, "Found vertex attribute with non-consecutive attribute locations, stopping.\n");
         return false;
       }
+      tentative_attribute_count++;
     }
 
     // validate rates are consistent per binding
     VertexAttributeRate rate = vertex_layout->attributes[i].rate;
     if (rate != VERTEX_ATTRIBUTE_RATE_NULL) {
-      if (offset_rates[vertex_layout->attributes[i].binding] == VERTEX_ATTRIBUTE_RATE_NULL) {
-        offset_rates[vertex_layout->attributes[i].binding] = rate;
+      if (vertex_layout->binding_rates[vertex_layout->attributes[i].binding] == VERTEX_ATTRIBUTE_RATE_NULL) {
+        vertex_layout->binding_rates[vertex_layout->attributes[i].binding] = rate;
       } else {
-        if (offset_rates[vertex_layout->attributes[i].binding] != rate) {
+        if (vertex_layout->binding_rates[vertex_layout->attributes[i].binding] != rate) {
           fprintf(stderr, "In vertex layout, found binding %u with inconsistent rate.\n",
                   vertex_layout->attributes[i].binding);
           return false;
@@ -1044,21 +1100,32 @@ static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layo
     }
   }
 
+  // at this point, we're valid
+  vertex_layout->attribute_count = tentative_attribute_count;
   populate_vertex_layout_name(vertex_layout);
   // offsets were already given manually in the shader, done
+  // TODO need semantics for stride when offsets are given manually
   if (!is_tightly_packed) {
     return true;
   }
 
-  u32 running_binding_offsets[MAX_NUM_VERTEX_BINDINGS];
-  memset(running_binding_offsets, 0, sizeof(running_binding_offsets));
+  // using what will become the final stride per binding array to accumulate per attribute offsets
+  // naming is overloaded
+  memset(vertex_layout->binding_strides, 0, sizeof(vertex_layout->binding_strides));
   for (u32 i = 0; i < MAX_NUM_VERTEX_ATTRIBUTES; i++) {
     if (!vertex_layout->attributes[i].is_valid) {
       continue;
     }
     u32 current_binding = vertex_layout->attributes[i].binding;
-    vertex_layout->attributes[i].offset = running_binding_offsets[current_binding];
-    running_binding_offsets[current_binding] += glsl_type_to_size[vertex_layout->attributes[i].glsl_type];
+    vertex_layout->attributes[i].offset = vertex_layout->binding_strides[current_binding];
+    vertex_layout->binding_strides[current_binding] += glsl_type_to_size[vertex_layout->attributes[i].glsl_type];
+  }
+
+  vertex_layout->binding_count = 0;
+  for (u32 i = 0; i < MAX_NUM_VERTEX_BINDINGS; i++) {
+    if (vertex_layout->binding_strides[i] > 0) {
+      vertex_layout->binding_count++;
+    }
   }
 
   return true;
@@ -1165,30 +1232,28 @@ void parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
 
   // TODO rwlocks
   if (shader_to_compile.stage == SHADER_STAGE_VERTEX) {
-
-    bool found_matching_vertex_layout = false;
-    const VertexLayout *matching_vertex_layout_index = NULL;
-    for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
-      if (vertex_layout_equals(&vertex_layout, &parsed_shaders_ir->vertex_layouts[i])) {
-        found_matching_vertex_layout = true;
-        matching_vertex_layout_index = &parsed_shaders_ir->vertex_layouts[i];
-        break;
+    if (vertex_layout_validate_and_compute_offsets(&vertex_layout)) {
+      // if this vertex layout is valid, check that it doesn't match an existing one
+      const VertexLayout *matching_vertex_layout_index = NULL;
+      for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
+        if (vertex_layout_equals(&vertex_layout, &parsed_shaders_ir->vertex_layouts[i])) {
+          matching_vertex_layout_index = &parsed_shaders_ir->vertex_layouts[i];
+          break;
+        }
       }
-    }
 
-    if (found_matching_vertex_layout) {
-      parsed_shader.vertex_layout = matching_vertex_layout_index;
-    } else {
-      if (vertex_layout_validate_and_compute_offsets(&vertex_layout)) {
+      if (matching_vertex_layout_index != NULL) {
+        parsed_shader.vertex_layout = matching_vertex_layout_index;
+      } else {
         parsed_shaders_ir->vertex_layouts[parsed_shaders_ir->num_vertex_layouts++] = vertex_layout;
         parsed_shader.vertex_layout = &parsed_shaders_ir->vertex_layouts[parsed_shaders_ir->num_vertex_layouts - 1];
-      } else {
-        // release locks?
-        fprintf(stderr, "Failed to validate vertex layout for %s.\n", shader_to_compile.name);
-        return;
       }
+      // log_vertex_layout(&vertex_layout);
+    } else {
+      // release locks?
+      fprintf(stderr, "Failed to validate vertex layout for %s.\n", shader_to_compile.name);
+      return;
     }
-    // log_vertex_layout(&vertex_layout);
   }
 
   parsed_shader.num_template_slices = string_slice_index;

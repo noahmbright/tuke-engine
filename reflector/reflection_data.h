@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #define MAX_NUM_VERTEX_ATTRIBUTES 32
-#define MAX_NUM_VERTEX_BINDINGS 32
+#define MAX_NUM_VERTEX_BINDINGS 8
 #define MAX_NUM_STRUCT_MEMBERS 8
 #define MAX_NUM_DESCRIPTOR_BINDINGS 8
 #define MAX_VERTEX_LAYOUT_NAME_LENGTH 128
@@ -43,7 +43,24 @@ enum VertexAttributeRate {
   NUM_VERTEX_ATTRIBUTE_RATES,
 };
 
+static inline const char *vertex_attribute_rate_to_vulkan_enum_string(VertexAttributeRate rate) {
+  switch (rate) {
+  case VERTEX_ATTRIBUTE_RATE_VERTEX:
+    return "VK_VERTEX_INPUT_RATE_VERTEX";
+  case VERTEX_ATTRIBUTE_RATE_INSTANCE:
+    return "VK_VERTEX_INPUT_RATE_INSTANCE";
+
+  case VERTEX_ATTRIBUTE_RATE_NULL:
+  default:
+    fprintf(stderr, "vertex_attribute_rate_to_vulkan_enum_string got an invalid rate enum.\n");
+    return NULL;
+  }
+}
+
 // a vertex attribute is a single variable, like a vec3 for position
+// the vulkan struct contains location, binding, offset and rate
+// in opengl, calls are to
+//  glVertexAttribPointer(location, num of type in next arg, GL_FLOAT, GL_FALSE, stride(bytes), (void*)offset(bytes));
 struct VertexAttribute {
   u8 location;
   u8 binding;
@@ -71,10 +88,26 @@ inline void log_vertex_attribute(VertexAttribute vertex_attribute) {
 
 // the vertex layout is the collection of all the attributes
 // this is how we tell the shader how to interpret incoming data
+//
+// in vulkan, a vertex layout is a list of attributes and a list of bindings
+// as far as the shader is concerned, lists of vertex attributes are independent of bindings
+// but the vulkan api is aware of bindings
+// we can reuse vertex attribute lists across shaders
+//
+// in opengl to declare a vertex attribute, call
+// glVertexAttribPointer(location, num of type in next arg, GL_FLOAT, GL_FALSE, stride(bytes), (void*)offset(bytes));
+//  stride and offset are per this binding
+// if a binding is accessed per instance, call glVertexAttribDivisor(location, divisor = 1);
 struct VertexLayout {
   VertexAttribute attributes[MAX_NUM_VERTEX_ATTRIBUTES];
+  u16 binding_strides[MAX_NUM_VERTEX_BINDINGS];
+  VertexAttributeRate binding_rates[MAX_NUM_VERTEX_BINDINGS];
+
   char name[MAX_VERTEX_LAYOUT_NAME_LENGTH];
   u8 name_length;
+
+  u8 binding_count;
+  u8 attribute_count;
 };
 
 inline void log_vertex_layout(const VertexLayout *vertex_layout) {
@@ -111,7 +144,10 @@ inline bool vertex_layout_equals(const VertexLayout *left, const VertexLayout *r
 
     bool same_location = (left->attributes[i].location == right->attributes[i].location);
     bool same_type = (left->attributes[i].glsl_type == right->attributes[i].glsl_type);
-    if (!(same_type && same_location)) {
+    bool same_binding = (left->attributes[i].binding == right->attributes[i].binding);
+    bool same_rate = (left->attributes[i].rate == right->attributes[i].rate);
+    bool same_glsl_type = (left->attributes[i].glsl_type == right->attributes[i].glsl_type);
+    if (!(same_type && same_location && same_binding && same_rate && same_glsl_type)) {
       return false;
     }
   }

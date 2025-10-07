@@ -282,17 +282,6 @@ struct StagingArena {
   u32 offset;
 };
 
-struct VulkanVertexAttributeList {
-  u32 attribute_count;
-  VkVertexInputAttributeDescription attributes[MAX_VERTEX_ATTRIBUTES];
-};
-
-struct _VulkanVertexLayout {
-  u32 binding_count;
-  VkVertexInputBindingDescription bindings[MAX_VERTEX_BINDINGS];
-  VulkanVertexAttributeList attributes;
-};
-
 struct VulkanVertexLayout {
   u32 binding_count;
   VkVertexInputBindingDescription bindings[MAX_VERTEX_BINDINGS];
@@ -485,27 +474,22 @@ VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u
 VertexLayout create_vertex_layout_builder();
 
 // stride in a binding is bytes separating vertex/instance data
-void push_vertex_binding(VertexLayout *builder, u32 binding, u32 stride, VkVertexInputRate input_rate);
 
-void push_vertex_attribute(VertexLayout *builder, u32 location, u32 binding, VkFormat format, u32 offset);
+inline void push_vertex_binding(VertexLayout *builder, VkVertexInputBindingDescription binding_description);
+inline void push_vertex_attribute(VertexLayout *builder, VkVertexInputAttributeDescription attribute_description);
 VkPipelineVertexInputStateCreateInfo build_vertex_input_state(VertexLayout *builder);
 void push_vertex_attributes_and_bindings_and_finalize(VertexLayout *builder, const VulkanVertexLayout layout);
-void finalize_vertex_input_state(VertexLayout *builder);
 
 u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties);
 
 VulkanTexture create_vulkan_texture_from_file(VulkanContext *context, const char *path);
-
 void load_vulkan_textures(VulkanContext *context, const char **paths, u32 num_paths, VulkanTexture *out_textures);
-
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
-
 VkSampler create_sampler(VkDevice device);
 
 VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(u32 binding, VkShaderStageFlags stage_flags,
                                                                   VkDescriptorType descriptor_type,
                                                                   u32 descriptor_count);
-
 DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context);
 
 // TODO this function/builder structure itself needs updated to decouple layouts

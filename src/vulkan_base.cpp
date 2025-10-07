@@ -1974,29 +1974,14 @@ ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *contex
   return readonly_storage_buffer;
 }
 
-void push_vertex_binding(VertexLayout *builder, u32 binding, u32 stride, VkVertexInputRate input_rate) {
+inline void push_vertex_binding(VertexLayout *builder, VkVertexInputBindingDescription binding_description) {
   assert(builder->binding_description_count < MAX_VERTEX_BINDINGS);
-
-  VkVertexInputBindingDescription *description = &builder->binding_descriptions[builder->binding_description_count];
-  description->binding = binding;
-  description->stride = stride;
-  description->inputRate = input_rate;
-
-  builder->binding_description_count++;
+  builder->binding_descriptions[builder->binding_description_count++] = binding_description;
 }
 
-void push_vertex_attribute(VertexLayout *builder, u32 location, u32 binding, VkFormat format, u32 offset) {
-
+inline void push_vertex_attribute(VertexLayout *builder, VkVertexInputAttributeDescription attribute_description) {
   assert(builder->attribute_description_count < MAX_VERTEX_ATTRIBUTES);
-
-  VkVertexInputAttributeDescription *description =
-      &builder->attribute_descriptions[builder->attribute_description_count];
-  description->location = location;
-  description->binding = binding;
-  description->format = format;
-  description->offset = offset;
-
-  builder->attribute_description_count++;
+  builder->attribute_descriptions[builder->attribute_description_count++] = attribute_description;
 }
 
 void push_vertex_attributes_and_bindings_and_finalize(VertexLayout *builder, const VulkanVertexLayout layout) {
@@ -2007,27 +1992,21 @@ void push_vertex_attributes_and_bindings_and_finalize(VertexLayout *builder, con
   assert(layout.binding_count < MAX_VERTEX_BINDINGS);
 
   for (u32 i = 0; i < layout.attribute_count; i++) {
-    const VkVertexInputAttributeDescription *attribute = &layout.attributes[i];
-    push_vertex_attribute(builder, attribute->location, attribute->binding, attribute->format, attribute->offset);
+    push_vertex_attribute(builder, layout.attributes[i]);
   }
 
   for (u32 i = 0; i < layout.binding_count; i++) {
-    const VkVertexInputBindingDescription *binding = &layout.bindings[i];
-    push_vertex_binding(builder, binding->binding, binding->stride, binding->inputRate);
+    push_vertex_binding(builder, layout.bindings[i]);
   }
 
-  finalize_vertex_input_state(builder);
+  builder->vertex_input_state =
+      create_vertex_input_state(builder->binding_description_count, builder->binding_descriptions,
+                                builder->attribute_description_count, builder->attribute_descriptions);
 }
 
 VkPipelineVertexInputStateCreateInfo build_vertex_input_state(VertexLayout *builder) {
   return create_vertex_input_state(builder->binding_description_count, builder->binding_descriptions,
                                    builder->attribute_description_count, builder->attribute_descriptions);
-}
-
-void finalize_vertex_input_state(VertexLayout *builder) {
-  builder->vertex_input_state =
-      create_vertex_input_state(builder->binding_description_count, builder->binding_descriptions,
-                                builder->attribute_description_count, builder->attribute_descriptions);
 }
 
 // TODO how to handle reusing staging buffers?
