@@ -282,25 +282,23 @@ struct StagingArena {
   u32 offset;
 };
 
-struct VulkanVertexBinding {
-  u32 binding;
-  u32 stride;
-  VkVertexInputRate input_rate;
+struct VulkanVertexAttributeList {
+  u32 attribute_count;
+  VkVertexInputAttributeDescription attributes[MAX_VERTEX_ATTRIBUTES];
 };
 
-struct VulkanVertexAttribute {
-  u32 location;
-  u32 binding;
-  VkFormat format;
-  u32 offset;
+struct _VulkanVertexLayout {
+  u32 binding_count;
+  VkVertexInputBindingDescription bindings[MAX_VERTEX_BINDINGS];
+  VulkanVertexAttributeList attributes;
 };
 
 struct VulkanVertexLayout {
   u32 binding_count;
-  VulkanVertexBinding bindings[MAX_VERTEX_BINDINGS];
+  VkVertexInputBindingDescription bindings[MAX_VERTEX_BINDINGS];
 
   u32 attribute_count;
-  VulkanVertexAttribute attributes[MAX_VERTEX_ATTRIBUTES];
+  VkVertexInputAttributeDescription attributes[MAX_VERTEX_ATTRIBUTES];
 };
 
 struct VertexLayout {

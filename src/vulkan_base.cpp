@@ -2295,23 +2295,20 @@ void push_vertex_attributes_and_bindings_and_finalize(
 
   assert(builder->attribute_description_count == 0);
   assert(builder->binding_description_count == 0);
+  assert(layout.attribute_count < MAX_VERTEX_ATTRIBUTES);
+  assert(layout.binding_count < MAX_VERTEX_BINDINGS);
 
-  u32 num_attributes = layout.attribute_count;
-  u32 num_bindings = layout.binding_count;
-  assert(num_attributes < MAX_VERTEX_ATTRIBUTES);
-  assert(num_bindings < MAX_VERTEX_BINDINGS);
-
-  const VulkanVertexAttribute *attributes = layout.attributes;
-  for (u32 i = 0; i < num_attributes; i++) {
-    push_vertex_attribute(builder, attributes[i].location,
-                          attributes[i].binding, attributes[i].format,
-                          attributes[i].offset);
+  for (u32 i = 0; i < layout.attribute_count; i++) {
+    const VkVertexInputAttributeDescription  *attribute = &layout.attributes[i];
+    push_vertex_attribute(builder, attribute->location,
+                          attribute->binding, attribute->format,
+                          attribute->offset);
   }
 
-  const VulkanVertexBinding *bindings = layout.bindings;
-  for (u32 i = 0; i < num_bindings; i++) {
-    push_vertex_binding(builder, bindings[i].binding, bindings[i].stride,
-                        bindings[i].input_rate);
+  for (u32 i = 0; i < layout.binding_count ; i++) {
+    const VkVertexInputBindingDescription  *binding = &layout.bindings[i];
+    push_vertex_binding(builder, binding->binding, binding->stride,
+                        binding->inputRate);
   }
 
   finalize_vertex_input_state(builder);
