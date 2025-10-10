@@ -1091,7 +1091,7 @@ static bool cache_shader_module(VulkanShaderCache *cache, ShaderSpec spec) {
 
   // shaderstage: VkShaderStageFlagBits
   // shaderspec: VkShaderStageFlags
-  ShaderStage *stage = &cache->hash_map.key_values[table_index].value;
+  ShaderModule *stage = &cache->hash_map.key_values[table_index].value;
   stage->module = create_shader_module(cache->device, spec.spv, spec.size);
   stage->stage = spec.stage_flags;
   // TODO add preprocessing to shader for specifying an entry point

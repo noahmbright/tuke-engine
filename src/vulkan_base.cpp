@@ -1069,8 +1069,8 @@ PipelineConfig create_default_graphics_pipeline_config(const VulkanContext *cont
 
   PipelineConfig pipeline_config;
 
-  const ShaderStage *vertex = context->shader_cache->hash_map.find(vertex_shader_name);
-  const ShaderStage *fragment = context->shader_cache->hash_map.find(fragment_shader_name);
+  const ShaderModule *vertex = context->shader_cache->hash_map.find(vertex_shader_name);
+  const ShaderModule *fragment = context->shader_cache->hash_map.find(fragment_shader_name);
   assert(vertex && fragment);
   pipeline_config.stages[0] = *vertex;
   pipeline_config.stages[1] = *fragment;
@@ -1901,8 +1901,8 @@ void flush_staging_arena(const VulkanContext *context, StagingArena *arena) {
   end_single_use_command_buffer(context, command_buffer);
 }
 
-ShaderStage create_shader_stage(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point) {
-  ShaderStage shader_stage;
+ShaderModule create_shader_stage(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point) {
+  ShaderModule shader_stage;
   shader_stage.module = module;
   shader_stage.entry_point = entry_point;
   shader_stage.stage = stage;

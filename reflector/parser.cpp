@@ -1045,9 +1045,8 @@ static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layo
     }
 
     // no valid entries to do anything for, valid null layout, just name it
-    const char *null_name = "VERTEX_LAYOUT_NULL";
-    vertex_layout->name_length = strlen(null_name);
-    memcpy(vertex_layout->name, null_name, vertex_layout->name_length);
+    vertex_layout->name_length = strlen(vertex_layout_null_string);
+    memcpy(vertex_layout->name, vertex_layout_null_string, vertex_layout->name_length);
     vertex_layout->name[vertex_layout->name_length] = '\0';
     return true;
   }

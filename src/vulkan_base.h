@@ -132,13 +132,13 @@ struct SwapchainStorage {
   DepthBuffer depth_buffers[NUM_SWAPCHAIN_IMAGES];
 };
 
-struct ShaderStage {
+struct ShaderModule {
   VkShaderModule module;
   VkShaderStageFlagBits stage;
   const char *entry_point;
 };
 
-using ShaderCacheMap = HashMap<const char *, ShaderStage, CStringHashFunctor, CStringEqualityFunctor>;
+using ShaderCacheMap = HashMap<const char *, ShaderModule, CStringHashFunctor, CStringEqualityFunctor>;
 struct VulkanShaderCache {
   VkDevice device;
   ShaderCacheMap hash_map;
@@ -239,7 +239,7 @@ enum BlendMode { BLEND_MODE_OPAQUE, BLEND_MODE_ALPHA };
 
 struct PipelineConfig {
   // pipeline create info
-  ShaderStage stages[MAX_SHADER_STAGE_COUNT];
+  ShaderModule stages[MAX_SHADER_STAGE_COUNT];
   u32 stage_count;
   const VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info;
   VkRenderPass render_pass;
@@ -448,7 +448,7 @@ u32 stage_data_auto(const VulkanContext *context, StagingArena *arena, const voi
 
 void flush_staging_arena(const VulkanContext *context, StagingArena *arena);
 
-ShaderStage create_shader_stage(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point = "main");
+ShaderModule create_shader_stage(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point = "main");
 
 // TODO abstract over dynamic uniform buffers
 UniformBuffer create_uniform_buffer(const VulkanContext *context, u32 buffer_size);

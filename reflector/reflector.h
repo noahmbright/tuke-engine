@@ -29,6 +29,12 @@ static const char *shader_stage_to_string[NUM_SHADER_STAGES] = {
     [SHADER_STAGE_COMPUTE] = "comp",
 };
 
+static const char *shader_stage_to_enum_string[NUM_SHADER_STAGES] = {
+    [SHADER_STAGE_VERTEX] = "SHADER_STAGE_VERTEX",
+    [SHADER_STAGE_FRAGMENT] = "SHADER_STAGE_FRAGMENT",
+    [SHADER_STAGE_COMPUTE] = "SHADER_STAGE_COMPUTE",
+};
+
 struct GLSLSource {
   const char *string;
   u32 length;

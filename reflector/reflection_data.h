@@ -155,6 +155,8 @@ inline bool vertex_layout_equals(const VertexLayout *left, const VertexLayout *r
   return true;
 }
 
+static const char *vertex_layout_null_string = "VERTEX_LAYOUT_NULL";
+
 // only supporting native GLSL types, no nested structs
 struct GLSLStructMember {
   const char *identifier;
