@@ -39,7 +39,7 @@ int main() {
   ParsedShadersIR parsed_shaders_ir = parse_all_shaders_and_populate_global_tables(&shader_to_compile_list);
 
   // 4) codegen
-  FILE *output_file = fopen("c_reflector_bringup.h", "w");
+  FILE *output_file = fopen("gen/c_reflector_bringup.h", "w");
   codegen(output_file, &parsed_shaders_ir);
 
   // (5) cleanup

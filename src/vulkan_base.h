@@ -1,5 +1,7 @@
 #pragma once
 
+#include "c_reflector_bringup.h"
+
 #include "hashmap.h"
 #include "renderer.h"
 #include "tuke_engine.h"
@@ -288,14 +290,6 @@ struct VulkanVertexLayout {
 
   u32 attribute_count;
   VkVertexInputAttributeDescription attributes[MAX_VERTEX_ATTRIBUTES];
-};
-
-struct VertexLayout {
-  u32 binding_description_count;
-  VkVertexInputBindingDescription binding_descriptions[MAX_VERTEX_BINDINGS];
-
-  u32 attribute_description_count;
-  VkVertexInputAttributeDescription attribute_descriptions[MAX_VERTEX_ATTRIBUTES];
 
   // vertex_input_state is the finalized state, used in pipeline creation
   VkPipelineVertexInputStateCreateInfo vertex_input_state;
@@ -404,8 +398,7 @@ VkShaderModule create_shader_module(VkDevice device, const u32 *code, u32 code_s
 VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *config, VkPipelineCache pipeline_cache);
 
 VkPipeline create_default_graphics_pipeline(const VulkanContext *context, VkRenderPass render_pass,
-                                            const char *vertex_shader_name, const char *fragment_shader_name,
-                                            const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
+                                            ShaderSpec vertex_shader_spec, ShaderSpec fragment_shader_spec,
                                             VkPipelineLayout pipeline_layout);
 
 bool begin_frame(VulkanContext *context);
@@ -471,17 +464,7 @@ VkVertexInputAttributeDescription create_vertex_attribute_description(u32 locati
                                                                       u32 offset);
 VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u32 stride);
 
-VertexLayout create_vertex_layout_builder();
-
-// stride in a binding is bytes separating vertex/instance data
-
-inline void push_vertex_binding(VertexLayout *builder, VkVertexInputBindingDescription binding_description);
-inline void push_vertex_attribute(VertexLayout *builder, VkVertexInputAttributeDescription attribute_description);
-VkPipelineVertexInputStateCreateInfo build_vertex_input_state(VertexLayout *builder);
-void push_vertex_attributes_and_bindings_and_finalize(VertexLayout *builder, const VulkanVertexLayout layout);
-
 u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties);
-
 VulkanTexture create_vulkan_texture_from_file(VulkanContext *context, const char *path);
 void load_vulkan_textures(VulkanContext *context, const char **paths, u32 num_paths, VulkanTexture *out_textures);
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);

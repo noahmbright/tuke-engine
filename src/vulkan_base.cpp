@@ -1,4 +1,5 @@
 #include "vulkan_base.h"
+#include "c_reflector_bringup.h"
 #include "hashmap.h"
 #include "renderer.h"
 #include "tuke_engine.h"
@@ -1063,18 +1064,19 @@ VkVertexInputAttributeDescription create_vertex_attribute_description(u32 locati
 }
 
 PipelineConfig create_default_graphics_pipeline_config(const VulkanContext *context, VkRenderPass render_pass,
-                                                       const char *vertex_shader_name, const char *fragment_shader_name,
-                                                       const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
+                                                       ShaderSpec vertex_shader_spec, ShaderSpec fragment_shader_spec,
                                                        VkPipelineLayout pipeline_layout) {
 
-  PipelineConfig pipeline_config;
-
-  const ShaderModule *vertex = context->shader_cache->hash_map.find(vertex_shader_name);
-  const ShaderModule *fragment = context->shader_cache->hash_map.find(fragment_shader_name);
+  const ShaderModule *vertex = context->shader_cache->hash_map.find(vertex_shader_spec.name);
+  const ShaderModule *fragment = context->shader_cache->hash_map.find(fragment_shader_spec.name);
   assert(vertex && fragment);
+
+  const VkPipelineVertexInputStateCreateInfo *vertex_input_state =
+      &generated_vulkan_vertex_layouts[vertex_shader_spec.vertex_layout_id];
+
+  PipelineConfig pipeline_config;
   pipeline_config.stages[0] = *vertex;
   pipeline_config.stages[1] = *fragment;
-
   pipeline_config.stage_count = 2;
   pipeline_config.vertex_input_state_create_info = vertex_input_state;
   pipeline_config.render_pass = render_pass;
@@ -1639,9 +1641,13 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
 
 // TODO make this take in a pair of shader specs
 VkPipeline create_default_graphics_pipeline(const VulkanContext *context, VkRenderPass render_pass,
-                                            const char *vertex_shader_name, const char *fragment_shader_name,
-                                            const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
+                                            ShaderSpec vertex_shader_spec, ShaderSpec fragment_shader_spec,
                                             VkPipelineLayout pipeline_layout) {
+
+  const char *vertex_shader_name = vertex_shader_spec.name;
+  const char *fragment_shader_name = fragment_shader_spec.name;
+  const VkPipelineVertexInputStateCreateInfo *vertex_input_state =
+      &generated_vulkan_vertex_layouts[vertex_shader_spec.vertex_layout_id];
 
   PipelineConfig config = create_default_graphics_pipeline_config(
       context, render_pass, vertex_shader_name, fragment_shader_name, vertex_input_state, pipeline_layout);
@@ -1952,15 +1958,6 @@ void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, Un
   memcpy(uniform_buffer->mapped + uniform_write.offset, data, uniform_write.size);
 }
 
-VertexLayout create_vertex_layout_builder() {
-  VertexLayout builder;
-  builder.binding_description_count = 0;
-  memset(builder.binding_descriptions, 0, sizeof(builder.binding_descriptions));
-  builder.attribute_description_count = 0;
-  memset(builder.attribute_descriptions, 0, sizeof(builder.attribute_descriptions));
-  return builder;
-}
-
 ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *context, u32 buffer_size) {
 
   ReadOnlyStorageBuffer readonly_storage_buffer;
@@ -1973,41 +1970,6 @@ ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *contex
            "create_readonly_storage_buffer: failed to vkMapMemory");
 
   return readonly_storage_buffer;
-}
-
-inline void push_vertex_binding(VertexLayout *builder, VkVertexInputBindingDescription binding_description) {
-  assert(builder->binding_description_count < MAX_VERTEX_BINDINGS);
-  builder->binding_descriptions[builder->binding_description_count++] = binding_description;
-}
-
-inline void push_vertex_attribute(VertexLayout *builder, VkVertexInputAttributeDescription attribute_description) {
-  assert(builder->attribute_description_count < MAX_VERTEX_ATTRIBUTES);
-  builder->attribute_descriptions[builder->attribute_description_count++] = attribute_description;
-}
-
-void push_vertex_attributes_and_bindings_and_finalize(VertexLayout *builder, const VulkanVertexLayout layout) {
-
-  assert(builder->attribute_description_count == 0);
-  assert(builder->binding_description_count == 0);
-  assert(layout.attribute_count < MAX_VERTEX_ATTRIBUTES);
-  assert(layout.binding_count < MAX_VERTEX_BINDINGS);
-
-  for (u32 i = 0; i < layout.attribute_count; i++) {
-    push_vertex_attribute(builder, layout.attributes[i]);
-  }
-
-  for (u32 i = 0; i < layout.binding_count; i++) {
-    push_vertex_binding(builder, layout.bindings[i]);
-  }
-
-  builder->vertex_input_state =
-      create_vertex_input_state(builder->binding_description_count, builder->binding_descriptions,
-                                builder->attribute_description_count, builder->attribute_descriptions);
-}
-
-VkPipelineVertexInputStateCreateInfo build_vertex_input_state(VertexLayout *builder) {
-  return create_vertex_input_state(builder->binding_description_count, builder->binding_descriptions,
-                                   builder->attribute_description_count, builder->attribute_descriptions);
 }
 
 // TODO how to handle reusing staging buffers?

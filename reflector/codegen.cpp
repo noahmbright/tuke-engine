@@ -6,7 +6,9 @@
 #include "subprocess.h"
 
 #include <assert.h>
-#include <cstdio>
+
+static const u32 max_num_vertex_attributes = 4;
+static const u32 max_num_vertex_bindings = 4;
 
 // line with version is #version {{ VERSION }}
 TemplateStringReplacement directive_replacement_version(GraphicsBackend backend) {
@@ -158,9 +160,11 @@ inline void codegen_compiled_shader_header(FILE *destination) {
   fprintf(destination, "// Generated shader header, do not edit\n");
   fprintf(destination, "#pragma once\n");
   fprintf(destination, "#include \"glad/gl.h\"\n");
-  fprintf(destination, "#include \"vulkan_base.h\"\n");
+  fprintf(destination, "#include <assert.h>\n");
   fprintf(destination, "#include <stddef.h>\n");
   fprintf(destination, "#include <stdint.h>\n\n");
+  fprintf(destination, "#include <stdio.h>\n\n");
+  fprintf(destination, "#include <vulkan/vulkan.h>\n\n");
 
   fprintf(destination, "enum ShaderStage {\n");
   fprintf(destination, "  SHADER_STAGE_VERTEX,\n");
@@ -207,14 +211,12 @@ const char *glsl_type_to_vulkan_format(GLSLType type) {
 }
 
 void generate_vulkan_vertex_layout_array(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
-  fprintf(destination, "const VulkanVertexLayout generated_vulkan_vertex_layouts[NUM_VERTEX_LAYOUT_IDS] = {\n");
+  // static arrays, needed bc initializing VkPipelineVertexInputStateCreateInfo as const requires pointing arrays
   for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
     const VertexLayout *vertex_layout = &parsed_shaders_ir->vertex_layouts[i];
-    fprintf(destination, "  [%s] = {\n", vertex_layout->name);
 
     // bindings
-    fprintf(destination, "    .binding_count = %u,\n", vertex_layout->binding_count);
-    fprintf(destination, "    .bindings = {\n");
+    fprintf(destination, "const VkVertexInputBindingDescription vertex_bindings_%s[] = {\n", vertex_layout->name);
     for (u32 i = 0; i < MAX_NUM_VERTEX_BINDINGS; i++) {
       bool has_stride = (vertex_layout->binding_strides[i] > 0);
       bool has_rate = (vertex_layout->binding_rates[i] != VERTEX_ATTRIBUTE_RATE_NULL);
@@ -224,29 +226,72 @@ void generate_vulkan_vertex_layout_array(FILE *destination, const ParsedShadersI
         continue;
       }
 
-      if (!has_rate) {
+      if (!has_rate || vertex_layout->binding_count == 0) {
         continue;
       }
 
-      fprintf(destination, "      { .binding = %u,\n", i);
-      fprintf(destination, "      .stride = %u,\n", vertex_layout->binding_strides[i]);
+      fprintf(destination, "      { .binding = %u, ", i);
+      fprintf(destination, "      .stride = %u, ", vertex_layout->binding_strides[i]);
       fprintf(destination, "      .inputRate = %s },\n",
               vertex_attribute_rate_to_vulkan_enum_string(vertex_layout->binding_rates[i]));
     }
-    fprintf(destination, "    },\n"); // close array of bindings
+    fprintf(destination, "};\n\n"); // close array of bindings
 
     // attributes
-    fprintf(destination, "    .attribute_count = %u,\n", vertex_layout->attribute_count);
-    fprintf(destination, "    .attributes = {\n");
+    fprintf(destination, "const VkVertexInputAttributeDescription vertex_attributes_%s[] = {\n", vertex_layout->name);
     for (u32 i = 0; i < vertex_layout->attribute_count; i++) {
-      fprintf(destination, "      { .binding = %u,\n", vertex_layout->attributes[i].binding);
-      fprintf(destination, "      .location = %u,\n", vertex_layout->attributes[i].location);
-      fprintf(destination, "      .offset = %u,\n", vertex_layout->attributes[i].offset);
-      fprintf(destination, "      .format = %s },\n",
-              glsl_type_to_vulkan_format(vertex_layout->attributes[i].glsl_type));
+      if (vertex_layout->attribute_count == 0) {
+        continue;
+      }
+
+      fprintf(destination, "  { .binding = %u, ", vertex_layout->attributes[i].binding);
+      fprintf(destination, "  .location = %u, ", vertex_layout->attributes[i].location);
+      fprintf(destination, "  .offset = %u, ", vertex_layout->attributes[i].offset);
+      fprintf(destination, "  .format = %s },\n", glsl_type_to_vulkan_format(vertex_layout->attributes[i].glsl_type));
     }
-    fprintf(destination, "    }\n"); // close attributes
-    fprintf(destination, "  },\n");  // close this vertex layout
+    fprintf(destination, "};\n\n"); // close attributes
+  }
+
+  // array init
+  fprintf(destination,
+          "const VkPipelineVertexInputStateCreateInfo generated_vulkan_vertex_layouts[NUM_VERTEX_LAYOUT_IDS] = {\n");
+  for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
+    const VertexLayout *vertex_layout = &parsed_shaders_ir->vertex_layouts[i];
+
+    if (vertex_layout->attribute_count > max_num_vertex_attributes) {
+      fprintf(stderr, "Vertex Layout %s has %u attributes, exceeding the max of %u.\n", vertex_layout->name,
+              vertex_layout->attribute_count, max_num_vertex_attributes);
+      continue;
+    }
+    if (vertex_layout->binding_count > max_num_vertex_bindings) {
+      fprintf(stderr, "Vertex Layout %s has %u bindings, exceeding the max of %u.\n", vertex_layout->name,
+              vertex_layout->binding_count, max_num_vertex_bindings);
+      continue;
+    }
+
+    fprintf(destination, "  [%s] = {\n", vertex_layout->name);
+    // boilerplate
+    fprintf(destination, "    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,\n");
+    fprintf(destination, "    .pNext = NULL,\n");
+    fprintf(destination, "    .flags = 0,\n");
+
+    // bindings
+    fprintf(destination, "    .vertexBindingDescriptionCount  = %u,\n", vertex_layout->binding_count);
+    if (vertex_layout->binding_count != 0) {
+      fprintf(destination, "    .pVertexBindingDescriptions  = vertex_bindings_%s,\n", vertex_layout->name);
+    } else {
+      fprintf(destination, "    .pVertexBindingDescriptions  = NULL,\n");
+    }
+
+    // attributes
+    fprintf(destination, "    .vertexAttributeDescriptionCount  = %u,\n", vertex_layout->attribute_count);
+    if (vertex_layout->attribute_count != 0) {
+      fprintf(destination, "    .pVertexAttributeDescriptions  = vertex_attributes_%s,\n", vertex_layout->name);
+    } else {
+      fprintf(destination, "    .pVertexAttributeDescriptions  = NULL,\n");
+    }
+
+    fprintf(destination, "  },\n"); // close this vertex layout
   }
   fprintf(destination, "};\n\n"); // close entire vulkan vertex layout array init
 }
@@ -282,7 +327,7 @@ static u32 glsl_type_to_number_of_floats(GLSLType type) {
 }
 
 void generate_opengl_vertex_layout_array(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
-  const char *parameter_list = "GLuint vao, GLuint* vbos, u32 num_vbos, GLuint ebo";
+  const char *parameter_list = "GLuint vao, GLuint* vbos, uint32_t num_vbos, GLuint ebo";
 
   for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
     const VertexLayout *vertex_layout = &parsed_shaders_ir->vertex_layouts[i];
@@ -336,8 +381,8 @@ inline void codegen_shader_spec_definition(FILE *destination) {
   fprintf(destination, "struct ShaderSpec {\n");
   fprintf(destination, "  const char* name;\n");
   fprintf(destination, "  const char* opengl_glsl;\n");
-  fprintf(destination, "  const u32* spv;\n");
-  fprintf(destination, "  const u32 spv_size;\n");
+  fprintf(destination, "  const uint32_t* spv;\n");
+  fprintf(destination, "  const uint32_t spv_size;\n");
   fprintf(destination, "  VertexLayoutID vertex_layout_id;\n");
   fprintf(destination, "  ShaderStage stage;\n");
   fprintf(destination, "};\n\n");
@@ -346,7 +391,7 @@ inline void codegen_shader_spec_definition(FILE *destination) {
 inline void codegen_shader_spec(FILE *destination, const ParsedShader *parsed_shader,
                                 const GLSLSource *opengl_glsl_source, const SpirVBytesArray *spirv_bytes_array) {
   // bytes
-  fprintf(destination, "const u32 %s_spv[] = {\n", parsed_shader->name);
+  fprintf(destination, "const uint32_t %s_spv[] = {\n", parsed_shader->name);
   print_bytes_array(destination, spirv_bytes_array);
   fprintf(destination, "};\n\n");
 
@@ -410,6 +455,9 @@ void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
   fprintf(destination, "\n  NUM_SHADER_HANDLES\n};\n\n");
 
   // codegen for vertex layouts
+  // struct definition
+  fprintf(destination, "#define MAX_NUM_VERTEX_BINDINGS %u\n", max_num_vertex_bindings);
+  fprintf(destination, "#define MAX_NUM_VERTEX_ATTRIBUTES %u\n", max_num_vertex_attributes);
   // enum
   fprintf(destination, "enum VertexLayoutID{\n");
   for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
