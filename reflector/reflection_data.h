@@ -1,6 +1,7 @@
 #pragma once
 
 #include "reflector.h"
+#include <cstring>
 #include <stdio.h>
 
 #define MAX_NUM_VERTEX_ATTRIBUTES 32
@@ -162,46 +163,93 @@ struct GLSLStructMember {
   const char *identifier;
   u32 array_length;
   u32 identifier_length;
-  GLSLType type;
+  GLSLType type; // type encodes alignment, which can vary with backend
 };
 
 struct GLSLStructMemberList {
   GLSLStructMember members[MAX_NUM_STRUCT_MEMBERS];
-  u16 num_members;
+  u32 num_members;
+  u32 size;
 };
 
 struct GLSLStruct {
   const char *type_name;
   u32 type_name_length;
+
+  const char *discovered_shader_name;
+  u32 discovered_shader_name_length;
+
   GLSLStructMemberList member_list;
 };
 
-inline void log_glsl_struct(const GLSLStruct *glsl_struct) {
-  printf("Logging GLSLStruct with %u members %.*s:\n", glsl_struct->member_list.num_members,
-         glsl_struct->type_name_length, glsl_struct->type_name);
+inline bool glsl_struct_member_list_equals(const GLSLStructMemberList *left, const GLSLStructMemberList *right) {
+  if (left->num_members != right->num_members) {
+    return false;
+  }
+
+  for (u32 i = 0; i < left->num_members; i++) {
+    const GLSLStructMember *left_member = &left->members[i];
+    const GLSLStructMember *right_member = &right->members[i];
+
+    bool name_lens_are_same = (left_member->identifier_length == right_member->identifier_length);
+    if (!name_lens_are_same) {
+      return false;
+    }
+
+    bool names_are_same =
+        (strncmp(left_member->identifier, right_member->identifier, left_member->identifier_length) == 0);
+    bool array_lens_are_same = left_member->array_length == right_member->array_length;
+    bool types_are_same = left_member->type == right_member->type;
+    if (!names_are_same || !array_lens_are_same || !types_are_same) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+inline void log_glsl_struct(FILE *destination, const GLSLStruct *glsl_struct) {
+  fprintf(destination, "Logging GLSLStruct with %u members %.*s:\n", glsl_struct->member_list.num_members,
+          glsl_struct->type_name_length, glsl_struct->type_name);
   for (u32 i = 0; i < glsl_struct->member_list.num_members; i++) {
     GLSLStructMember current_member = glsl_struct->member_list.members[i];
-    printf("\t%s %.*s\n", glsl_type_to_string[current_member.type], (int)current_member.identifier_length,
-           current_member.identifier);
+    fprintf(destination, "\t%s %.*s\n", glsl_type_to_string[current_member.type], (int)current_member.identifier_length,
+            current_member.identifier);
   }
 }
 
-// descriptor sets
+// Descriptor Sets
+//
+// A descriptor set layout if the list of all the bindings that a single set uses
+//  i.e., set 0 could be camera mvps, so 3 bindings at set 0
+// in the vulkan API, you bind the resources at the set indices to make a DescriptorSet
+// if a vertex shader and fragment shader are linked, I enforce that if they explictly
+// use the same set, that set must have the same list of bindings
+enum DescriptorType {
+  DESCRIPTOR_TYPE_INVALID,
+  DESCRIPTOR_TYPE_UNIFORM,
+  DESCRIPTOR_TYPE_SAMPLER2D,
+
+  NUM_DESCRIPTOR_TYPES,
+};
+
+// fat struct with all possible data
 struct DescriptorBinding {
-  u32 set;
-  u32 binding;
+  DescriptorType type;
+
+  // descriptors all give an identifier, the name of the texture or unform instance
+  const char *name;
+  u32 name_length;
+
+  // for uniforms
+  const GLSLStruct *glsl_struct;
+
+  bool is_valid;
 };
 
-// these lists of bindings describe what a shader needs. these are data formats
-// these can be reused across pipelines. but the descriptor set itself must know
-// what numerical set index it corresponds to for vulkan API calls
-struct DescriptorBindingList {
+struct DescriptorSetLayout {
   DescriptorBinding bindings[MAX_NUM_DESCRIPTOR_BINDINGS];
-  u32 num_bindings;
-};
-
-// a descriptor set is a set of all the bindings with the same set id
-struct DescriptorSet {
-  u32 set_index;
-  DescriptorBindingList *binding_list;
+  ShaderStage stage;
+  u8 num_bindings;
+  u8 set_index; // numerically, which number set this is
 };

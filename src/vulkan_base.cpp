@@ -1637,6 +1637,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
   return graphics_pipeline;
 }
 
+// TODO make this take in a pair of shader specs
 VkPipeline create_default_graphics_pipeline(const VulkanContext *context, VkRenderPass render_pass,
                                             const char *vertex_shader_name, const char *fragment_shader_name,
                                             const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
@@ -2166,7 +2167,7 @@ DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {
 
 // this binding handle would describe which binding, array of uniform
 // size, and what shader stage the uniform is used in
-void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder, UniformBuffer *uniform_buffer, u32 offset,
+void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder, const UniformBuffer *uniform_buffer, u32 offset,
                                        u32 range, u32 binding, u32 descriptor_count, VkShaderStageFlags stage_flags,
                                        bool dynamic) {
   assert(builder->write_descriptor_count < MAX_DESCRIPTOR_WRITES);

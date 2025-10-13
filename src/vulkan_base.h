@@ -496,7 +496,7 @@ DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context);
 // from descriptor sets - a layout should be a list of descriptors
 DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescriptorPool descriptor_pool);
 
-void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder, UniformBuffer *uniform_buffer, u32 offset,
+void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder, const UniformBuffer *uniform_buffer, u32 offset,
                                        u32 range, u32 binding, u32 descriptor_count, VkShaderStageFlags stage_flags,
                                        bool dynamic);
 

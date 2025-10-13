@@ -12,7 +12,9 @@
 #define MAX_NUM_STRING_SLICES 64
 #define MAX_NUM_VERTEX_LAYOUTS 32
 #define MAX_NUM_DESCRIPTOR_SET_LISTS 32
-#define MAX_NUM_DESCRIPTOR_SETS 8
+#define MAX_NUM_DESCRIPTOR_SET_LAYOUTS 16
+#define MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER 8
+#define MAX_NUM_GLSL_STRUCTS 64
 
 static const char *RED = "\033[31m";
 static const char *RESET = "\033[0m";
@@ -188,12 +190,17 @@ inline void log_string_slices(const TemplateStringSlice *template_string_slices,
 struct SetBindingDirectiveParse {
   const char *next_glsl_source_start;
   GLSLStruct glsl_struct;
+  DescriptorBinding descriptor_binding;
+  u32 set;
+  u32 binding;
   bool was_successful;
 };
 
 struct LocationDirectiveParse {
   const char *next_glsl_source_start;
   VertexAttribute vertex_attribute;
+  bool found_repeat_attribute;
+  u32 repeated_attribute_location;
 };
 
 // Token definitions
@@ -279,9 +286,10 @@ struct ParsedShader {
   TemplateStringSlice template_slices[MAX_NUM_STRING_SLICES];
   u32 num_template_slices;
 
-  const VertexLayout *vertex_layout;
-  DescriptorSet descriptor_sets[MAX_NUM_DESCRIPTOR_SETS];
+  DescriptorSetLayout *descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER];
 
+  // vertex input layout
+  const VertexLayout *vertex_layout;
   VertexAttributeRate binding_rates[MAX_NUM_VERTEX_BINDINGS];
   u16 binding_strides[MAX_NUM_VERTEX_BINDINGS];
   u8 binding_count;
@@ -294,11 +302,19 @@ struct ParsedShadersIR {
   ParsedShader parsed_shaders[MAX_NUM_SHADERS];
   u32 num_parsed_shaders;
 
-  DescriptorBindingList descriptor_binding_lists[MAX_NUM_DESCRIPTOR_SET_LISTS];
+  DescriptorSetLayout descriptor_binding_set_layouts[MAX_NUM_DESCRIPTOR_SET_LISTS];
   u32 num_descriptor_binding_lists;
 
   VertexLayout vertex_layouts[MAX_NUM_VERTEX_LAYOUTS];
   u32 num_vertex_layouts;
+
+  GLSLStruct glsl_structs[MAX_NUM_GLSL_STRUCTS];
+  u32 num_glsl_structs;
+};
+
+struct StructSearchResult {
+  const GLSLStruct *matching_struct;
+  bool found_mismatch;
 };
 
 TokenVector lex_string(const char *string, u32 string_length);
