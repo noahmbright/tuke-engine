@@ -305,6 +305,8 @@ struct ParsedShadersIR {
   DescriptorSetLayout descriptor_binding_set_layouts[MAX_NUM_DESCRIPTOR_SET_LISTS];
   u32 num_descriptor_binding_lists;
 
+  u32 descriptor_binding_types[NUM_DESCRIPTOR_TYPES];
+
   VertexLayout vertex_layouts[MAX_NUM_VERTEX_LAYOUTS];
   u32 num_vertex_layouts;
 

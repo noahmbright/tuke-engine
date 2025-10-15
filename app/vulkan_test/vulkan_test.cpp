@@ -50,7 +50,7 @@ glm::vec4 movement_direction_from_inputs(const Inputs *inputs) {
 int main() {
   VulkanContext context = create_vulkan_context("Tuke");
   VkDescriptorPool descriptor_pool =
-      create_descriptor_pool(context.device, generated_pool_sizes, pool_size_count, max_sets);
+      create_descriptor_pool(context.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
   cache_shader_modules(context.shader_cache, generated_shader_specs, num_generated_specs);
   ViewportState viewport_state = create_viewport_state_xy(context.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {{.color = {{0.01, 0.01, 0.01, 1.0}}},

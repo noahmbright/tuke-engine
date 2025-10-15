@@ -854,8 +854,17 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
 
     parser_advance(parser);
     directive_parse.was_successful = true;
+    directive_parse.descriptor_binding.type = descriptor_type;
+    directive_parse.descriptor_binding.name = NULL;
+    directive_parse.descriptor_binding.name_length = 0;
+    directive_parse.descriptor_binding.glsl_struct = NULL;
+    directive_parse.descriptor_binding.is_valid = true;
+    directive_parse.was_successful = true;
+    directive_parse.set = set;
+    directive_parse.binding = binding;
     return directive_parse;
-  } // done parsing sampler
+  }
+  // done parsing sampler
 
   // on BUFFER_LABEL
   // {{ SET_BINDING set binding BUFFER_LABEL label}} uniform identifier { (type identifier;)! } idenitifer;
@@ -954,7 +963,7 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
   directive_parse.descriptor_binding.name_length = struct_instance_name_length;
   // still need to check if we already found the same struct in a different shader
   directive_parse.descriptor_binding.glsl_struct = NULL;
-  directive_parse.descriptor_binding.is_valid = NULL;
+  directive_parse.descriptor_binding.is_valid = true;
 
   directive_parse.was_successful = true;
   directive_parse.glsl_struct = glsl_struct;
@@ -1347,6 +1356,15 @@ void parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
                 shader_to_compile.name_length, shader_to_compile.name);
       } else {
         descriptor_set_layouts[set].bindings[binding] = set_binding_directive_parse.descriptor_binding;
+      }
+
+      if (set_binding_directive_parse.descriptor_binding.type != DESCRIPTOR_TYPE_INVALID) {
+        if (set_binding_directive_parse.descriptor_binding.type == NUM_DESCRIPTOR_TYPES) {
+          fprintf(stderr, "Somehow descriptor set binding type is NUM_DESCRIPTOR TYPES, in shader %.*s.\n",
+                  shader_to_compile.name_length, shader_to_compile.name);
+        } else {
+          parsed_shaders_ir->descriptor_binding_types[set_binding_directive_parse.descriptor_binding.type]++;
+        }
       }
       break;
     }

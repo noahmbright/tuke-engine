@@ -376,6 +376,24 @@ void generate_opengl_vertex_layout_array(FILE *destination, const ParsedShadersI
   }
   fprintf(destination, "};\n\n");
 }
+void generate_vulkan_descriptor_pool_size_array(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
+  u32 max_sets = 0;
+  for (u32 i = 0; i < NUM_DESCRIPTOR_TYPES; i++) {
+    u32 num_sets = parsed_shaders_ir->descriptor_binding_types[i];
+    max_sets = (max_sets > num_sets) ? max_sets : num_sets;
+  }
+
+  fprintf(destination, "const uint32_t pool_size_count = %u;\n", NUM_DESCRIPTOR_TYPES);
+  fprintf(destination, "const uint32_t max_descriptor_sets = %u;\n", max_sets);
+  fprintf(destination, "const VkDescriptorPoolSize generated_pool_sizes[%u] = {\n", NUM_DESCRIPTOR_TYPES);
+
+  fprintf(destination, "  {  .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = %u },\n",
+          parsed_shaders_ir->descriptor_binding_types[DESCRIPTOR_TYPE_UNIFORM]);
+
+  fprintf(destination, "  {  .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = %u },\n",
+          parsed_shaders_ir->descriptor_binding_types[DESCRIPTOR_TYPE_SAMPLER2D]);
+  fprintf(destination, "};\n\n");
+}
 
 inline void codegen_shader_spec_definition(FILE *destination) {
   fprintf(destination, "struct ShaderSpec {\n");
@@ -469,6 +487,9 @@ void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
   generate_vulkan_vertex_layout_array(destination, parsed_shaders_ir);
   fprintf(destination, "//////////////////// OPENGL VERTEX LAYOUTS ///////////////\n");
   generate_opengl_vertex_layout_array(destination, parsed_shaders_ir);
+
+  // descriptor sets
+  generate_vulkan_descriptor_pool_size_array(destination, parsed_shaders_ir);
 
   // for individual shaders, the spirv bytes, the opengl glsl
   codegen_shader_spec_definition(destination);
