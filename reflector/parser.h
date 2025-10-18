@@ -302,8 +302,8 @@ struct ParsedShadersIR {
   ParsedShader parsed_shaders[MAX_NUM_SHADERS];
   u32 num_parsed_shaders;
 
-  DescriptorSetLayout descriptor_binding_set_layouts[MAX_NUM_DESCRIPTOR_SET_LISTS];
-  u32 num_descriptor_binding_lists;
+  DescriptorSetLayout descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LISTS];
+  u32 num_descriptor_set_layouts;
 
   u32 descriptor_binding_types[NUM_DESCRIPTOR_TYPES];
 

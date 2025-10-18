@@ -1926,13 +1926,11 @@ VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(u32 binding, V
                                                                   u32 descriptor_count) {
 
   VkDescriptorSetLayoutBinding layout_binding;
-
   layout_binding.binding = binding;
   layout_binding.descriptorType = descriptor_type;
   layout_binding.descriptorCount = descriptor_count;
   layout_binding.stageFlags = stage_flags;
   layout_binding.pImmutableSamplers = NULL;
-
   return layout_binding;
 }
 
@@ -2109,7 +2107,6 @@ DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {
 
   DescriptorSetBuilder builder;
   builder.device = context->device;
-  // builder.descriptor_set_layout = VK_NULL_HANDLE;
 
   builder.binding_count = 0;
   memset(builder.layout_bindings, 0, sizeof(builder.layout_bindings));
@@ -2126,6 +2123,11 @@ DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {
 
   return builder;
 };
+
+void merge_descriptor_set_layouts() {
+  // asdf
+  // asdf
+}
 
 // this binding handle would describe which binding, array of uniform
 // size, and what shader stage the uniform is used in

@@ -857,6 +857,7 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     directive_parse.descriptor_binding.type = descriptor_type;
     directive_parse.descriptor_binding.name = NULL;
     directive_parse.descriptor_binding.name_length = 0;
+    directive_parse.descriptor_binding.descriptor_count = descriptor_count;
     directive_parse.descriptor_binding.glsl_struct = NULL;
     directive_parse.descriptor_binding.is_valid = true;
     directive_parse.was_successful = true;
@@ -962,6 +963,7 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
   directive_parse.descriptor_binding.name = struct_instance_name;
   directive_parse.descriptor_binding.name_length = struct_instance_name_length;
   // still need to check if we already found the same struct in a different shader
+  directive_parse.descriptor_binding.descriptor_count = descriptor_count;
   directive_parse.descriptor_binding.glsl_struct = NULL;
   directive_parse.descriptor_binding.is_valid = true;
 
@@ -1060,6 +1062,7 @@ static inline void populate_vertex_layout_name(VertexLayout *vertex_layout) {
       return;
     }
 
+    // if we find a new binding, add that to the name
     if (vertex_layout->attributes[i].binding != current_binding) {
       current_binding = vertex_layout->attributes[i].binding;
       const char *binding_string = "_BINDING";
@@ -1096,6 +1099,40 @@ static inline void populate_vertex_layout_name(VertexLayout *vertex_layout) {
   // so this null terminator shouldn't be necessary. add out of abundance of caution
   vertex_layout->name[current_length] = '\0';
   vertex_layout->name_length = current_length;
+}
+
+static void populate_descriptor_set_layout_name(DescriptorSetLayout *descriptor_set_layout) {
+  memset(descriptor_set_layout->name, 0, sizeof(descriptor_set_layout->name));
+
+  const char *prefix = "DESCRIPTOR_SET_LAYOUT";
+  memcpy(descriptor_set_layout->name, prefix, strlen(prefix));
+  u32 current_length = strlen(prefix);
+
+  const char *descriptor_type_to_string[NUM_DESCRIPTOR_TYPES] = {
+      [DESCRIPTOR_TYPE_UNIFORM] = "UNIFORM",
+      [DESCRIPTOR_TYPE_SAMPLER2D] = "SAMPLER2D",
+  };
+
+  // main loop
+  for (u32 binding_id = 0; binding_id < MAX_NUM_DESCRIPTOR_BINDINGS; binding_id++) {
+    const DescriptorBinding *binding = &descriptor_set_layout->bindings[binding_id];
+    if (!binding->is_valid) {
+      continue;
+    }
+
+    // meaningful stuff: binding #, binding type, binding count
+    u32 remaining_length = MAX_DESCRIPTOR_SET_LAYOUT_NAME_LENGTH - current_length;
+    u32 next_length = snprintf(NULL, 0, "_BIND%u_%s_ARR%u", binding_id, descriptor_type_to_string[binding->type],
+                               binding->descriptor_count);
+    if (next_length > remaining_length) {
+      printf("Ran out of room for descriptor set layout name at %s, stopping.\n", descriptor_set_layout->name);
+      return;
+    }
+
+    snprintf(descriptor_set_layout->name + current_length, remaining_length, "_BIND%u_%s_ARR%u", binding_id,
+             descriptor_type_to_string[binding->type], binding->descriptor_count);
+    current_length += next_length;
+  }
 }
 
 static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layout) {
@@ -1315,6 +1352,7 @@ void parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
       SetBindingDirectiveParse set_binding_directive_parse =
           parse_set_binding_directive(&parser, &template_string_slice);
       glsl_string_slice.start = set_binding_directive_parse.next_glsl_source_start;
+      set_binding_directive_parse.descriptor_binding.shader_stage = shader_to_compile.stage;
 
       // validate descriptor binding
       // just got a single binding for a particular set in a particular shader
@@ -1352,10 +1390,11 @@ void parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
       u32 set = set_binding_directive_parse.set;
       u32 binding = set_binding_directive_parse.binding;
       if (descriptor_set_layouts[set].bindings[binding].is_valid) {
-        fprintf(stderr, "Found repeat binding %u for set % in shader %.*s.\n", binding, set,
+        fprintf(stderr, "Found repeat binding %u for set %u in shader %.*s.\n", binding, set,
                 shader_to_compile.name_length, shader_to_compile.name);
       } else {
         descriptor_set_layouts[set].bindings[binding] = set_binding_directive_parse.descriptor_binding;
+        descriptor_set_layouts[set].num_bindings++;
       }
 
       if (set_binding_directive_parse.descriptor_binding.type != DESCRIPTOR_TYPE_INVALID) {
@@ -1416,6 +1455,12 @@ void parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
   }
 
   // validate descriptor sets
+  for (u32 i = 0; i < MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER; i++) {
+    DescriptorSetLayout *descriptor_set_layout = &descriptor_set_layouts[i];
+    if (descriptor_set_layout->num_bindings > 0) {
+      populate_descriptor_set_layout_name(descriptor_set_layout);
+    }
+  }
 
   parsed_shader.num_template_slices = string_slice_index;
   parsed_shaders_ir->parsed_shaders[parsed_shaders_ir->num_parsed_shaders++] = parsed_shader;

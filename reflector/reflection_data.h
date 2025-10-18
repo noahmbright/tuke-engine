@@ -9,6 +9,7 @@
 #define MAX_NUM_STRUCT_MEMBERS 8
 #define MAX_NUM_DESCRIPTOR_BINDINGS 8
 #define MAX_VERTEX_LAYOUT_NAME_LENGTH 128
+#define MAX_DESCRIPTOR_SET_LAYOUT_NAME_LENGTH 256
 
 enum GLSLType {
   GLSL_TYPE_NULL,
@@ -32,9 +33,22 @@ static const char *glsl_type_to_string[NUM_GLSL_TYPES]{
 };
 
 static const u32 glsl_type_to_size[NUM_GLSL_TYPES]{
-    [GLSL_TYPE_NULL] = 0,     [GLSL_TYPE_FLOAT] = 4,    [GLSL_TYPE_UINT] = 0,
+    [GLSL_TYPE_NULL] = 0,     [GLSL_TYPE_FLOAT] = 4,    [GLSL_TYPE_UINT] = 4,
     [GLSL_TYPE_VEC2] = 8,     [GLSL_TYPE_VEC3] = 12,    [GLSL_TYPE_VEC4] = 16,
     [GLSL_TYPE_MAT2] = 4 * 4, [GLSL_TYPE_MAT3] = 9 * 4, [GLSL_TYPE_MAT4] = 16 * 4,
+};
+
+// https://registry.khronos.org/OpenGL/specs/gl/glspec46.core.pdf
+// page 146 has the alignment rules
+static const u32 glsl_type_to_alignment[NUM_GLSL_TYPES]{
+    [GLSL_TYPE_NULL] = 0,  [GLSL_TYPE_FLOAT] = 4, [GLSL_TYPE_UINT] = 4,  [GLSL_TYPE_VEC2] = 8,  [GLSL_TYPE_VEC3] = 16,
+    [GLSL_TYPE_VEC4] = 16, [GLSL_TYPE_MAT2] = 16, [GLSL_TYPE_MAT3] = 16, [GLSL_TYPE_MAT4] = 16,
+};
+
+static const char *glsl_type_to_c_type[] = {
+    [GLSL_TYPE_FLOAT] = "float",    [GLSL_TYPE_UINT] = "unsigned",  [GLSL_TYPE_VEC2] = "glm::vec2",
+    [GLSL_TYPE_VEC3] = "glm::vec3", [GLSL_TYPE_VEC4] = "glm::vec4", [GLSL_TYPE_MAT2] = "glm::mat2",
+    [GLSL_TYPE_MAT3] = "glm::mat4", [GLSL_TYPE_MAT4] = "glm::mat4",
 };
 
 enum VertexAttributeRate {
@@ -163,7 +177,7 @@ struct GLSLStructMember {
   const char *identifier;
   u32 array_length;
   u32 identifier_length;
-  GLSLType type; // type encodes alignment, which can vary with backend
+  GLSLType type; // type encodes alignment, which can vary with backend or usage
 };
 
 struct GLSLStructMemberList {
@@ -240,16 +254,44 @@ struct DescriptorBinding {
   // descriptors all give an identifier, the name of the texture or unform instance
   const char *name;
   u32 name_length;
+  u32 descriptor_count;
 
   // for uniforms
   const GLSLStruct *glsl_struct;
+  ShaderStage shader_stage;
 
   bool is_valid;
 };
 
 struct DescriptorSetLayout {
+  char name[MAX_DESCRIPTOR_SET_LAYOUT_NAME_LENGTH];
+  u8 name_length;
+
   DescriptorBinding bindings[MAX_NUM_DESCRIPTOR_BINDINGS];
   ShaderStage stage;
   u8 num_bindings;
   u8 set_index; // numerically, which number set this is
 };
+
+inline bool descriptor_set_layout_equals(const DescriptorSetLayout *left, const DescriptorSetLayout *right) {
+  if (left->num_bindings != right->num_bindings) {
+    return false;
+  }
+
+  for (u32 i = 0; i < MAX_NUM_DESCRIPTOR_BINDINGS; i++) {
+    const DescriptorBinding *left_binding = &left->bindings[i];
+    const DescriptorBinding *right_binding = &right->bindings[i];
+    if (left_binding->is_valid != right_binding->is_valid) {
+      continue;
+    }
+
+    // don't bother comparing stage, will merge at pipeline creation time
+    bool type_equals = (left_binding->type == right_binding->type);
+    bool count_equals = (left_binding->descriptor_count == right_binding->descriptor_count);
+    if (!type_equals || !count_equals) {
+      return false;
+    }
+  }
+
+  return true;
+}

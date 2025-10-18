@@ -165,6 +165,7 @@ inline void codegen_compiled_shader_header(FILE *destination) {
   fprintf(destination, "#include <stdint.h>\n\n");
   fprintf(destination, "#include <stdio.h>\n\n");
   fprintf(destination, "#include <vulkan/vulkan.h>\n\n");
+  fprintf(destination, "#include <glm/glm.hpp>\n\n");
 
   fprintf(destination, "enum ShaderStage {\n");
   fprintf(destination, "  SHADER_STAGE_VERTEX,\n");
@@ -230,9 +231,9 @@ void generate_vulkan_vertex_layout_array(FILE *destination, const ParsedShadersI
         continue;
       }
 
-      fprintf(destination, "      { .binding = %u, ", i);
-      fprintf(destination, "      .stride = %u, ", vertex_layout->binding_strides[i]);
-      fprintf(destination, "      .inputRate = %s },\n",
+      fprintf(destination, "{ .binding = %u, ", i);
+      fprintf(destination, ".stride = %u, ", vertex_layout->binding_strides[i]);
+      fprintf(destination, ".inputRate = %s },\n",
               vertex_attribute_rate_to_vulkan_enum_string(vertex_layout->binding_rates[i]));
     }
     fprintf(destination, "};\n\n"); // close array of bindings
@@ -240,14 +241,10 @@ void generate_vulkan_vertex_layout_array(FILE *destination, const ParsedShadersI
     // attributes
     fprintf(destination, "const VkVertexInputAttributeDescription vertex_attributes_%s[] = {\n", vertex_layout->name);
     for (u32 i = 0; i < vertex_layout->attribute_count; i++) {
-      if (vertex_layout->attribute_count == 0) {
-        continue;
-      }
-
       fprintf(destination, "  { .binding = %u, ", vertex_layout->attributes[i].binding);
-      fprintf(destination, "  .location = %u, ", vertex_layout->attributes[i].location);
-      fprintf(destination, "  .offset = %u, ", vertex_layout->attributes[i].offset);
-      fprintf(destination, "  .format = %s },\n", glsl_type_to_vulkan_format(vertex_layout->attributes[i].glsl_type));
+      fprintf(destination, ".location = %u, ", vertex_layout->attributes[i].location);
+      fprintf(destination, ".offset = %u, ", vertex_layout->attributes[i].offset);
+      fprintf(destination, ".format = %s },\n", glsl_type_to_vulkan_format(vertex_layout->attributes[i].glsl_type));
     }
     fprintf(destination, "};\n\n"); // close attributes
   }
@@ -376,6 +373,7 @@ void generate_opengl_vertex_layout_array(FILE *destination, const ParsedShadersI
   }
   fprintf(destination, "};\n\n");
 }
+
 void generate_vulkan_descriptor_pool_size_array(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
   u32 max_sets = 0;
   for (u32 i = 0; i < NUM_DESCRIPTOR_TYPES; i++) {
@@ -395,6 +393,16 @@ void generate_vulkan_descriptor_pool_size_array(FILE *destination, const ParsedS
   fprintf(destination, "};\n\n");
 }
 
+void generate_vulkan_descriptor_set_layout_binding_lists(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
+  (void)destination;
+
+  for (u32 i = 0; i < parsed_shaders_ir->num_descriptor_set_layouts; i++) {
+    const DescriptorSetLayout *layout = &parsed_shaders_ir->descriptor_set_layouts[i];
+    for (u32 j = 0; j < layout->num_bindings; j++) {
+    }
+  }
+}
+
 inline void codegen_shader_spec_definition(FILE *destination) {
   fprintf(destination, "struct ShaderSpec {\n");
   fprintf(destination, "  const char* name;\n");
@@ -404,6 +412,42 @@ inline void codegen_shader_spec_definition(FILE *destination) {
   fprintf(destination, "  VertexLayoutID vertex_layout_id;\n");
   fprintf(destination, "  ShaderStage stage;\n");
   fprintf(destination, "};\n\n");
+}
+
+static u32 align_up(u32 offset, u32 alignment) { return (offset + alignment - 1) & ~(alignment - 1); }
+
+static void codegen_struct_defintions(FILE *destination, const GLSLStruct *glsl_structs, u32 num_glsl_structs) {
+  for (u32 i = 0; i < num_glsl_structs; i++) {
+    const GLSLStruct *glsl_struct = &glsl_structs[i];
+
+    // precompute stuff
+    u32 max_alignment = 0;
+    u32 struct_size = 0;
+    for (u32 j = 0; j < glsl_struct->member_list.num_members; j++) {
+      const GLSLStructMember *member = &glsl_struct->member_list.members[j];
+      u32 alignment = glsl_type_to_alignment[member->type];
+      max_alignment = (max_alignment > alignment) ? max_alignment : alignment;
+      u32 next_aligned_size = align_up(struct_size, alignment);
+      struct_size = next_aligned_size;
+      struct_size += glsl_type_to_size[member->type];
+    }
+
+    // codegen
+    fprintf(destination, "typedef struct alignas(%u) {\n", max_alignment);
+    for (u32 j = 0; j < glsl_struct->member_list.num_members; j++) {
+      const GLSLStructMember *member = &glsl_struct->member_list.members[j];
+      fprintf(destination, "  alignas(%u) %s %.*s;\n", glsl_type_to_alignment[member->type],
+              glsl_type_to_c_type[member->type], member->identifier_length, member->identifier);
+    }
+
+    u32 final_aligned_size = align_up(struct_size, max_alignment);
+    u32 struct_alignment_size_difference = final_aligned_size - struct_size;
+    if (struct_alignment_size_difference > 0) {
+      fprintf(destination, "  unsigned char _padding[%u];\n", struct_alignment_size_difference);
+    }
+
+    fprintf(destination, "} %.*s;\n\n", glsl_struct->type_name_length, glsl_struct->type_name);
+  }
 }
 
 inline void codegen_shader_spec(FILE *destination, const ParsedShader *parsed_shader,
@@ -489,11 +533,18 @@ void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
   generate_opengl_vertex_layout_array(destination, parsed_shaders_ir);
 
   // descriptor sets
+  // enum
+  fprintf(destination, "enum DescriptorSetLayoutIDs{\n");
+  for (u32 i = 0; i < parsed_shaders_ir->num_descriptor_set_layouts; i++) {
+    fprintf(destination, "  %s,\n", parsed_shaders_ir->descriptor_set_layouts[i].name);
+  }
+  fprintf(destination, "\n  NUM_DESCRIPTOR_SET_LAYOUTS\n};\n\n");
   generate_vulkan_descriptor_pool_size_array(destination, parsed_shaders_ir);
+  generate_vulkan_descriptor_set_layout_binding_lists(destination, parsed_shaders_ir);
+  codegen_struct_defintions(destination, parsed_shaders_ir->glsl_structs, parsed_shaders_ir->num_glsl_structs);
 
   // for individual shaders, the spirv bytes, the opengl glsl
   codegen_shader_spec_definition(destination);
-
   for (u32 i = 0; i < parsed_shaders_ir->num_parsed_shaders; i++) {
     codegen_shader_spec(destination, &parsed_shaders_ir->parsed_shaders[i], &glsl_sources[i][GRAPHICS_BACKEND_OPENGL],
                         &spirv_bytes_arrays[i]);
