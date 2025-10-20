@@ -16,6 +16,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE engine)
 add_executable(vulkan_test ${CMAKE_SOURCE_DIR}/app/vulkan_test/vulkan_test.cpp)
 target_link_libraries(vulkan_test PRIVATE engine)
 
+add_executable(opengl_test ${CMAKE_SOURCE_DIR}/app/opengl_test/opengl_test.cpp)
+target_link_libraries(opengl_test PRIVATE engine)
+
 file(GLOB_RECURSE PONG_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/app/pong/pong.cpp
     ${CMAKE_SOURCE_DIR}/app/pong/main.cpp

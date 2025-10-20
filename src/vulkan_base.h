@@ -1,9 +1,6 @@
 #pragma once
 
-#include "c_reflector_bringup.h"
-
 #include "hashmap.h"
-#include "renderer.h"
 #include "tuke_engine.h"
 #include "vulkan/vulkan_core.h"
 #include <stdio.h>
@@ -241,7 +238,7 @@ enum BlendMode { BLEND_MODE_OPAQUE, BLEND_MODE_ALPHA };
 
 struct PipelineConfig {
   // pipeline create info
-  ShaderModule stages[MAX_SHADER_STAGE_COUNT];
+  VkPipelineShaderStageCreateInfo stages[MAX_SHADER_STAGE_COUNT];
   u32 stage_count;
   const VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info;
   VkRenderPass render_pass;
@@ -398,7 +395,8 @@ VkShaderModule create_shader_module(VkDevice device, const u32 *code, u32 code_s
 VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *config, VkPipelineCache pipeline_cache);
 
 VkPipeline create_default_graphics_pipeline(const VulkanContext *context, VkRenderPass render_pass,
-                                            ShaderSpec vertex_shader_spec, ShaderSpec fragment_shader_spec,
+                                            VkShaderModule vertex_shader, VkShaderModule fragment_shader,
+                                            const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
                                             VkPipelineLayout pipeline_layout);
 
 bool begin_frame(VulkanContext *context);
@@ -418,7 +416,7 @@ create_vertex_input_state(u32 binding_description_count, const VkVertexInputBind
                           u32 attribute_description_count,
                           const VkVertexInputAttributeDescription *attribute_descriptions);
 
-VkPipelineLayout create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layout,
+VkPipelineLayout create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts,
                                         u32 set_layout_count);
 
 VkDescriptorPool create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count,
@@ -454,8 +452,8 @@ UniformBufferManager new_uniform_buffer_manager();
 
 UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager, u32 size);
 
-PipelineConfig create_default_graphics_pipeline_config(const VulkanContext *context, VkRenderPass render_pass,
-                                                       const char *vertex_shader_name, const char *fragment_shader_name,
+PipelineConfig create_default_graphics_pipeline_config(VkRenderPass render_pass, VkShaderModule vertex_shader,
+                                                       VkShaderModule fragment_shader,
                                                        const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
                                                        VkPipelineLayout pipeline_layout);
 

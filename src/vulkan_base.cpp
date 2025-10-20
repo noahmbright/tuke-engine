@@ -1,5 +1,4 @@
 #include "vulkan_base.h"
-#include "c_reflector_bringup.h"
 #include "hashmap.h"
 #include "renderer.h"
 #include "tuke_engine.h"
@@ -1063,20 +1062,32 @@ VkVertexInputAttributeDescription create_vertex_attribute_description(u32 locati
   return description;
 }
 
-PipelineConfig create_default_graphics_pipeline_config(const VulkanContext *context, VkRenderPass render_pass,
-                                                       ShaderSpec vertex_shader_spec, ShaderSpec fragment_shader_spec,
+VkPipelineShaderStageCreateInfo create_shader_stage_info(VkShaderModule module, VkShaderStageFlagBits stage,
+                                                         const char *entry_point) {
+  VkPipelineShaderStageCreateInfo shader_stage_create_info;
+  shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  shader_stage_create_info.pNext = NULL;
+  shader_stage_create_info.flags = 0;
+  shader_stage_create_info.stage = stage;
+  shader_stage_create_info.module = module;
+  shader_stage_create_info.pName = entry_point;
+  shader_stage_create_info.pSpecializationInfo = NULL;
+  return shader_stage_create_info;
+}
+
+PipelineConfig create_default_graphics_pipeline_config(VkRenderPass render_pass, VkShaderModule vertex_shader,
+                                                       VkShaderModule fragment_shader,
+                                                       const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
                                                        VkPipelineLayout pipeline_layout) {
 
-  const ShaderModule *vertex = context->shader_cache->hash_map.find(vertex_shader_spec.name);
-  const ShaderModule *fragment = context->shader_cache->hash_map.find(fragment_shader_spec.name);
-  assert(vertex && fragment);
-
-  const VkPipelineVertexInputStateCreateInfo *vertex_input_state =
-      &generated_vulkan_vertex_layouts[vertex_shader_spec.vertex_layout_id];
+  VkPipelineShaderStageCreateInfo pipeline_shader_create_info_vertex =
+      create_shader_stage_info(vertex_shader, VK_SHADER_STAGE_VERTEX_BIT, "main");
+  VkPipelineShaderStageCreateInfo pipeline_shader_create_info_fragment =
+      create_shader_stage_info(fragment_shader, VK_SHADER_STAGE_FRAGMENT_BIT, "main");
 
   PipelineConfig pipeline_config;
-  pipeline_config.stages[0] = *vertex;
-  pipeline_config.stages[1] = *fragment;
+  pipeline_config.stages[0] = pipeline_shader_create_info_vertex;
+  pipeline_config.stages[1] = pipeline_shader_create_info_fragment;
   pipeline_config.stage_count = 2;
   pipeline_config.vertex_input_state_create_info = vertex_input_state;
   pipeline_config.render_pass = render_pass;
@@ -1541,36 +1552,17 @@ create_color_blend_state(u32 num_color_blend_attachments,
   return color_blend_state_create_info;
 }
 
-VkPipelineShaderStageCreateInfo create_shader_stage_info(VkShaderModule module, VkShaderStageFlagBits stage,
-                                                         const char *entry_point) {
-  VkPipelineShaderStageCreateInfo shader_stage_create_info;
-  shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  shader_stage_create_info.pNext = NULL;
-  shader_stage_create_info.flags = 0;
-  shader_stage_create_info.stage = stage;
-  shader_stage_create_info.module = module;
-  shader_stage_create_info.pName = entry_point;
-  shader_stage_create_info.pSpecializationInfo = NULL;
-  return shader_stage_create_info;
-}
-
 // TODO Validate shader stages if you want strict pipeline guarantees
 // TODO Print/log pipeline cache usage for debugging
 VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *config, VkPipelineCache pipeline_cache) {
 
   assert(config->stage_count <= MAX_SHADER_STAGE_COUNT);
-  VkPipelineShaderStageCreateInfo stages[MAX_SHADER_STAGE_COUNT];
-  for (u32 i = 0; i < config->stage_count; i++) {
-    stages[i] =
-        create_shader_stage_info(config->stages[i].module, config->stages[i].stage, config->stages[i].entry_point);
-  }
-
   VkGraphicsPipelineCreateInfo graphics_pipeline_create_info;
   graphics_pipeline_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
   graphics_pipeline_create_info.pNext = 0;
   graphics_pipeline_create_info.flags = 0;
   graphics_pipeline_create_info.stageCount = config->stage_count;
-  graphics_pipeline_create_info.pStages = stages;
+  graphics_pipeline_create_info.pStages = config->stages;
 
   assert(config->vertex_input_state_create_info && "create_graphics_pipeline: vertex_input_state_create_info is NULL. "
                                                    "Did you mean to fill out this structure manually?");
@@ -1639,18 +1631,13 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
   return graphics_pipeline;
 }
 
-// TODO make this take in a pair of shader specs
 VkPipeline create_default_graphics_pipeline(const VulkanContext *context, VkRenderPass render_pass,
-                                            ShaderSpec vertex_shader_spec, ShaderSpec fragment_shader_spec,
+                                            VkShaderModule vertex_shader, VkShaderModule fragment_shader,
+                                            const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
                                             VkPipelineLayout pipeline_layout) {
 
-  const char *vertex_shader_name = vertex_shader_spec.name;
-  const char *fragment_shader_name = fragment_shader_spec.name;
-  const VkPipelineVertexInputStateCreateInfo *vertex_input_state =
-      &generated_vulkan_vertex_layouts[vertex_shader_spec.vertex_layout_id];
-
-  PipelineConfig config = create_default_graphics_pipeline_config(
-      context, render_pass, vertex_shader_name, fragment_shader_name, vertex_input_state, pipeline_layout);
+  PipelineConfig config = create_default_graphics_pipeline_config(render_pass, vertex_shader, fragment_shader,
+                                                                  vertex_input_state, pipeline_layout);
 
   return create_graphics_pipeline(context->device, &config, context->pipeline_cache);
 }
@@ -1768,7 +1755,7 @@ create_vertex_input_state(u32 binding_description_count, const VkVertexInputBind
   return vertex_input_state_create_info;
 }
 
-VkPipelineLayout create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layout,
+VkPipelineLayout create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts,
                                         u32 set_layout_count) {
 
   VkPipelineLayoutCreateInfo pipeline_layout_create_info;
@@ -1776,7 +1763,7 @@ VkPipelineLayout create_pipeline_layout(VkDevice device, const VkDescriptorSetLa
   pipeline_layout_create_info.pNext = NULL;
   pipeline_layout_create_info.flags = 0;
   pipeline_layout_create_info.setLayoutCount = set_layout_count;
-  pipeline_layout_create_info.pSetLayouts = descriptor_set_layout;
+  pipeline_layout_create_info.pSetLayouts = descriptor_set_layouts;
   // TODO push constants
   pipeline_layout_create_info.pushConstantRangeCount = 0;
   pipeline_layout_create_info.pPushConstantRanges = NULL;
@@ -2202,7 +2189,7 @@ void add_image_descriptor_set(DescriptorSetBuilder *builder, VkImageView image_v
 
 // TODO decouple layouts from descriptor sets
 // I make a layout for every descriptor set, but I should be able to
-// create layouts from mixtures of descriptor sets
+// create sets from mixtures of layouts
 DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescriptorPool descriptor_pool) {
   DescriptorSetHandle handle;
 

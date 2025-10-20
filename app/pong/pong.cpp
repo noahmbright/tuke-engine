@@ -1,7 +1,9 @@
-#include "pong.h"
+#include "c_reflector_bringup.h"
+#include "generated_shader_utils.h"
+
 #include "camera.h"
-#include "compiled_shaders.h"
 #include "physics.h"
+#include "pong.h"
 #include "statistics.h"
 #include "transform.h"
 #include "tuke_engine.h"
@@ -9,9 +11,8 @@
 #include "vulkan_base.h"
 #include "window.h"
 
-static const char *texture_names[NUM_TEXTURES] = {
-    "textures/generic_girl.jpg", "textures/pong/field_background.jpg",
-    "textures/girl_face.jpg", "textures/girl_face_normal_map.jpg"};
+static const char *texture_names[NUM_TEXTURES] = {"textures/generic_girl.jpg", "textures/pong/field_background.jpg",
+                                                  "textures/girl_face.jpg", "textures/girl_face_normal_map.jpg"};
 
 void init_buffers(State *state) {
   VulkanContext *ctx = &state->context;
@@ -19,10 +20,8 @@ void init_buffers(State *state) {
   // big vertex/index buffers
   BufferUploadQueue buffer_upload_queue = new_buffer_upload_queue();
 
-  const BufferHandle *unit_quad_vertices_slice =
-      UPLOAD_VERTEX_ARRAY(buffer_upload_queue, paddle_vertices);
-  const BufferHandle *quad_inices_slice =
-      UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
+  const BufferHandle *unit_quad_vertices_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, paddle_vertices);
+  const BufferHandle *quad_inices_slice = UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
 
   state->buffer_manager = flush_buffers(ctx, &buffer_upload_queue);
 
@@ -30,12 +29,9 @@ void init_buffers(State *state) {
   // TODO can I come up with a scheme for coordinating UBOs and the location of
   // what data in what portion of the renderer maps to what data in the shaders?
   UniformBufferManager ub_manager = new_uniform_buffer_manager();
-  state->uniform_writes.camera_vp =
-      push_uniform(&ub_manager, sizeof(VPUniform));
-  state->uniform_writes.arena_model =
-      push_uniform(&ub_manager, sizeof(glm::mat4));
-  state->uniform_writes.instance_data =
-      push_uniform(&ub_manager, sizeof(InstanceDataUBO));
+  state->uniform_writes.camera_vp = push_uniform(&ub_manager, sizeof(VPUniform));
+  state->uniform_writes.arena_model = push_uniform(&ub_manager, sizeof(glm::mat4));
+  state->uniform_writes.instance_data = push_uniform(&ub_manager, sizeof(InstanceDataUBO));
   state->uniform_buffer = create_uniform_buffer(ctx, ub_manager.current_offset);
 }
 
@@ -46,10 +42,8 @@ void init_descriptor_sets(State *state) {
   // global VP
   DescriptorSetBuilder global_vp_builder = create_descriptor_set_builder(ctx);
   // global vp
-  add_uniform_buffer_descriptor_set(&global_vp_builder, &state->uniform_buffer,
-                                    state->uniform_writes.camera_vp.offset,
-                                    state->uniform_writes.camera_vp.size, 0, 1,
-                                    VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(&global_vp_builder, &state->uniform_buffer, state->uniform_writes.camera_vp.offset,
+                                    state->uniform_writes.camera_vp.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP] =
       build_descriptor_set(&global_vp_builder, state->descriptor_pool);
 
@@ -57,24 +51,20 @@ void init_descriptor_sets(State *state) {
   DescriptorSetBuilder background_builder = create_descriptor_set_builder(ctx);
   // background model
   add_uniform_buffer_descriptor_set(&background_builder, &state->uniform_buffer,
-                                    state->uniform_writes.arena_model.offset,
-                                    state->uniform_writes.arena_model.size, 0,
+                                    state->uniform_writes.arena_model.offset, state->uniform_writes.arena_model.size, 0,
                                     1, VK_SHADER_STAGE_VERTEX_BIT, false);
 
-  add_image_descriptor_set(&background_builder,
-                           state->textures[TEXTURE_FIELD_BACKGROUND].image_view,
-                           state->sampler, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+  add_image_descriptor_set(&background_builder, state->textures[TEXTURE_FIELD_BACKGROUND].image_view, state->sampler, 1,
+                           1, VK_SHADER_STAGE_FRAGMENT_BIT);
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND] =
       build_descriptor_set(&background_builder, state->descriptor_pool);
 
   // paddles and ball
   DescriptorSetBuilder paddle_ball_builder = create_descriptor_set_builder(ctx);
-  add_uniform_buffer_descriptor_set(&paddle_ball_builder,
-                                    &state->uniform_buffer,
+  add_uniform_buffer_descriptor_set(&paddle_ball_builder, &state->uniform_buffer,
                                     state->uniform_writes.instance_data.offset,
-                                    state->uniform_writes.instance_data.size, 0,
-                                    1, VK_SHADER_STAGE_VERTEX_BIT, false);
+                                    state->uniform_writes.instance_data.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL] =
       build_descriptor_set(&paddle_ball_builder, state->descriptor_pool);
@@ -84,22 +74,17 @@ void init_background_material(State *state) {
 
   Material *mat = &state->background_material;
 
-  DescriptorSetHandle *vp_handle =
-      &state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP];
+  DescriptorSetHandle *vp_handle = &state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP];
 
-  DescriptorSetHandle *background_handle =
-      &state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND];
+  DescriptorSetHandle *background_handle = &state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND];
 
-  VkDescriptorSetLayout layouts[2] = {vp_handle->descriptor_set_layout,
-                                      background_handle->descriptor_set_layout};
+  VkDescriptorSetLayout layouts[2] = {vp_handle->descriptor_set_layout, background_handle->descriptor_set_layout};
 
-  state->background_material.pipeline_layout =
-      create_pipeline_layout(state->context.device, layouts, 2);
+  state->background_material.pipeline_layout = create_pipeline_layout(state->context.device, layouts, 2);
 
-  state->background_material.pipeline = create_default_graphics_pipeline(
-      &state->context, state->context.render_pass, background_vert_spec.name,
-      background_frag_spec.name, get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2),
-      state->background_material.pipeline_layout);
+  state->background_material.pipeline = shader_handles_to_graphics_pipeline(
+      &state->context, state->context.render_pass, SHADER_HANDLE_PONG_BACKGROUND_VERT,
+      SHADER_HANDLE_PONG_BACKGROUND_FRAG, state->background_material.pipeline_layout);
 
   mat->render_call.instance_count = 1;
   mat->render_call.graphics_pipeline = mat->pipeline;
@@ -109,8 +94,7 @@ void init_background_material(State *state) {
   mat->render_call.descriptor_sets[1] = background_handle->descriptor_set;
   mat->render_call.num_vertex_buffers = 1;
   mat->render_call.vertex_buffer_offsets[0] = 0;
-  mat->render_call.vertex_buffers[0] =
-      state->buffer_manager.vertex_buffer.buffer;
+  mat->render_call.vertex_buffers[0] = state->buffer_manager.vertex_buffer.buffer;
   mat->render_call.index_buffer_offset = 0;
   mat->render_call.num_indices = 6;
   mat->render_call.index_buffer = state->buffer_manager.index_buffer.buffer;
@@ -121,22 +105,17 @@ void init_paddles_material(State *state) {
 
   Material *mat = &state->paddle_material;
 
-  DescriptorSetHandle *vp_handle =
-      &state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP];
+  DescriptorSetHandle *vp_handle = &state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP];
 
-  DescriptorSetHandle *paddle_handle =
-      &state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL];
+  DescriptorSetHandle *paddle_handle = &state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL];
 
-  VkDescriptorSetLayout layouts[2] = {vp_handle->descriptor_set_layout,
-                                      paddle_handle->descriptor_set_layout};
+  VkDescriptorSetLayout layouts[2] = {vp_handle->descriptor_set_layout, paddle_handle->descriptor_set_layout};
 
-  state->paddle_material.pipeline_layout =
-      create_pipeline_layout(state->context.device, layouts, 2);
+  state->paddle_material.pipeline_layout = create_pipeline_layout(state->context.device, layouts, 2);
 
-  state->paddle_material.pipeline = create_default_graphics_pipeline(
-      &state->context, state->context.render_pass, paddle_vert_spec.name,
-      paddle_frag_spec.name, get_vertex_layout(VERTEX_LAYOUT_VEC3_VEC2),
-      state->paddle_material.pipeline_layout);
+  state->paddle_material.pipeline =
+      shader_handles_to_graphics_pipeline(&state->context, state->context.render_pass, SHADER_HANDLE_PONG_PADDLE_VERT,
+                                          SHADER_HANDLE_PONG_PADDLE_FRAG, state->paddle_material.pipeline_layout);
 
   mat->render_call.instance_count = InstanceDataUBO_model_array_size;
   mat->render_call.graphics_pipeline = mat->pipeline;
@@ -146,8 +125,7 @@ void init_paddles_material(State *state) {
   mat->render_call.descriptor_sets[1] = paddle_handle->descriptor_set;
   mat->render_call.num_vertex_buffers = 1;
   mat->render_call.vertex_buffer_offsets[0] = 0;
-  mat->render_call.vertex_buffers[0] =
-      state->buffer_manager.vertex_buffer.buffer;
+  mat->render_call.vertex_buffers[0] = state->buffer_manager.vertex_buffer.buffer;
   mat->render_call.index_buffer_offset = 0;
   mat->render_call.num_indices = 6;
   mat->render_call.index_buffer = state->buffer_manager.index_buffer.buffer;
@@ -157,12 +135,10 @@ void init_paddles_material(State *state) {
 static void init_transforms(State *state) {
   Transform *transforms = state->transforms;
 
-  transforms[ENTITY_LEFT_PADDLE] =
-      create_transform(&state->positions[ENTITY_LEFT_PADDLE]);
+  transforms[ENTITY_LEFT_PADDLE] = create_transform(&state->positions[ENTITY_LEFT_PADDLE]);
   transforms[ENTITY_LEFT_PADDLE].scale = &paddle_scale0;
 
-  transforms[ENTITY_RIGHT_PADDLE] =
-      create_transform(&state->positions[ENTITY_RIGHT_PADDLE]);
+  transforms[ENTITY_RIGHT_PADDLE] = create_transform(&state->positions[ENTITY_RIGHT_PADDLE]);
   transforms[ENTITY_RIGHT_PADDLE].scale = &paddle_scale0;
 
   transforms[ENTITY_BALL] = create_transform(&state->positions[ENTITY_BALL]);
@@ -172,13 +148,10 @@ static void init_transforms(State *state) {
     generate_transform(&state->transforms[i], &state->instance_data.model[i]);
   }
 
-  write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data,
-                          state->uniform_writes.instance_data);
+  write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data, state->uniform_writes.instance_data);
 }
 
 State setup_state(const char *title) {
-  init_vertex_layout_registry();
-
   State state;
   state.arena_dimensions = arena_dimensions0;
   init_inputs(&state.inputs);
@@ -196,13 +169,8 @@ State setup_state(const char *title) {
   // TODO this sampler never changes - look into wiring immutable samplers
   state.sampler = create_sampler(ctx->device);
 
-  state.descriptor_pool = create_descriptor_pool(
-      ctx->device, generated_pool_sizes, pool_size_count, max_sets);
-
-  cache_shader_module(ctx->shader_cache, paddle_vert_spec);
-  cache_shader_module(ctx->shader_cache, paddle_frag_spec);
-  cache_shader_module(ctx->shader_cache, background_frag_spec);
-  cache_shader_module(ctx->shader_cache, background_vert_spec);
+  state.descriptor_pool =
+      create_descriptor_pool(ctx->device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
 
   init_descriptor_sets(&state);
 
@@ -244,16 +212,13 @@ State setup_state(const char *title) {
 
   // TODO make camera matrices only on camera movement
   // TODO buffer only on resize
-  const CameraMatrices camera_matrices =
-      new_camera_matrices(&state.camera, state.context.window_framebuffer_width,
-                          state.context.window_framebuffer_height);
+  const CameraMatrices camera_matrices = new_camera_matrices(&state.camera, state.context.window_framebuffer_width,
+                                                             state.context.window_framebuffer_height);
   glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
 
   // uniform buffer structure: camera vp, background model, paddle model
-  write_to_uniform_buffer(&state.uniform_buffer, &camera_vp,
-                          state.uniform_writes.camera_vp);
-  write_to_uniform_buffer(&state.uniform_buffer, &arena_model,
-                          state.uniform_writes.arena_model);
+  write_to_uniform_buffer(&state.uniform_buffer, &camera_vp, state.uniform_writes.camera_vp);
+  write_to_uniform_buffer(&state.uniform_buffer, &arena_model, state.uniform_writes.arena_model);
 
   state.screen_shake.x_oscillator.phase = 0.0f;
   state.screen_shake.x_oscillator.omega = 10.0f;
@@ -269,8 +234,7 @@ State setup_state(const char *title) {
   state.screen_shake.time_elapsed = 0.0f;
   state.screen_shake.cutoff_duration = 0.5f;
 
-  init_alias_method(&state.powerup_alias_table, NUM_POWERUPS,
-                    powerup_likelihoods, 0x69420);
+  init_alias_method(&state.powerup_alias_table, NUM_POWERUPS, powerup_likelihoods, 0x69420);
   log_alias_method(&state.powerup_alias_table);
   state.left_paddle_powerup_flags = 0;
   state.right_paddle_powerup_flags = 0;
@@ -297,8 +261,7 @@ void destroy_state(State *state) {
   }
 
   for (u32 i = 0; i < NUM_DESCRIPTOR_HANDLES; i++) {
-    destroy_descriptor_set_handle(ctx->device,
-                                  &state->descriptor_set_handles[i]);
+    destroy_descriptor_set_handle(ctx->device, &state->descriptor_set_handles[i]);
   }
 
   destroy_material(ctx, &state->background_material);
@@ -321,8 +284,7 @@ void render(State *state) {
   }
 
   VkCommandBuffer command_buffer = begin_command_buffer(ctx);
-  begin_render_pass(ctx, command_buffer, ctx->render_pass,
-                    ctx->framebuffers[ctx->image_index], state->clear_values, 2,
+  begin_render_pass(ctx, command_buffer, ctx->render_pass, ctx->framebuffers[ctx->image_index], state->clear_values, 2,
                     state->viewport_state.scissor.offset);
   vkCmdSetViewport(command_buffer, 0, 1, &state->viewport_state.viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &state->viewport_state.scissor);
@@ -356,8 +318,7 @@ void process_inputs_playing(State *state, f32 dt) {
   }
 
   glm::vec3 input_direction(0.0f);
-  bool horizontal_enabled =
-      (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED);
+  bool horizontal_enabled = (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED);
 
   if (key_held(inputs, INPUT_KEY_W)) {
     input_direction.y += 1.0f;
@@ -372,12 +333,10 @@ void process_inputs_playing(State *state, f32 dt) {
     input_direction.x += horizontal_enabled * 1.0f;
   }
 
-  if (key_pressed(inputs, INPUT_KEY_SPACEBAR) &&
-      state->pong_mode == PONG_MODE_BETWEEN_POINTS) {
+  if (key_pressed(inputs, INPUT_KEY_SPACEBAR) && state->pong_mode == PONG_MODE_BETWEEN_POINTS) {
 
     // TODO engine: convert to a branchless scheme
-    f32 theta =
-        2 * PI * random_f32_xoroshiro128_plus(&state->rngs.ball_direction);
+    f32 theta = 2 * PI * random_f32_xoroshiro128_plus(&state->rngs.ball_direction);
     const f32 half_pi = PI / 2.0f;
     const f32 epsilon = PI / 16.0f;
     const f32 top_min = half_pi - epsilon;
@@ -385,8 +344,7 @@ void process_inputs_playing(State *state, f32 dt) {
     const f32 bottom_min = 3 * half_pi - epsilon;
     const f32 bottom_max = 3 * half_pi + epsilon;
 
-    while (interval_contains(theta, top_min, top_max) ||
-           interval_contains(theta, bottom_min, bottom_max)) {
+    while (interval_contains(theta, top_min, top_max) || interval_contains(theta, bottom_min, bottom_max)) {
       theta = random_f32_xoroshiro128_plus(&state->rngs.ball_direction);
     }
 
@@ -400,16 +358,14 @@ void process_inputs_playing(State *state, f32 dt) {
 
   // TODO Pong: replace with powerup
   if (key_pressed(inputs, INPUT_KEY_H)) {
-    state->movement_mode =
-        (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED)
-            ? MOVEMENT_MODE_VERTICAL_ONLY
-            : MOVEMENT_MODE_HORIZONTAL_ENABLED;
+    state->movement_mode = (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED)
+                               ? MOVEMENT_MODE_VERTICAL_ONLY
+                               : MOVEMENT_MODE_HORIZONTAL_ENABLED;
   }
 
   // TODO Pong: make the paddle scale over the course of the game
   if (input_direction.length() > EPSILON) {
-    state->positions[ENTITY_LEFT_PADDLE] +=
-        dt * state->left_paddle_speed * input_direction;
+    state->positions[ENTITY_LEFT_PADDLE] += dt * state->left_paddle_speed * input_direction;
     state->transforms[ENTITY_LEFT_PADDLE].dirty = true;
   }
 }
@@ -489,49 +445,36 @@ void handle_collisions(State *state, const f32 dt) {
   // paddle intersects with arena boundary
   // left paddle
   // vertical
-  if (left_paddle_pos.y + 0.5f * left_paddle_scale.y >
-      arena_vertical_boundary) {
-    positions[ENTITY_LEFT_PADDLE].y =
-        arena_vertical_boundary - 0.5f * left_paddle_scale.y;
+  if (left_paddle_pos.y + 0.5f * left_paddle_scale.y > arena_vertical_boundary) {
+    positions[ENTITY_LEFT_PADDLE].y = arena_vertical_boundary - 0.5f * left_paddle_scale.y;
   }
 
-  if (left_paddle_pos.y - 0.5f * left_paddle_scale.y <
-      -arena_vertical_boundary) {
-    positions[ENTITY_LEFT_PADDLE].y =
-        -arena_vertical_boundary + 0.5f * left_paddle_scale.y;
+  if (left_paddle_pos.y - 0.5f * left_paddle_scale.y < -arena_vertical_boundary) {
+    positions[ENTITY_LEFT_PADDLE].y = -arena_vertical_boundary + 0.5f * left_paddle_scale.y;
   }
 
   // horizontal
-  if (left_paddle_pos.x + 0.5f * left_paddle_scale.x >
-      arena_horizontal_boundary) {
-    positions[ENTITY_LEFT_PADDLE].x =
-        arena_horizontal_boundary - 0.5f * left_paddle_scale.x;
+  if (left_paddle_pos.x + 0.5f * left_paddle_scale.x > arena_horizontal_boundary) {
+    positions[ENTITY_LEFT_PADDLE].x = arena_horizontal_boundary - 0.5f * left_paddle_scale.x;
   }
 
-  if (left_paddle_pos.x - 0.5f * left_paddle_scale.x <
-      -arena_horizontal_boundary) {
-    positions[ENTITY_LEFT_PADDLE].x =
-        -arena_horizontal_boundary + 0.5f * left_paddle_scale.x;
+  if (left_paddle_pos.x - 0.5f * left_paddle_scale.x < -arena_horizontal_boundary) {
+    positions[ENTITY_LEFT_PADDLE].x = -arena_horizontal_boundary + 0.5f * left_paddle_scale.x;
   }
 
   // right paddle
-  if (right_paddle_pos.y - 0.5f * right_paddle_scale.y <
-      -arena_vertical_boundary) {
-    positions[ENTITY_RIGHT_PADDLE].y =
-        -arena_vertical_boundary + 0.5f * right_paddle_scale.y;
+  if (right_paddle_pos.y - 0.5f * right_paddle_scale.y < -arena_vertical_boundary) {
+    positions[ENTITY_RIGHT_PADDLE].y = -arena_vertical_boundary + 0.5f * right_paddle_scale.y;
   }
 
-  if (right_paddle_pos.y + 0.5f * right_paddle_scale.y >
-      arena_vertical_boundary) {
-    positions[ENTITY_RIGHT_PADDLE].y =
-        arena_vertical_boundary - 0.5f * right_paddle_scale.y;
+  if (right_paddle_pos.y + 0.5f * right_paddle_scale.y > arena_vertical_boundary) {
+    positions[ENTITY_RIGHT_PADDLE].y = arena_vertical_boundary - 0.5f * right_paddle_scale.y;
   }
 
   if (state->left_paddle_cooldown <= 0.0f) {
     // ball paddle collisions
     SweptAABBCollisionCheck left_collision_check = swept_aabb_collision(
-        dt, left_paddle_pos, left_paddle_scale, left_paddle_velocity, ball_pos,
-        ball_scale, ball_velocity);
+        dt, left_paddle_pos, left_paddle_scale, left_paddle_velocity, ball_pos, ball_scale, ball_velocity);
 
     if (left_collision_check.did_collide) {
       state->left_paddle_cooldown = 1.0f;
@@ -542,22 +485,19 @@ void handle_collisions(State *state, const f32 dt) {
 
       // normal is from paddles's perspective
       if (left_collision_check.was_overlapping) {
-        const glm::vec3 displacement =
-            normal * left_collision_check.penetration_depth;
+        const glm::vec3 displacement = normal * left_collision_check.penetration_depth;
         state->positions[ENTITY_BALL] += displacement;
       } else {
         state->positions[ENTITY_BALL] += ball_velocity * left_collision_check.t;
       }
 
-      state->velocities[ENTITY_BALL] =
-          ball_velocity - 2.0f * glm::dot(ball_velocity, normal) * normal;
+      state->velocities[ENTITY_BALL] = ball_velocity - 2.0f * glm::dot(ball_velocity, normal) * normal;
     }
   } else {
     state->left_paddle_cooldown -= dt;
   }
 
-  if (aabb_collision(ball_pos, ball_scale, right_paddle_pos,
-                     right_paddle_scale)) {
+  if (aabb_collision(ball_pos, ball_scale, right_paddle_pos, right_paddle_scale)) {
     state->last_paddle_to_hit = LAST_PADDLE_RIGHT;
     state->velocities[ENTITY_BALL].x = -state->velocities[ENTITY_BALL].x;
     // state->screen_shake.active = true;
@@ -577,24 +517,19 @@ void update_screen_shake(State *state, f32 dt) {
     state->screen_shake.time_elapsed = 0.0f;
     state->screen_shake.active = false;
   } else {
-    f32 dx = evaluate_damped_harmonic_oscillator(
-        state->screen_shake.x_oscillator, state->screen_shake.time_elapsed);
-    f32 dy = evaluate_damped_harmonic_oscillator(
-        state->screen_shake.y_oscillator, state->screen_shake.time_elapsed);
+    f32 dx = evaluate_damped_harmonic_oscillator(state->screen_shake.x_oscillator, state->screen_shake.time_elapsed);
+    f32 dy = evaluate_damped_harmonic_oscillator(state->screen_shake.y_oscillator, state->screen_shake.time_elapsed);
 
-    camera_matrices = new_camera_matrices_with_offset(
-        &state->camera, glm::vec3(dx, dy, 0.0f), width, height);
+    camera_matrices = new_camera_matrices_with_offset(&state->camera, glm::vec3(dx, dy, 0.0f), width, height);
   }
 
   glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
-  write_to_uniform_buffer(&state->uniform_buffer, &camera_vp,
-                          state->uniform_writes.camera_vp);
+  write_to_uniform_buffer(&state->uniform_buffer, &camera_vp, state->uniform_writes.camera_vp);
 }
 
 void update_game_state(State *state, const f32 dt) {
 
-  if (state->game_mode == GAMEMODE_PAUSED ||
-      state->game_mode == GAMEMODE_MAIN_MENU) {
+  if (state->game_mode == GAMEMODE_PAUSED || state->game_mode == GAMEMODE_MAIN_MENU) {
     return;
   }
 
@@ -602,15 +537,13 @@ void update_game_state(State *state, const f32 dt) {
   if (state->time_since_last_powerup_draw > powerup_draw_interval_in_sec) {
     state->time_since_last_powerup_draw -= powerup_draw_interval_in_sec;
 
-    f32 prob_to_spawn =
-        random_f32_xoroshiro128_plus(&state->rngs.powerup_spawn);
+    f32 prob_to_spawn = random_f32_xoroshiro128_plus(&state->rngs.powerup_spawn);
     if (prob_to_spawn < prob_powerup_spawns) {
       u32 powerup_index = draw_alias_method(&state->powerup_alias_table);
     }
   }
 
-  if (state->positions[ENTITY_BALL].y >
-      state->positions[ENTITY_RIGHT_PADDLE].y) {
+  if (state->positions[ENTITY_BALL].y > state->positions[ENTITY_RIGHT_PADDLE].y) {
     state->velocities[ENTITY_RIGHT_PADDLE].y = cpu_speed0;
   } else {
     state->velocities[ENTITY_RIGHT_PADDLE].y = -cpu_speed0;
@@ -627,8 +560,7 @@ void update_game_state(State *state, const f32 dt) {
     generate_transform(transform, &state->instance_data.model[i]);
   }
 
-  write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data,
-                          state->uniform_writes.instance_data);
+  write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data, state->uniform_writes.instance_data);
 
   if (state->screen_shake.active) {
     update_screen_shake(state, dt);

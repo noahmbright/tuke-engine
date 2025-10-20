@@ -793,6 +793,7 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
                         token_type_to_string[current_token.type]);
     return directive_parse;
   }
+
   u32 binding = parse_integer_token(parser, current_token);
   if (binding >= MAX_NUM_VERTEX_BINDINGS) {
     report_parser_error(parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
@@ -863,6 +864,8 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     directive_parse.was_successful = true;
     directive_parse.set = set;
     directive_parse.binding = binding;
+    template_string_slice->set = set;
+    template_string_slice->binding = binding;
     return directive_parse;
   }
   // done parsing sampler

@@ -1,7 +1,6 @@
 #pragma once
 #include "tuke_engine.h"
 #include "vulkan_base.h"
-#include <cstring>
 
 // clang-format off
 const f32 triangle_vertices[] = {
@@ -99,13 +98,7 @@ const f32 cube_vertices[] = {
 };
 // clang-format on
 
-enum TextureId {
-  TEXTURE_GENERIC_GIRL,
-  TEXTURE_GIRL_FACE,
-  TEXTURE_GIRL_FACE_NORMAL_MAP,
-  NUM_TEXTURES
-};
+enum TextureId { TEXTURE_GENERIC_GIRL, TEXTURE_GIRL_FACE, TEXTURE_GIRL_FACE_NORMAL_MAP, NUM_TEXTURES };
 
-static const char *texture_names[NUM_TEXTURES] = {
-    "textures/generic_girl.jpg", "textures/girl_face.jpg",
-    "textures/girl_face_normal_map.jpg"};
+static const char *texture_names[NUM_TEXTURES] = {"textures/generic_girl.jpg", "textures/girl_face.jpg",
+                                                  "textures/girl_face_normal_map.jpg"};

@@ -14,12 +14,12 @@
 
 {{ SET_BINDING 0 2 BUFFER_LABEL GLOBAL }} uniform CameraVP {
     mat4 vp;
-} camera_vp[2];
+} camera_vp;
 
 
 void main(){
     norm = mat3(transpose(inverse(cube_transform.model))) * a_normal;
     uv = a_uv;
     frag_pos = vec3(cube_transform.model * vec4(a_pos, 1.0));
-    gl_Position = camera_vp[0].vp * vec4(frag_pos, 1.0);
+    gl_Position = camera_vp.vp * vec4(frag_pos, 1.0);
 }

@@ -1,6 +1,8 @@
+#include "c_reflector_bringup.h"
 #define GLM_ENABLE_EXPERIMENTAL
 
-#include "vulkan_test.h"
+#include "generated_shader_utils.h"
+
 #include "camera.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/quaternion_transform.hpp"
@@ -9,6 +11,7 @@
 #include "tuke_engine.h"
 #include "utils.h"
 #include "vulkan_base.h"
+#include "vulkan_test.h"
 #include "window.h"
 
 #include <stdalign.h>
@@ -51,7 +54,7 @@ int main() {
   VulkanContext context = create_vulkan_context("Tuke");
   VkDescriptorPool descriptor_pool =
       create_descriptor_pool(context.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
-  cache_shader_modules(context.shader_cache, generated_shader_specs, num_generated_specs);
+  init_generated_shader_vk_modules(context.device);
   ViewportState viewport_state = create_viewport_state_xy(context.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {{.color = {{0.01, 0.01, 0.01, 1.0}}},
                                                       {.depthStencil = {.depth = 1.0f, .stencil = 0}}};
@@ -79,6 +82,9 @@ int main() {
   UniformWrite mvp_handle = push_uniform(&ub_manager, sizeof(MVPUniform));
   UniformWrite cube_model_handle = push_uniform(&ub_manager, sizeof(CubeModel));
   UniformWrite x_handle = push_uniform(&ub_manager, sizeof(UniformBufferObject));
+  // FIXME manual padding
+  // either need a new philosophy for managing UBs or a way to push up to next alignment
+  push_uniform(&ub_manager, 12);
   UniformWrite light_position_handle = push_uniform(&ub_manager, sizeof(LightPosition));
   UniformWrite camera_vp_handle = push_uniform(&ub_manager, sizeof(CameraVP));
   UniformBuffer global_uniform_buffer = create_uniform_buffer(&context, ub_manager.current_offset);
@@ -124,37 +130,36 @@ int main() {
 
   // fullscreen quad descriptor set
   DescriptorSetBuilder fullscreen_quad_set_builder = create_descriptor_set_builder(&context);
-
   add_image_descriptor_set(&fullscreen_quad_set_builder, offscreen_framebuffer.color_image_view, sampler, 0, 1,
                            VK_SHADER_STAGE_FRAGMENT_BIT);
-
   DescriptorSetHandle fullscreen_quad_descriptor = build_descriptor_set(&fullscreen_quad_set_builder, descriptor_pool);
-
+  assert(fullscreen_quad_set_builder.layout_bindings[0].stageFlags == VK_SHADER_STAGE_FRAGMENT_BIT);
   VkPipelineLayout fullscreen_quad_pipeline_layout =
       create_pipeline_layout(context.device, &fullscreen_quad_descriptor.descriptor_set_layout, 1);
 
   // create pipelines
   VkPipeline triangle_pipeline =
-      create_default_graphics_pipeline(&context, offscreen_framebuffer.render_pass, common_simple_vert_shader_spec,
-                                       common_simple_frag_shader_spec, x_pipeline_layout);
+      shader_handles_to_graphics_pipeline(&context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT,
+                                          SHADER_HANDLE_COMMON_SIMPLE_FRAG, x_pipeline_layout);
 
   VkPipeline square_pipeline =
-      create_default_graphics_pipeline(&context, offscreen_framebuffer.render_pass, common_simple_vert_shader_spec,
-                                       common_square_frag_shader_spec, x_pipeline_layout);
+      shader_handles_to_graphics_pipeline(&context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT,
+                                          SHADER_HANDLE_COMMON_SQUARE_FRAG, x_pipeline_layout);
 
-  VkPipeline instanced_quad_pipeline = create_default_graphics_pipeline(
-      &context, offscreen_framebuffer.render_pass, common_instanced_quad_vert_shader_spec,
-      common_instanced_quad_frag_shader_spec, mvp_pipeline_layout);
+  VkPipeline instanced_quad_pipeline = shader_handles_to_graphics_pipeline(
+      &context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_INSTANCED_QUAD_VERT,
+      SHADER_HANDLE_COMMON_INSTANCED_QUAD_FRAG, mvp_pipeline_layout);
 
-  PipelineConfig cube_pipeline_config =
-      create_default_graphics_pipeline_config(&context, offscreen_framebuffer.render_pass, common_cube_vert_shader_spec,
-                                              common_cube_frag_shader_spec, cube_pipeline_layout);
+  PipelineConfig cube_pipeline_config = create_default_graphics_pipeline_config(
+      offscreen_framebuffer.render_pass, shader_modules[SHADER_HANDLE_COMMON_CUBE_VERT],
+      shader_modules[SHADER_HANDLE_COMMON_CUBE_FRAG],
+      &generated_vulkan_vertex_layouts[common_cube_vert_shader_spec.vertex_layout_id], cube_pipeline_layout);
   cube_pipeline_config.cull_mode = VK_CULL_MODE_FRONT_BIT;
   VkPipeline cube_pipeline = create_graphics_pipeline(context.device, &cube_pipeline_config, context.pipeline_cache);
 
   VkPipeline fullscreen_quad_pipeline =
-      create_default_graphics_pipeline(&context, context.render_pass, common_fullscreen_quad_vert_shader_spec,
-                                       common_fullscreen_quad_frag_shader_spec, fullscreen_quad_pipeline_layout);
+      shader_handles_to_graphics_pipeline(&context, context.render_pass, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT,
+                                          SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG, fullscreen_quad_pipeline_layout);
 
   RenderCall triangle_render_call;
   triangle_render_call.num_vertices = 3;
@@ -334,6 +339,8 @@ int main() {
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
     destroy_vulkan_texture(context.device, &textures[i]);
   }
+
+  free_generated_shader_vk_modules(context.device);
 
   destroy_color_depth_framebuffer(&context, &offscreen_framebuffer);
   destroy_descriptor_set_handle(context.device, &simple__descriptor);

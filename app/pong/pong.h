@@ -1,7 +1,7 @@
 #pragma once
 
+#include "c_reflector_bringup.h"
 #include "camera.h"
-#include "compiled_shaders.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/glm.hpp"
 #include "physics.h"
@@ -36,15 +36,9 @@ const f32 arena_dimensions_x0 = 30.0f;
 const f32 arena_dimensions_y0 = arena_dimensions_x0 / aspect_ratio;
 const f32 x_inset_from_wall0 = 0.05f * arena_dimensions_x0;
 const f32 x_offset0 = arena_dimensions_x0 / 2.0f - x_inset_from_wall0;
-const glm::vec3 arena_dimensions0{arena_dimensions_x0, arena_dimensions_y0,
-                                  1.0f};
+const glm::vec3 arena_dimensions0{arena_dimensions_x0, arena_dimensions_y0, 1.0f};
 
-enum EntityIndex {
-  ENTITY_LEFT_PADDLE = 0,
-  ENTITY_RIGHT_PADDLE,
-  ENTITY_BALL,
-  NUM_ENTITIES
-};
+enum EntityIndex { ENTITY_LEFT_PADDLE = 0, ENTITY_RIGHT_PADDLE, ENTITY_BALL, NUM_ENTITIES };
 
 enum LastPaddle {
   LAST_PADDLE_NEITHER,
@@ -66,15 +60,11 @@ const glm::vec3 left_paddle_pos0{-x_offset0, 0.0f, z0};
 const glm::vec3 right_paddle_pos0{x_offset0, 0.0f, z0};
 const glm::vec3 ball_pos0{0.0f, 0.0f, z0};
 
-const glm::mat4 left_paddle_translated0 =
-    glm::translate(glm::mat4(1.0f), left_paddle_pos0);
-const glm::mat4 left_paddle_model0 =
-    glm::scale(left_paddle_translated0, paddle_scale0);
+const glm::mat4 left_paddle_translated0 = glm::translate(glm::mat4(1.0f), left_paddle_pos0);
+const glm::mat4 left_paddle_model0 = glm::scale(left_paddle_translated0, paddle_scale0);
 
-const glm::mat4 right_paddle_translated0 =
-    glm::translate(glm::mat4(1.0f), right_paddle_pos0);
-const glm::mat4 right_paddle_model0 =
-    glm::scale(right_paddle_translated0, paddle_scale0);
+const glm::mat4 right_paddle_translated0 = glm::translate(glm::mat4(1.0f), right_paddle_pos0);
+const glm::mat4 right_paddle_model0 = glm::scale(right_paddle_translated0, paddle_scale0);
 
 const glm::mat4 ball_translated0 = glm::translate(glm::mat4(1.0f), ball_pos0);
 const glm::mat4 ball_model0 = glm::scale(ball_translated0, ball_scale0);
