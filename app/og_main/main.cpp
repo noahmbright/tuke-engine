@@ -16,15 +16,12 @@
 #include "window.h"
 
 int main() {
-  GLFWwindow *window = new_window();
+  GLFWwindow *window = new_window(false /*is vulkan*/);
   // Camera camera = new_camera(CameraType::Camera2D);
 
   unsigned player_texture = load_texture_opengl("textures/generic_girl.jpg");
-  unsigned player_program = link_shader_program("shaders/player_vertex.glsl",
-                                                "shaders/player_fragment.glsl");
-
-  unsigned tilemap_program = link_shader_program(
-      "shaders/tilemap_vertex.glsl", "shaders/tilemap_fragment.glsl");
+  // unsigned player_program = link_shader_program("shaders/player_vertex.glsl", "shaders/player_fragment.glsl");
+  // unsigned tilemap_program = link_shader_program("shaders/tilemap_vertex.glsl", "shaders/tilemap_fragment.glsl");
 
   const int level_width = 16;
   const int level_height = 9;
@@ -43,12 +40,10 @@ int main() {
   // clang-format on
 
   Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
-  TilemapOpenGLRenderData tilemap_render_data =
-      new_tilemap_opengl_render_data(tilemap_program, &tilemap);
+  // TilemapOpenGLRenderData tilemap_render_data = new_tilemap_opengl_render_data(tilemap_program, &tilemap);
 
   Player player = new_player({0.0, 0.0, 1.0}, {1.0, 1.0, 1.0});
-  PlayerOpenGLRenderData player_render_data =
-      new_player_opengl_render_data(player_program, player_texture);
+  // PlayerOpenGLRenderData player_render_data = new_player_opengl_render_data(player_program, player_texture);
 
   glClearColor(0.0f, 0.1f, 0.4, 1.0f);
   glEnable(GL_DEPTH_TEST);
@@ -72,8 +67,8 @@ int main() {
     const glm::mat4 player_model = model_from_player(&player);
     const glm::mat4 tilemap_model = glm::mat4(1.0);
 
-    opengl_draw_tilemap(&tilemap_render_data, tilemap_model);
-    opengl_draw_player(&player_render_data, player_model);
+    // opengl_draw_tilemap(&tilemap_render_data, tilemap_model);
+    // opengl_draw_player(&player_render_data, player_model);
 
     glfwSwapBuffers(window);
     glfwPollEvents();

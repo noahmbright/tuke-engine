@@ -1,0 +1,9 @@
+#version {{ VERSION }}
+
+{{ LOCATION 0 }} in vec3 pos;
+
+{{ LOCATION 0 }} out vec4 color;
+
+void main(){
+    color = vec4(pos, 1.0);
+}

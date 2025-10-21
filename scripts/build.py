@@ -12,9 +12,7 @@ def main():
     args = parser.parse_args()
 
     if not args.no_shaders:
-        invocations = ["python3", "scripts/compile_shaders.py"]
-        if args.force_shaders:
-            invocations.append("--force")
+        invocations = ["./build/reflector"]
         subprocess.run(invocations, check=True)
 
     if not args.no_build:

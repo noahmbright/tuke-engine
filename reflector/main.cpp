@@ -9,11 +9,7 @@
 
 int main() {
   // main flow:
-  // 1) walk dirs
-  // 2) collect shaders
-  // 3) parse shaders and populate symbol tables
-  // 4) codegen
-
+  // 1) walk dirs 2) collect shaders 3) parse shaders and populate symbol tables 4) codegen
   // 1) walk dirs
   SubdirectoryList subdirectory_list;
   memset(&subdirectory_list, 0, sizeof(subdirectory_list));
@@ -23,19 +19,10 @@ int main() {
   ShaderToCompileList shader_to_compile_list = collect_shaders_to_compile(&subdirectory_list);
   if (shader_to_compile_list.num_shaders == 0) {
     printf("Got no shaders to compile\n");
-    exit(0);
-  } else {
-    // debug hack
-    // shader_to_compile_list.num_shaders = 1;
+    return 0;
   }
 
-  printf("Collected %d shaders to compile\n", shader_to_compile_list.num_shaders);
-  ShaderToCompile shader_to_compile = shader_to_compile_list.shaders[0];
-  printf("Shader to compile name:\n%s\n", shader_to_compile.name);
-  printf("Shader to compile source:\n%s\n", shader_to_compile.source);
-
   // 3) parse shaders
-  // hack
   ParsedShadersIR parsed_shaders_ir = parse_all_shaders_and_populate_global_tables(&shader_to_compile_list);
 
   // 4) codegen
@@ -44,5 +31,6 @@ int main() {
 
   // (5) cleanup
   free_shader_to_compile_list(&shader_to_compile_list);
+  printf("Successfully compiled shaders.\n\n");
   return 0;
 }

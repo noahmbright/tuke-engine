@@ -225,8 +225,17 @@ void generate_vulkan_vertex_layout_array(FILE *destination, const ParsedShadersI
       bool has_stride = (vertex_layout->binding_strides[i] > 0);
       bool has_rate = (vertex_layout->binding_rates[i] != VERTEX_ATTRIBUTE_RATE_NULL);
       if (has_stride != has_rate) {
-        fprintf(stderr, "Generating binding code for vertex layout %s, but rate and stride are not both present.\n",
-                vertex_layout->name);
+        fprintf(
+            stderr,
+            "Generating binding code for vertex layout %s, but rate and stride are not both present for binding %u.\n",
+            vertex_layout->name, i);
+        if (!has_stride) {
+          fprintf(stderr, "  stride is missing.\n");
+        } else if (!has_rate) {
+          fprintf(stderr, "  rate is missing.\n");
+        } else {
+          fprintf(stderr, "  both stride and rate are missing.\n");
+        }
         continue;
       }
 

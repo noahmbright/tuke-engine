@@ -25,9 +25,11 @@ inline void print_bytes_array(FILE *destination, const SpirVBytesArray *bytes_ar
 inline void print_c_string_with_newlines(FILE *destination, const char *s) {
   for (; *s; s++) {
     if (*s == '\n') {
-      fputc('"', destination);
-      fputc(*s, destination);
-      fputc('"', destination);
+      if (s[1] && s[1] == '\n') {
+        fputs("\"\n\"\\n", destination);
+      } else {
+        fputs("\"\n\"", destination);
+      }
     } else {
       fputc(*s, destination);
     }

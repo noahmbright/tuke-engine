@@ -1215,6 +1215,7 @@ static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layo
 
   // at this point, we're valid
   vertex_layout->attribute_count = tentative_attribute_count;
+  vertex_layout->binding_rates[vertex_layout->attributes[0].binding] = vertex_layout->attributes[0].rate;
   populate_vertex_layout_name(vertex_layout);
   // offsets were already given manually in the shader, done
   // TODO need semantics for stride when offsets are given manually
