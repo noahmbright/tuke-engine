@@ -57,7 +57,7 @@ TemplateStringReplacement directive_replacement_set_binding(GraphicsBackend back
 
   switch (backend) {
   case GRAPHICS_BACKEND_OPENGL:
-    replacement.string = "layout(binding = _) ";
+    replacement.string = "layout(std140) ";
     replacement.length = strlen(replacement.string);
     return replacement;
 
@@ -135,10 +135,7 @@ GLSLSource replace_string_slices(const ParsedShader *sliced_shader, GraphicsBack
       assert(string_slice->set < 10);
       assert(string_slice->binding < 10);
 
-      if (backend == GRAPHICS_BACKEND_OPENGL) {
-        // layout(binding = _) _ is 17
-        current_start[17] = '0' + string_slice->binding;
-      } else if (backend == GRAPHICS_BACKEND_VULKAN) {
+      if (backend == GRAPHICS_BACKEND_VULKAN) {
         // layout(set = _, binding = _) _ at 13, 26
         current_start[13] = '0' + string_slice->set;
         current_start[26] = '0' + string_slice->binding;
@@ -355,12 +352,16 @@ void generate_opengl_vertex_layout_array(FILE *destination, const ParsedShadersI
     fprintf(destination, "  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);\n\n");
 
     // emit attributes
+    u32 current_binding = -1; // impossible sentinel value, hopefully
     for (u32 i = 0; i < vertex_layout->attribute_count; i++) {
       const VertexAttribute *attribute = &vertex_layout->attributes[i];
       u32 binding_stride = vertex_layout->binding_strides[attribute->binding];
 
       // only supporting GL_FLOAT for now
-      fprintf(destination, "  glBindBuffer(GL_ARRAY_BUFFER, vbos[%u]);\n", attribute->binding);
+      if (attribute->binding != current_binding) {
+        fprintf(destination, "  glBindBuffer(GL_ARRAY_BUFFER, vbos[%u]);\n", attribute->binding);
+        current_binding = attribute->binding;
+      }
       fprintf(destination, "  glEnableVertexAttribArray(%u);\n", attribute->location);
       fprintf(destination, "  glVertexAttribPointer(%u, %u, GL_FLOAT, GL_FALSE, %u, (void*)%u);\n", attribute->location,
               glsl_type_to_number_of_floats(attribute->glsl_type), binding_stride, attribute->offset);
