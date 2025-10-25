@@ -240,11 +240,11 @@ inline void log_glsl_struct(FILE *destination, const GLSLStruct *glsl_struct) {
 // if a vertex shader and fragment shader are linked, I enforce that if they explictly
 // use the same set, that set must have the same list of bindings
 enum DescriptorType {
+  DESCRIPTOR_TYPE_INVALID,
   DESCRIPTOR_TYPE_UNIFORM,
   DESCRIPTOR_TYPE_SAMPLER2D,
 
   NUM_DESCRIPTOR_TYPES,
-  DESCRIPTOR_TYPE_INVALID,
 };
 
 // fat struct with all possible data

@@ -866,6 +866,7 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     directive_parse.binding = binding;
     template_string_slice->set = set;
     template_string_slice->binding = binding;
+    template_string_slice->descriptor_type = descriptor_type;
     return directive_parse;
   }
   // done parsing sampler
@@ -962,6 +963,7 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     return directive_parse;
   }
 
+  template_string_slice->descriptor_type = descriptor_type;
   directive_parse.descriptor_binding.type = descriptor_type;
   directive_parse.descriptor_binding.name = struct_instance_name;
   directive_parse.descriptor_binding.name_length = struct_instance_name_length;
@@ -1274,8 +1276,9 @@ StructSearchResult search_for_matching_struct(const GLSLStruct *new_glsl_struct,
   return search_result;
 }
 
-void parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_shaders_ir) {
+bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_shaders_ir) {
 
+  // TODO make return successful or not, and if not, don't compile header
   Parser parser;
   parser.tokens = lex_string(shader_to_compile.source, shader_to_compile.source_length);
   parser.source = shader_to_compile.source;
@@ -1454,7 +1457,7 @@ void parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
     } else {
       // release locks?
       fprintf(stderr, "Failed to validate vertex layout for %s.\n", shader_to_compile.name);
-      return;
+      return true;
     }
   }
 
@@ -1469,6 +1472,7 @@ void parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
   parsed_shader.num_template_slices = string_slice_index;
   parsed_shaders_ir->parsed_shaders[parsed_shaders_ir->num_parsed_shaders++] = parsed_shader;
   token_vector_free(&parser.tokens);
+  return true;
 }
 
 ParsedShadersIR parse_all_shaders_and_populate_global_tables(const ShaderToCompileList *shader_to_compile_list) {

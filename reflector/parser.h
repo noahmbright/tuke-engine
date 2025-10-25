@@ -155,6 +155,7 @@ struct TemplateStringSlice {
   u32 location;
   u32 set;
   u32 binding;
+  DescriptorType descriptor_type;
 };
 
 inline TemplateStringSlice new_template_string_slice(const char *start) {

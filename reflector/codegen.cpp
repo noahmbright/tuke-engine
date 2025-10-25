@@ -52,13 +52,18 @@ TemplateStringReplacement directive_replacement_location(GraphicsBackend backend
 // turns into
 // layout(set = 0, binding = 0) for vulkan
 // layout(binding = 0) for opengl
-TemplateStringReplacement directive_replacement_set_binding(GraphicsBackend backend) {
+TemplateStringReplacement directive_replacement_set_binding(GraphicsBackend backend, DescriptorType descriptor_type) {
   TemplateStringReplacement replacement;
 
   switch (backend) {
   case GRAPHICS_BACKEND_OPENGL:
-    replacement.string = "layout(std140) ";
-    replacement.length = strlen(replacement.string);
+    if (descriptor_type == DESCRIPTOR_TYPE_SAMPLER2D) {
+      replacement.string = "";
+      replacement.length = 0;
+    } else if (descriptor_type == DESCRIPTOR_TYPE_UNIFORM) {
+      replacement.string = "layout(std140) ";
+      replacement.length = strlen(replacement.string);
+    }
     return replacement;
 
   case GRAPHICS_BACKEND_VULKAN: {
@@ -84,7 +89,7 @@ TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_
   case DIRECTIVE_TYPE_LOCATION:
     return directive_replacement_location(backend);
   case DIRECTIVE_TYPE_SET_BINDING:
-    return directive_replacement_set_binding(backend);
+    return directive_replacement_set_binding(backend, string_slice->descriptor_type);
   case DIRECTIVE_TYPE_PUSH_CONSTANT:
     // return replacement;
   case DIRECTIVE_TYPE_GLSL_SOURCE:

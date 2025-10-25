@@ -20,6 +20,7 @@ inline void free_generated_shader_vk_modules(VkDevice device) {
 }
 
 inline void init_opengl_vertex_layout(ShaderHandle shader_handle, GLuint vao, GLuint *vbos, u32 num_vbos, GLuint ebo) {
+  assert(generated_shader_specs[shader_handle]->stage == SHADER_STAGE_VERTEX);
   generated_opengl_vertex_array_initializers[generated_shader_specs[shader_handle]->vertex_layout_id](vao, vbos,
                                                                                                       num_vbos, ebo);
 }
