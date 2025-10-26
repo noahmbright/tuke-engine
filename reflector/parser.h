@@ -15,6 +15,7 @@
 #define MAX_NUM_DESCRIPTOR_SET_LAYOUTS 16
 #define MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER 8
 #define MAX_NUM_GLSL_STRUCTS 64
+#define MAX_NUM_BINDING_SLOTS 8
 
 static const char *RED = "\033[31m";
 static const char *RESET = "\033[0m";
@@ -194,6 +195,8 @@ struct SetBindingDirectiveParse {
   DescriptorBinding descriptor_binding;
   u32 set;
   u32 binding;
+  const char *buffer_label_name;
+  u32 buffer_label_name_length;
   bool was_successful;
 };
 
@@ -299,6 +302,10 @@ struct ParsedShader {
 // the IR contains the shaders after parsing, which all have their slices and pointers to their descriptor sets and
 // vertex layouts
 // it also holds the global list of descriptor sets and vertex layouts that the slices shaders point into
+//
+// ShaderToCompileList is generated in the beginning of the main function, which owns all source strings. It is freed
+// at the end of the main function. ParsedShadersIR contains slices into it, so as long as ShaderToCompileList is
+// freed after codegen, ParsedShadersIR will remain valid
 struct ParsedShadersIR {
   ParsedShader parsed_shaders[MAX_NUM_SHADERS];
   u32 num_parsed_shaders;
@@ -313,6 +320,9 @@ struct ParsedShadersIR {
 
   GLSLStruct glsl_structs[MAX_NUM_GLSL_STRUCTS];
   u32 num_glsl_structs;
+
+  UniformBufferLabel uniform_buffer_labels[MAX_NUM_BINDING_SLOTS];
+  u32 num_buffer_labels;
 };
 
 struct StructSearchResult {

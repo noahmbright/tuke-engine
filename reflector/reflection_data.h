@@ -281,11 +281,18 @@ inline bool descriptor_set_layout_equals(const DescriptorSetLayout *left, const 
   for (u32 i = 0; i < MAX_NUM_DESCRIPTOR_BINDINGS; i++) {
     const DescriptorBinding *left_binding = &left->bindings[i];
     const DescriptorBinding *right_binding = &right->bindings[i];
-    if (left_binding->is_valid != right_binding->is_valid) {
-      continue;
+
+    if (!left_binding->is_valid || !right_binding->is_valid) {
+      if (!left_binding->is_valid && !right_binding->is_valid) {
+        continue;
+      } else {
+        return false;
+      }
     }
 
     // don't bother comparing stage, will merge at pipeline creation time
+    // don't think I need to compare buffer labels. if the layouts are the same but they draw from
+    // different buffers, I can still reuse
     bool type_equals = (left_binding->type == right_binding->type);
     bool count_equals = (left_binding->descriptor_count == right_binding->descriptor_count);
     if (!type_equals || !count_equals) {
@@ -295,3 +302,9 @@ inline bool descriptor_set_layout_equals(const DescriptorSetLayout *left, const 
 
   return true;
 }
+
+// for opengl slot bindings
+struct UniformBufferLabel {
+  const char *name;
+  u32 name_length;
+};

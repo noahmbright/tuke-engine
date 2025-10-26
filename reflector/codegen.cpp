@@ -190,6 +190,12 @@ inline void print_name_in_caps(FILE *destination, const char *name) {
   }
 }
 
+inline void print_name_in_caps_n(FILE *destination, const char *s, u32 n) {
+  for (u32 i = 0; i < n; i++) {
+    fputc(ascii_to_upper(s[i]), destination);
+  }
+}
+
 const char *glsl_type_to_vulkan_format(GLSLType type) {
   switch (type) {
 
@@ -551,6 +557,18 @@ void codegen_footer(FILE *destination, const ParsedShadersIR *parsed_shaders_ir)
   // codegen_vulkan_shader_module_creation(destination);
 }
 
+void codegen_buffer_labels(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
+  fprintf(destination, "enum UniformBufferLabel {\n");
+  for (u32 i = 0; i < parsed_shaders_ir->num_buffer_labels; i++) {
+    fprintf(destination, "  UNIFORM_BUFFER_LABEL_");
+    print_name_in_caps_n(destination, parsed_shaders_ir->uniform_buffer_labels[i].name,
+                         parsed_shaders_ir->uniform_buffer_labels[i].name_length);
+    fprintf(destination, ",\n");
+  }
+  fprintf(destination, "\n  NUM_UNIFORM_BUFFER_LABELS\n");
+  fprintf(destination, "};\n\n");
+}
+
 // the real deal
 void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
 
@@ -617,6 +635,8 @@ void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
   for (u32 i = 0; i < parsed_shaders_ir->num_parsed_shaders; i++) {
     codegen_shader_spec(destination, &parsed_shaders_ir->parsed_shaders[i], glsl_sources[i], &spirv_bytes_arrays[i]);
   }
+
+  codegen_buffer_labels(destination, parsed_shaders_ir);
 
   codegen_footer(destination, parsed_shaders_ir);
 }

@@ -771,6 +771,8 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
   SetBindingDirectiveParse directive_parse;
   directive_parse.was_successful = false;
   directive_parse.next_glsl_source_start = NULL;
+  directive_parse.buffer_label_name = NULL;
+  directive_parse.buffer_label_name_length = 0;
 
   Token current_token = parser_get_current_token(parser);
   assert(current_token.type == TOKEN_TYPE_DIRECTIVE_SET_BINDING);
@@ -971,6 +973,8 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
   directive_parse.descriptor_binding.descriptor_count = descriptor_count;
   directive_parse.descriptor_binding.glsl_struct = NULL;
   directive_parse.descriptor_binding.is_valid = true;
+  directive_parse.buffer_label_name = buffer_label_token.start;
+  directive_parse.buffer_label_name_length = buffer_label_token.text_length;
 
   directive_parse.was_successful = true;
   directive_parse.glsl_struct = glsl_struct;
@@ -1402,6 +1406,31 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
       } else {
         descriptor_set_layouts[set].bindings[binding] = set_binding_directive_parse.descriptor_binding;
         descriptor_set_layouts[set].num_bindings++;
+      }
+
+      // check for new uniform buffer slots
+      // TODO save pointers to these in this shader spec
+      bool should_add_new_buffer_label = true;
+      if (set_binding_directive_parse.buffer_label_name == NULL) {
+        // if name is null, found nothing, nothing to add
+        should_add_new_buffer_label = false;
+      } else {
+        for (u32 i = 0; i < parsed_shaders_ir->num_buffer_labels; i++) {
+          const UniformBufferLabel *buffer_label = &parsed_shaders_ir->uniform_buffer_labels[i];
+
+          if (buffer_label->name_length == set_binding_directive_parse.buffer_label_name_length &&
+              (strncmp(buffer_label->name, set_binding_directive_parse.buffer_label_name, buffer_label->name_length) ==
+               0)) {
+            should_add_new_buffer_label = false; // found repeat
+            break;
+          }
+        }
+      }
+
+      if (should_add_new_buffer_label) {
+        UniformBufferLabel uniform_buffer_label = {.name = set_binding_directive_parse.buffer_label_name,
+                                                   .name_length = set_binding_directive_parse.buffer_label_name_length};
+        parsed_shaders_ir->uniform_buffer_labels[parsed_shaders_ir->num_buffer_labels++] = uniform_buffer_label;
       }
 
       if (set_binding_directive_parse.descriptor_binding.type != DESCRIPTOR_TYPE_INVALID) {

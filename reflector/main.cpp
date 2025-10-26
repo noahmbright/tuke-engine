@@ -29,7 +29,7 @@ int main() {
   FILE *output_file = fopen("gen/c_reflector_bringup.h", "w");
   codegen(output_file, &parsed_shaders_ir);
 
-  // (5) cleanup
+  // 5) cleanup
   free_shader_to_compile_list(&shader_to_compile_list);
   printf("Successfully compiled shaders.\n\n");
   return 0;
