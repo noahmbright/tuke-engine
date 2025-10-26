@@ -3,6 +3,7 @@
 #include "generated_shader_utils.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/glm.hpp"
+#include "opengl_base.h"
 #include "utils.h"
 #include "window.h"
 
@@ -11,48 +12,35 @@ int main() {
 
   glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 
-  u32 vbo, vao;
-  glGenVertexArrays(1, &vao);
-  glGenBuffers(1, &vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(triangle_vertices), triangle_vertices, GL_STATIC_DRAW);
   u32 program = shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_TRIANGLE_BRINGUP_VERT,
                                                  SHADER_HANDLE_COMMON_TRIANGLE_BRINGUP_FRAG);
-  glUseProgram(program);
-  init_opengl_vertex_layout(SHADER_HANDLE_COMMON_TRIANGLE_BRINGUP_VERT, vao, &vbo, 1, 0);
-  glBindVertexArray(vao);
-  printf("Compiled first triangle program\n");
 
-  u32 transformed_vao;
-  glGenVertexArrays(1, &transformed_vao);
   u32 transformed_program = shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_UNIFORM_BRINGUP_VERT,
                                                              SHADER_HANDLE_COMMON_UNIFORM_BRINGUP_FRAG);
-  glUseProgram(transformed_program);
-  init_opengl_vertex_layout(SHADER_HANDLE_COMMON_UNIFORM_BRINGUP_VERT, transformed_vao, &vbo, 1, 0);
-  printf("Compiled transformed program\n");
 
-  u32 ubo;
-  glGenBuffers(1, &ubo);
-  glBindBuffer(GL_UNIFORM_BUFFER, ubo);
-  glBufferData(GL_UNIFORM_BUFFER, sizeof(TriangleTransformation), NULL, GL_DYNAMIC_DRAW);
-
-  u32 block_index = glGetUniformBlockIndex(transformed_program, "TriangleTransformation");
-  glUniformBlockBinding(transformed_program, block_index, 0);
-  glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
-  printf("Bound uniform block\n");
-
-  u32 texture = load_texture_opengl("textures/girl_face.jpg");
-  u32 textured_quad_vbo, textured_quad_vao;
-  glGenVertexArrays(1, &textured_quad_vao);
-  glGenBuffers(1, &textured_quad_vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, textured_quad_vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(textured_quad_vertices), textured_quad_vertices, GL_STATIC_DRAW);
   u32 textured_quad_program = shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_TEXTURED_QUAD_BRINGUP_VERT,
                                                                SHADER_HANDLE_COMMON_TEXTURED_QUAD_BRINGUP_FRAG);
-  glUseProgram(textured_quad_program);
-  init_opengl_vertex_layout(SHADER_HANDLE_COMMON_TEXTURED_QUAD_BRINGUP_VERT, textured_quad_vao, &textured_quad_vbo, 1,
-                            0);
-  printf("Compiled textured quad program\n");
+  printf("Compiled programs\n");
+
+  // meshes
+  OpenGLMesh triangle_mesh = create_opengl_mesh_with_vertex_layout(triangle_vertices, sizeof(triangle_vertices),
+                                                                   VERTEX_LAYOUT_BINDING0VERTEX_VEC3, GL_STATIC_DRAW);
+  triangle_mesh.num_vertices = 3;
+  OpenGLMaterial triangle_material = create_opengl_material(program);
+
+  OpenGLMesh transformed_mesh = create_opengl_mesh_with_vertex_layout(
+      triangle_vertices, sizeof(triangle_vertices), VERTEX_LAYOUT_BINDING0VERTEX_VEC3, GL_STATIC_DRAW);
+  transformed_mesh.num_vertices = 3;
+
+  OpenGLMaterial transformed_material = create_opengl_material(transformed_program);
+  opengl_material_add_uniform(&transformed_material, "TriangleTransformation", sizeof(TriangleTransformation),
+                              GL_DYNAMIC_DRAW);
+
+  OpenGLMesh textured_quad_mesh = create_opengl_mesh_with_vertex_layout(
+      textured_quad_vertices, sizeof(textured_quad_vertices), VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
+  textured_quad_mesh.num_vertices = 6;
+  OpenGLMaterial textured_quad_material = create_opengl_material(textured_quad_program);
+  textured_quad_material.texture = load_texture_opengl("textures/girl_face.jpg");
 
   TriangleTransformation triangle_transformation;
   const glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.0f));
@@ -67,21 +55,12 @@ int main() {
 
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glBindBuffer(GL_UNIFORM_BUFFER, ubo);
+    glBindBuffer(GL_UNIFORM_BUFFER, transformed_material.uniform);
     glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(TriangleTransformation), &triangle_transformation);
 
-    glUseProgram(program);
-    glBindVertexArray(vao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
-    glUseProgram(transformed_program);
-    glBindVertexArray(transformed_vao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
-    // glBindTexture(GL_TEXTURE_2D, texture);
-    glUseProgram(textured_quad_program);
-    glBindVertexArray(textured_quad_vao);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    draw_opengl_mesh(&triangle_mesh, triangle_material);
+    draw_opengl_mesh(&transformed_mesh, transformed_material);
+    draw_opengl_mesh(&textured_quad_mesh, textured_quad_material);
 
     glfwSwapBuffers(window);
   }
