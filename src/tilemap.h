@@ -1,20 +1,18 @@
 #pragma once
 
-#include "camera.h"
-
-#include "glm/glm.hpp"
+#include "tuke_engine.h"
+#include <stdio.h>
 
 struct TileVertex {
-  glm::vec2 texture_coords;
-  glm::vec3 position;
-  glm::vec4 color;
-  float texture_id;
+  f32 texture_coords[2];
+  f32 position[3];
+  f32 texture_id;
 };
 
 struct Tilemap {
-  int level_width;
-  int level_height;
-  int *level_map;
+  u32 level_width;
+  u32 level_height;
+  const u8 *level_map;
 };
 
 struct TileQuad {
@@ -24,18 +22,10 @@ struct TileQuad {
   TileVertex bottom_right;
 };
 
-struct TilemapOpenGLRenderData {
-  unsigned vbo, vao, ebo, program;
-  unsigned num_quads;
-  const float *vertices;
-  const unsigned *element_indices;
+inline void log_tile_vertex(const TileVertex *tile_vertex) {
+  printf("  %f %f %f, %f %f, %f\n", tile_vertex->position[0], tile_vertex->position[1], tile_vertex->position[2],
+         tile_vertex->texture_coords[0], tile_vertex->texture_coords[1], tile_vertex->texture_id);
+}
 
-  int u_model_location;
-  unsigned matrices_buffer_index = CAMERA_MATRICES_INDEX;
-};
-
-Tilemap new_tilemap(const int width, const int height, int map[]);
-void opengl_draw_tilemap(const TilemapOpenGLRenderData *tm,
-                         const glm::mat4 &model);
-TilemapOpenGLRenderData new_tilemap_opengl_render_data(unsigned program,
-                                                       Tilemap *tm);
+Tilemap new_tilemap(const u32 width, const u32 height, const u8 *map);
+void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vertices);

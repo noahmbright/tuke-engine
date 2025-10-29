@@ -39,8 +39,8 @@ int main() {
   };
   // clang-format on
 
-  Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
-  // TilemapOpenGLRenderData tilemap_render_data = new_tilemap_opengl_render_data(tilemap_program, &tilemap);
+  // Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
+  //  TilemapOpenGLRenderData tilemap_render_data = new_tilemap_opengl_render_data(tilemap_program, &tilemap);
 
   Player player = new_player({0.0, 0.0, 1.0}, {1.0, 1.0, 1.0});
   // PlayerOpenGLRenderData player_render_data = new_player_opengl_render_data(player_program, player_texture);

@@ -1,7 +1,5 @@
 #pragma once
 
-#define CAMERA_MATRICES_INDEX 0
-
 #include "physics.h"
 #include "tuke_engine.h"
 
@@ -42,28 +40,18 @@ struct ScreenShake {
 };
 
 Camera new_camera(CameraType type, const glm::vec3 &pos = {0.0, 0.0, 1.0},
-                  const glm::vec3 &direction = {0.0, 0.0, -1.0},
-                  const glm::vec3 &up = {0.0, 1.0, 0.0},
+                  const glm::vec3 &direction = {0.0, 0.0, -1.0}, const glm::vec3 &up = {0.0, 1.0, 0.0},
                   const glm::vec3 &right = {1.0, 0.0, 0.0});
 
-void move_camera_2d(Camera *camera, f32 delta_t,
-                    const glm::vec4 &movement_direction);
-void move_camera_3d(Camera *camera, f32 delta_t,
-                    const glm::vec4 &movement_direction);
-void move_camera(Camera *camera, f32 delta_t,
-                 const glm::vec4 &movement_direction);
+void move_camera_2d(Camera *camera, f32 delta_t, const glm::vec4 &movement_direction);
+void move_camera_3d(Camera *camera, f32 delta_t, const glm::vec4 &movement_direction);
+void move_camera(Camera *camera, f32 delta_t, const glm::vec4 &movement_direction);
 
 glm::mat4 look_at_from_camera(const Camera *camera);
-glm::mat4 look_at_from_camera_with_offset(const Camera *camera,
-                                          glm::vec3 offset);
-glm::mat4 perspective_projection_from_camera(const Camera *camera,
-                                             u32 window_width,
-                                             u32 window_height);
-CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width,
-                                   u32 window_height);
-CameraMatrices new_camera_matrices_with_offset(const Camera *camera,
-                                               glm::vec3 offset,
-                                               u32 window_width,
+glm::mat4 look_at_from_camera_with_offset(const Camera *camera, glm::vec3 offset);
+glm::mat4 perspective_projection_from_camera(const Camera *camera, u32 window_width, u32 window_height);
+CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width, u32 window_height);
+CameraMatrices new_camera_matrices_with_offset(const Camera *camera, glm::vec3 offset, u32 window_width,
                                                u32 window_height);
 void log_camera(const Camera *camera);
 

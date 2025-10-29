@@ -203,9 +203,10 @@ const char *glsl_type_to_vulkan_format(GLSLType type) {
     return "VK_FORMAT_R32G32_SFLOAT";
   case GLSL_TYPE_VEC3:
     return "VK_FORMAT_R32G32B32_SFLOAT";
+  case GLSL_TYPE_FLOAT:
+    return "VK_FORMAT_R32_SFLOAT";
 
     // TODO?
-  case GLSL_TYPE_FLOAT:
   case GLSL_TYPE_UINT:
   case GLSL_TYPE_VEC4:
   case GLSL_TYPE_MAT2:
@@ -214,7 +215,7 @@ const char *glsl_type_to_vulkan_format(GLSLType type) {
 
   case GLSL_TYPE_NULL:
   default:
-    fprintf(stderr, "vertex_attribute_rate_to_vulkan_enum_string got an invalid rate enum.\n");
+    fprintf(stderr, "glsl_type_to_vulkan_format got an invalid rate enum.\n");
     return NULL;
   }
 }

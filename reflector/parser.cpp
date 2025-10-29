@@ -1038,7 +1038,7 @@ static inline const char *vertex_attribute_rate_to_string(VertexAttributeRate ra
 
   case VERTEX_ATTRIBUTE_RATE_NULL:
   default:
-    fprintf(stderr, "vertex_attribute_rate_to_string got an invalid rate enum.\n");
+    fprintf(stderr, "in_parsing, vertex_attribute_rate_to_string got an invalid rate enum.\n");
     return NULL;
   }
 }

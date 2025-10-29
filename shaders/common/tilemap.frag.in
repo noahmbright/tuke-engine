@@ -1,0 +1,15 @@
+#version {{ VERSION }}
+
+{{ LOCATION 0 }} in float texture_id;
+
+{{ LOCATION 0 }} out vec4 frag_color;
+
+void main(){
+    if (texture_id == 0.0){
+        frag_color = vec4(0.3, 0.0, 0.0, 1.0);
+    }
+    if (texture_id == 1.0){
+        frag_color = vec4(0.0, 0.3, 0.0, 1.0);
+    }
+}
+

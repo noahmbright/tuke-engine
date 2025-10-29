@@ -26,9 +26,9 @@ inline void print_c_string_with_newlines(FILE *destination, const char *s) {
   for (; *s; s++) {
     if (*s == '\n') {
       if (s[1] && s[1] == '\n') {
-        fputs("\"\n\"\\n", destination);
+        fputs("\\n\"\n\"", destination);
       } else {
-        fputs("\"\n\"", destination);
+        fputs("\\n\"\n\"", destination);
       }
     } else {
       fputc(*s, destination);
