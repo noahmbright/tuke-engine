@@ -32,9 +32,10 @@ int main() {
       triangle_vertices, sizeof(triangle_vertices), VERTEX_LAYOUT_BINDING0VERTEX_VEC3, GL_STATIC_DRAW);
   transformed_mesh.num_vertices = 3;
 
+  u32 transformation_ubo = create_opengl_ubo(sizeof(TriangleTransformation), GL_DYNAMIC_DRAW);
   OpenGLMaterial transformed_material = create_opengl_material(transformed_program);
-  opengl_material_add_uniform(&transformed_material, "TriangleTransformation", sizeof(TriangleTransformation),
-                              GL_DYNAMIC_DRAW);
+  opengl_material_add_uniform(&transformed_material, transformation_ubo, UNIFORM_BUFFER_LABEL_TRIANGLE_TRANSFORMATION,
+                              "TriangleTransformation");
 
   OpenGLMesh textured_quad_mesh = create_opengl_mesh_with_vertex_layout(
       textured_quad_vertices, sizeof(textured_quad_vertices), VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
@@ -55,7 +56,7 @@ int main() {
 
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glBindBuffer(GL_UNIFORM_BUFFER, transformed_material.uniform);
+    glBindBuffer(GL_UNIFORM_BUFFER, transformation_ubo);
     glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(TriangleTransformation), &triangle_transformation);
 
     draw_opengl_mesh(&triangle_mesh, triangle_material);

@@ -51,8 +51,7 @@ void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
   camera->right = glm::cross(camera->direction, camera->up);
 }
 
-Camera new_camera(CameraType type, const glm::vec3 &pos,
-                  const glm::vec3 &direction, const glm::vec3 &up,
+Camera new_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direction, const glm::vec3 &up,
                   const glm::vec3 &right) {
   Camera camera;
   camera.type = type;
@@ -63,18 +62,16 @@ Camera new_camera(CameraType type, const glm::vec3 &pos,
 
   switch (camera.type) {
 
-  case CameraType::Camera2D:
+  case CAMERA_TYPE_2D:
     camera.move_camera_function = move_camera_2d;
     break;
 
-  case CameraType::Camera3D:
-  case CameraType::CameraFPS:
+  case CAMERA_TYPE_3D:
+  case CAMERA_TYPE_FPS:
     // TODO FPS
 
-    f32 xy_magnitude =
-        glm::length(glm::vec2{camera.direction.x, camera.direction.y});
-    f32 xz_magnitude =
-        glm::length(glm::vec2{camera.direction.x, camera.direction.z});
+    f32 xy_magnitude = glm::length(glm::vec2{camera.direction.x, camera.direction.y});
+    f32 xz_magnitude = glm::length(glm::vec2{camera.direction.x, camera.direction.z});
 
     const f32 tolerance = 1e-5;
     if (xy_magnitude < tolerance) {
@@ -97,11 +94,9 @@ Camera new_camera(CameraType type, const glm::vec3 &pos,
 
 // expect movement direction contains the WASD/arrow key inputs in x and y,
 // and if the shift key is pressed, the w component will be 2, if not, 1
-void move_camera_2d(Camera *camera, f32 delta_t,
-                    const glm::vec4 &movement_direction) {
+void move_camera_2d(Camera *camera, f32 delta_t, const glm::vec4 &movement_direction) {
 
-  const glm::vec3 dir3{movement_direction.x, movement_direction.y,
-                       movement_direction.z};
+  const glm::vec3 dir3{movement_direction.x, movement_direction.y, movement_direction.z};
 
   camera->position += camera->speed * delta_t * (movement_direction.w) * dir3;
 }
@@ -109,8 +104,7 @@ void move_camera_2d(Camera *camera, f32 delta_t,
 // movement direction will have x and y components
 // y means move in camera->direction
 // x means move along camera->right
-void move_camera_3d(Camera *camera, f32 delta_t,
-                    const glm::vec4 &movement_direction) {
+void move_camera_3d(Camera *camera, f32 delta_t, const glm::vec4 &movement_direction) {
 
   f32 distance = camera->speed * delta_t * movement_direction.w;
 
@@ -118,51 +112,39 @@ void move_camera_3d(Camera *camera, f32 delta_t,
   camera->position += distance * movement_direction.x * camera->right;
 }
 
-void move_camera(Camera *camera, f32 delta_t,
-                 const glm::vec4 &movement_direction) {
+void move_camera(Camera *camera, f32 delta_t, const glm::vec4 &movement_direction) {
   camera->move_camera_function(camera, delta_t, movement_direction);
 }
 
 glm::mat4 look_at_from_camera(const Camera *camera) {
-  return glm::lookAt(camera->position, camera->position + camera->direction,
-                     camera->up);
+  return glm::lookAt(camera->position, camera->position + camera->direction, camera->up);
 }
 
-glm::mat4 look_at_from_camera_with_offset(const Camera *camera,
-                                          glm::vec3 offset) {
+glm::mat4 look_at_from_camera_with_offset(const Camera *camera, glm::vec3 offset) {
   glm::vec3 pos = camera->position + offset;
   return glm::lookAt(pos, pos + camera->direction, camera->up);
 }
 
-glm::mat4 perspective_projection_from_camera(const Camera *camera,
-                                             u32 window_width,
-                                             u32 window_height) {
+glm::mat4 perspective_projection_from_camera(const Camera *camera, u32 window_width, u32 window_height) {
   f32 near_z = 0.1f;
   f32 far_z = 100.0f;
-  glm::mat4 proj =
-      glm::perspective(glm::radians(camera->fovy),
-                       f32(window_width) / f32(window_height), near_z, far_z);
+  glm::mat4 proj = glm::perspective(glm::radians(camera->fovy), f32(window_width) / f32(window_height), near_z, far_z);
   proj[1][1] = camera->y_needs_inverted ? -proj[1][1] : proj[1][1];
   return proj;
 }
 
-CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width,
-                                   u32 window_height) {
+CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width, u32 window_height) {
   CameraMatrices camera_matrices;
   camera_matrices.view = look_at_from_camera(camera);
-  camera_matrices.projection =
-      perspective_projection_from_camera(camera, window_width, window_height);
+  camera_matrices.projection = perspective_projection_from_camera(camera, window_width, window_height);
   return camera_matrices;
 }
 
-CameraMatrices new_camera_matrices_with_offset(const Camera *camera,
-                                               glm::vec3 offset,
-                                               u32 window_width,
+CameraMatrices new_camera_matrices_with_offset(const Camera *camera, glm::vec3 offset, u32 window_width,
                                                u32 window_height) {
   CameraMatrices camera_matrices;
   camera_matrices.view = look_at_from_camera_with_offset(camera, offset);
-  camera_matrices.projection =
-      perspective_projection_from_camera(camera, window_width, window_height);
+  camera_matrices.projection = perspective_projection_from_camera(camera, window_width, window_height);
   return camera_matrices;
 }
 

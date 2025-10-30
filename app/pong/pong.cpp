@@ -204,7 +204,7 @@ State setup_state(const char *title) {
   init_transforms(&state);
 
   glm::vec3 camera_pos{0.0f, 0.0f, 30.0f};
-  state.camera = new_camera(CameraType::Camera2D, camera_pos);
+  state.camera = new_camera(CAMERA_TYPE_3D, camera_pos);
   state.camera.y_needs_inverted = true;
 
   // TODO how to get model onto GPU? uniform? something else? push constant?

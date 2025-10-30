@@ -5,7 +5,7 @@
 
 #include <glm/glm.hpp>
 
-enum class CameraType { Camera2D, Camera3D, CameraFPS };
+enum CameraType { CAMERA_TYPE_2D, CAMERA_TYPE_3D, CAMERA_TYPE_FPS };
 
 struct Camera {
   CameraType type;
@@ -54,6 +54,3 @@ CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width, u32 w
 CameraMatrices new_camera_matrices_with_offset(const Camera *camera, glm::vec3 offset, u32 window_width,
                                                u32 window_height);
 void log_camera(const Camera *camera);
-
-// void buffer_camera_matrices_to_gl_uniform_buffer(
-// const CameraMatrices *camera_matrices);

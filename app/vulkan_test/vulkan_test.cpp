@@ -231,7 +231,7 @@ int main() {
   const f32 root3 = 0.57735026919;
   const glm::vec3 cube_rotation_axis = {root3, root3, root3};
 
-  Camera camera = new_camera(CameraType::Camera3D);
+  Camera camera = new_camera(CAMERA_TYPE_3D);
   camera.position = {0.0f, 0.0f, 5.0f};
   glm::mat4 camera_vp;
   Inputs inputs;

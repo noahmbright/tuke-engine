@@ -11,8 +11,10 @@
 } u_vp;
 
 void main(){
-    //gl_Position = u_vp.vp * vec4(a_pos, 1.0);
-    gl_Position = vec4(a_pos, 1.0);
+
+    vec4 transformed_pos = u_vp.vp * vec4(a_pos.x, -a_pos.y, a_pos.z, 1.0);
+    gl_Position = vec4(vec3(transformed_pos), 1.0);
+
     texture_id = a_texture_id;
 }
 
