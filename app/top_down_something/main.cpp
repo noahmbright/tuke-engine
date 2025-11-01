@@ -6,12 +6,14 @@
 #include "tilemap.h"
 #include "topdown.h"
 #include "tuke_engine.h"
+#include "window.h"
 #include <stdio.h>
 
 void print_mat4(const glm::mat4 &m) {
+  printf("logging mat4...\n-----\n");
   for (u32 row = 0; row < 4; ++row) {
     for (u32 col = 0; col < 4; ++col) {
-      printf("%f ", m[col][row]);
+      printf("%10.4f ", m[col][row]);
     }
     printf("\n");
   }
@@ -24,19 +26,30 @@ bool matrix_has_nan(const glm::mat4 &mat) {
 
 void buffer_vp_matrix_to_gl_ubo(const Camera *camera, u32 ubo, u32 window_width, u32 window_height) {
   CameraMatrices camera_matrices = new_camera_matrices(camera, window_width, window_height);
+  glm::mat4 vp = camera_matrices.projection * camera_matrices.view;
 
-  glm::mat4 vp;
-  vp = glm::mat4(1.0f);
-  vp = camera_matrices.projection;
-  vp = camera_matrices.view;
-  vp = camera_matrices.projection * camera_matrices.view;
+#ifndef NDEBUG
   if (matrix_has_nan(camera_matrices.view)) {
     exit(1);
   }
-  print_mat4(vp);
+#endif
 
   glBindBuffer(GL_UNIFORM_BUFFER, ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(vp), &vp);
+}
+
+glm::vec3 inputs_to_movement_vector(const Inputs *inputs) {
+  glm::vec3 movement_vector = inputs_to_direction(inputs);
+
+  f32 xy_plane_speed = 2.0f;
+  if (key_held(inputs, INPUT_LEFT_SHIFT)) {
+    xy_plane_speed += xy_plane_speed; // 2x speed
+  }
+
+  f32 zoom_speed = 10.0f;
+  movement_vector.z = zoom_speed * inputs->scroll_dy;
+
+  return movement_vector;
 }
 
 int main() {
@@ -48,8 +61,11 @@ int main() {
   TileVertex *tilemap_vertices = (TileVertex *)malloc(tilemap_vertices_sizes_bytes);
   tilemap_generate_vertices(&tilemap, tilemap_vertices);
 
-  Camera camera = new_camera(CAMERA_TYPE_3D);
-  camera.position.z = 2.0f;
+  Camera camera = new_camera(CAMERA_TYPE_2D);
+  camera.position.z = 5.0f;
+
+  Inputs inputs;
+  init_inputs(&inputs);
 
 #if 0
   for (u32 i = 0; i < num_tiles; i++) {
@@ -82,15 +98,18 @@ int main() {
     f64 t = glfwGetTime();
     f64 dt = t - t0;
     t0 = t;
-    f32 sint = sinf(t);
-    // camera.move_camera_function(&camera, 20 * dt, glm::vec4(5 * cosf(t), 0.0f, 0.0f, 1.0f));
-    // printf("%f, ", camera.position.z);
 
-    glfwPollEvents();
+    update_key_inputs_glfw(&inputs, window);
+
     glClear(GL_COLOR_BUFFER_BIT);
     int window_height, window_width;
     glfwGetFramebufferSize(window, &window_width, &window_height);
     glViewport(0, 0, window_width, window_height);
+
+    move_camera(&camera, (f32)dt * inputs_to_movement_vector(&inputs));
+    if (camera.position.z < 1.0f) {
+      camera.position.z = 1.0f;
+    }
 
     buffer_vp_matrix_to_gl_ubo(&camera, vp_ubo, window_width, window_height);
     draw_opengl_mesh(&tilemap_mesh, tilemap_material);
@@ -98,5 +117,7 @@ int main() {
     glfwSwapBuffers(window);
   }
 
+  glfwDestroyWindow(window);
+  glfwTerminate();
   return 0;
 }

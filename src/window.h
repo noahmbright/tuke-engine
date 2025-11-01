@@ -1,7 +1,7 @@
 #pragma once
 
 #include "GLFW/glfw3.h"
-#include "glm/vec4.hpp"
+#include "glm/glm.hpp"
 #include "tuke_engine.h"
 
 // TODO does input belong in the windowing file?
@@ -31,6 +31,8 @@ enum Input {
 };
 
 struct Inputs {
+  f64 scroll_dx;
+  f64 scroll_dy;
   bool key_inputs_array[2][NUM_INPUTS];
   bool *key_inputs;
   bool *prev_key_inputs;
@@ -39,9 +41,78 @@ struct Inputs {
   bool right_mouse_clicked;
 };
 
+// scroll callback for glfw
+struct ScrollDeltas {
+  f64 dx, dy;
+};
+
 GLFWwindow *new_window(bool is_vulkan, const char *title = "Tuke", const int width = 800, const int height = 600);
 void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window);
 void init_inputs(Inputs *inputs);
-bool key_pressed(const Inputs *inputs, Input key);
-bool key_released(const Inputs *inputs, Input key);
-bool key_held(const Inputs *inputs, Input key);
+
+inline bool key_pressed(const Inputs *inputs, Input key) {
+  return inputs->key_inputs[key] && !inputs->prev_key_inputs[key];
+}
+
+inline bool key_released(const Inputs *inputs, Input key) {
+  return !inputs->key_inputs[key] && inputs->prev_key_inputs[key];
+}
+
+inline bool key_held(const Inputs *inputs, Input key) { return inputs->key_inputs[key]; }
+
+inline glm::vec3 inputs_to_direction(const Inputs *inputs) {
+  glm::vec3 direction(0.0f);
+
+  if (key_held(inputs, INPUT_KEY_W) || key_held(inputs, INPUT_KEY_UP_ARROW)) {
+    direction.y += 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_A) || key_held(inputs, INPUT_KEY_LEFT_ARROW)) {
+    direction.x -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_S) || key_held(inputs, INPUT_KEY_DOWN_ARROW)) {
+    direction.y -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_D) || key_held(inputs, INPUT_KEY_RIGHT_ARROW)) {
+    direction.x += 1.0f;
+  }
+
+  return direction;
+}
+
+inline glm::vec3 inputs_to_direction_wasd(const Inputs *inputs) {
+  glm::vec3 direction(0.0f);
+
+  if (key_held(inputs, INPUT_KEY_W)) {
+    direction.y += 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_A)) {
+    direction.x -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_S)) {
+    direction.y -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_D)) {
+    direction.x += 1.0f;
+  }
+
+  return direction;
+}
+
+inline glm::vec3 inputs_to_direction_arrow_keys(const Inputs *inputs) {
+  glm::vec3 direction(0.0f);
+
+  if (key_held(inputs, INPUT_KEY_UP_ARROW)) {
+    direction.y += 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_LEFT_ARROW)) {
+    direction.x -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_DOWN_ARROW)) {
+    direction.y -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_RIGHT_ARROW)) {
+    direction.x += 1.0f;
+  }
+
+  return direction;
+}

@@ -1,29 +1,4 @@
-// TODO do I need this?
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <GLFW/glfw3.h> // TODO Remove
-
 #include "camera.h"
-#include "tuke_engine.h"
-
-#include "glm/gtc/matrix_transform.hpp"
-#define GLM_ENABLE_EXPERIMENTAL
-#include "glm/gtx/compatibility.hpp"
-#include "glm/trigonometric.hpp"
-
-// TODO decouple from window
-// static void scroll_callback(GLFWwindow *window, f64 xoffset, f64 yoffset) {
-//  Camera *camera = (Camera *)glfwGetWindowUserPointer(window);
-//
-//  (void)xoffset;
-//  (void)yoffset;
-//
-//  camera->fovy -= (f32)yoffset;
-//  if (camera->fovy < 1.0f)
-//    camera->fovy = 1.0f;
-//
-//  if (camera->fovy > 45.0f)
-//    camera->fovy = 45.0f;
-//}
 
 void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
   if (!camera->has_moused_yet) {
@@ -53,29 +28,6 @@ void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
   camera->right = glm::cross(camera->direction, camera->up);
 }
 
-glm::mat4 perspective_projection_from_camera(const Camera *camera, u32 window_width, u32 window_height) {
-  f32 near_z = 0.1f;
-  f32 far_z = 100.0f;
-  glm::mat4 proj = glm::perspective(glm::radians(camera->fovy), f32(window_width) / f32(window_height), near_z, far_z);
-  proj[1][1] = camera->y_needs_inverted ? -proj[1][1] : proj[1][1];
-  return proj;
-}
-
-glm::mat4 orthogonal_projection_from_camera(const Camera *camera, u32 window_width, u32 window_height) {
-  f32 left = 0.0f;
-  f32 right = (f32)window_width;
-
-  f32 top = (f32)window_height;
-  f32 bottom = 0.0f;
-
-  f32 near_z = -1000.0f;
-  f32 far_z = 1000.0f;
-
-  glm::mat4 proj = glm::ortho(left, right, bottom, top, near_z, far_z);
-
-  proj[1][1] = camera->y_needs_inverted ? -proj[1][1] : proj[1][1];
-  return proj;
-}
 Camera new_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direction, const glm::vec3 &up,
                   const glm::vec3 &right) {
   Camera camera;
@@ -88,8 +40,7 @@ Camera new_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direct
   switch (camera.type) {
 
   case CAMERA_TYPE_2D:
-    camera.move_camera_function = move_camera_2d;
-    camera.make_projection_function = orthogonal_projection_from_camera;
+    camera.move_camera_function = camera_move_2d;
     break;
 
   case CAMERA_TYPE_3D:
@@ -112,75 +63,27 @@ Camera new_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direct
       camera.pitch = glm::atan(camera.direction.y / xz_magnitude);
     }
 
-    camera.move_camera_function = move_camera_3d;
-    camera.make_projection_function = perspective_projection_from_camera;
+    camera.move_camera_function = camera_move_3d;
     break;
   }
 
   return camera;
 }
 
-// expect movement direction contains the WASD/arrow key inputs in x and y,
-// and if the shift key is pressed, the w component will be 2, if not, 1
-void move_camera_2d(Camera *camera, f32 delta_t, const glm::vec4 &movement_direction) {
-
-  const glm::vec3 dir3{movement_direction.x, movement_direction.y, movement_direction.z};
-  camera->position += camera->speed * delta_t * (movement_direction.w) * dir3;
-}
-
-// movement direction will have x and y components
-// y means move in camera->direction
-// x means move along camera->right
-void move_camera_3d(Camera *camera, f32 delta_t, const glm::vec4 &movement_direction) {
-
-  f32 distance = camera->speed * delta_t * movement_direction.w;
-
-  camera->position += distance * movement_direction.y * camera->direction;
-  camera->position += distance * movement_direction.x * camera->right;
-}
-
-void move_camera(Camera *camera, f32 delta_t, const glm::vec4 &movement_direction) {
-  camera->move_camera_function(camera, delta_t, movement_direction);
-}
-
-glm::mat4 look_at_from_camera(const Camera *camera) {
-  assert(glm::all(glm::isfinite(camera->direction)));
-  assert(glm::length(camera->direction) > 0.0f);
-
-  return glm::lookAt(camera->position, camera->position + camera->direction, camera->up);
-}
-
-glm::mat4 look_at_from_camera_with_offset(const Camera *camera, glm::vec3 offset) {
-  glm::vec3 pos = camera->position + offset;
-  return glm::lookAt(pos, pos + camera->direction, camera->up);
-}
-
-CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width, u32 window_height) {
-  CameraMatrices camera_matrices;
-  camera_matrices.view = look_at_from_camera(camera);
-  camera_matrices.projection = camera->make_projection_function(camera, window_width, window_height);
-  return camera_matrices;
-}
-
-CameraMatrices new_camera_matrices_with_offset(const Camera *camera, glm::vec3 offset, u32 window_width,
-                                               u32 window_height) {
-  CameraMatrices camera_matrices;
-  camera_matrices.view = look_at_from_camera_with_offset(camera, offset);
-  camera_matrices.projection = perspective_projection_from_camera(camera, window_width, window_height);
-  return camera_matrices;
-}
-
-void log_camera(const Camera *camera) {
-
-  printf("camera position:  ");
-  log_vec3(&camera->position);
-
-  printf("camera direction: ");
-  log_vec3(&camera->direction);
-
-  printf("camera up:        ");
-  log_vec3(&camera->up);
-}
+// TODO decouple from window
+// static void scroll_callback(GLFWwindow *window, f64 xoffset, f64 yoffset) {
+//  Camera *camera = (Camera *)glfwGetWindowUserPointer(window);
+//
+//  (void)xoffset;
+//  (void)yoffset;
+//
+//  camera->fovy -= (f32)yoffset;
+//  if (camera->fovy < 1.0f)
+//    camera->fovy = 1.0f;
+//
+//  if (camera->fovy > 45.0f)
+//    camera->fovy = 45.0f;
+//}
 
 // void buffer_camera_matrices_to_gl_uniform_buffer(
 //     const CameraMatrices *camera_matrices) {

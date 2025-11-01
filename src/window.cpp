@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// global for scroll callback, ugly would like to upgrade
+ScrollDeltas scroll_deltas;
+
 // need to init in place, because inputs contains arrays that would be
 // stack allocated. the problem is when we go to point with the prev/cur
 // pointers to those stack allocated arrays
@@ -22,29 +25,14 @@ void init_inputs(Inputs *inputs) {
   inputs->right_mouse_clicked = false;
 }
 
-bool key_pressed(const Inputs *inputs, Input key) {
-  return inputs->key_inputs[key] && !inputs->prev_key_inputs[key];
-}
-
-bool key_released(const Inputs *inputs, Input key) {
-  return !inputs->key_inputs[key] && inputs->prev_key_inputs[key];
-}
-
-bool key_held(const Inputs *inputs, Input key) {
-  return inputs->key_inputs[key];
-}
-
 void update_mouse_input_glfw(Inputs *inputs, GLFWwindow *window) {
-
-  inputs->left_mouse_clicked =
-      (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
-
-  inputs->right_mouse_clicked =
-      (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+  inputs->left_mouse_clicked = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+  inputs->right_mouse_clicked = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
 }
 
 // update the inputs AND swap the pointers to the current frames inputs
 void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
+  glfwPollEvents();
 
   const i32 key_to_glfw_key[] = {
 
@@ -72,15 +60,19 @@ void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
   inputs->prev_key_inputs = temp;
 
   for (u32 i = 0; i < NUM_INPUTS; i++) {
-    inputs->key_inputs[i] =
-        (glfwGetKey(window, key_to_glfw_key[i]) == GLFW_PRESS);
+    inputs->key_inputs[i] = (glfwGetKey(window, key_to_glfw_key[i]) == GLFW_PRESS);
   }
+
+  inputs->scroll_dx = scroll_deltas.dx;
+  inputs->scroll_dy = scroll_deltas.dy;
+  scroll_deltas.dx = 0.0f;
+  scroll_deltas.dy = 0.0f;
 }
 
 glm::vec2 get_cursor_position(GLFWwindow *window) {
   double xpos, ypos;
   glfwGetCursorPos(window, &xpos, &ypos);
-  return {xpos, ypos};
+  return glm::vec2(xpos, ypos);
 }
 
 void error_callback(int error, const char *description) {
@@ -88,8 +80,7 @@ void error_callback(int error, const char *description) {
   fprintf(stderr, "GLFW error callback:\n%s\n", description);
 }
 
-void key_callback(GLFWwindow *window, int key, int scancode, int action,
-                  int mods) {
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
   (void)action;
   (void)mods;
   (void)scancode;
@@ -99,8 +90,14 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action,
   }
 }
 
-GLFWwindow *new_window(bool is_vulkan, const char *title, const int width,
-                       const int height) {
+static void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+  (void)window; // unused
+  scroll_deltas.dx += xoffset;
+  scroll_deltas.dy += yoffset;
+  // printf("scrollin, %f, %f\n", scroll_deltas.dx, scroll_deltas.dy);
+}
+
+GLFWwindow *new_window(bool is_vulkan, const char *title, const int width, const int height) {
 
   glfwSetErrorCallback(error_callback);
   if (!glfwInit()) {
@@ -129,6 +126,10 @@ GLFWwindow *new_window(bool is_vulkan, const char *title, const int width,
     glfwMakeContextCurrent(window);
     gladLoadGL(glfwGetProcAddress);
   }
+
+  scroll_deltas.dx = 0.0;
+  scroll_deltas.dy = 0.0;
+  glfwSetScrollCallback(window, scroll_callback);
 
   return window;
 }

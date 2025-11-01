@@ -309,7 +309,7 @@ int main() {
     context.current_frame_index = context.current_frame % MAX_FRAMES_IN_FLIGHT;
     glm::vec4 movement_direction = movement_direction_from_inputs(&inputs);
     f32 speed = 10.0f;
-    move_camera_3d(&camera, dt, speed * movement_direction);
+    camera_move_3d(&camera, dt * speed * movement_direction);
 
 #if 0
     printf("offscreen image addr %p\n",

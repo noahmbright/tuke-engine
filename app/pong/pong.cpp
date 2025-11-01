@@ -317,21 +317,9 @@ void process_inputs_playing(State *state, f32 dt) {
     state->game_mode = GAMEMODE_PAUSED;
   }
 
-  glm::vec3 input_direction(0.0f);
   bool horizontal_enabled = (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED);
-
-  if (key_held(inputs, INPUT_KEY_W)) {
-    input_direction.y += 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_A)) {
-    input_direction.x -= horizontal_enabled * 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_S)) {
-    input_direction.y -= 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_D)) {
-    input_direction.x += horizontal_enabled * 1.0f;
-  }
+  glm::vec3 input_direction = inputs_to_direction(inputs);
+  input_direction.x *= horizontal_enabled;
 
   if (key_pressed(inputs, INPUT_KEY_SPACEBAR) && state->pong_mode == PONG_MODE_BETWEEN_POINTS) {
 
@@ -520,7 +508,7 @@ void update_screen_shake(State *state, f32 dt) {
     f32 dx = evaluate_damped_harmonic_oscillator(state->screen_shake.x_oscillator, state->screen_shake.time_elapsed);
     f32 dy = evaluate_damped_harmonic_oscillator(state->screen_shake.y_oscillator, state->screen_shake.time_elapsed);
 
-    camera_matrices = new_camera_matrices_with_offset(&state->camera, glm::vec3(dx, dy, 0.0f), width, height);
+    camera_matrices = camera_matrices_with_offset(&state->camera, glm::vec3(dx, dy, 0.0f), width, height);
   }
 
   glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
