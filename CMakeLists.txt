@@ -39,7 +39,24 @@ file(GLOB_RECURSE REFLECTOR_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/reflector/subprocess.cpp
 )
 
+# reflector stuff
+option(DEBUG_REFLECTOR "Build reflector in debug mode, default to opimized for faster engine dev" OFF)
 add_executable(reflector ${REFLECTOR_SOURCE_FILES})
-target_compile_options(reflector PRIVATE 
-    -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address)
-target_link_options(reflector PUBLIC -fsanitize=address)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR DEBUG_REFLECTOR)
+    message("Building reflector in debug mode")
+    target_compile_options(reflector PRIVATE
+        -g
+        -Wall -Wextra -Wpedantic -Werror
+        -fsanitize=address
+    )
+    target_link_options(reflector PRIVATE
+        -fsanitize=address
+    )
+else() # Release, RelWithDebInfo, etc.
+    message("Building reflector in release mode")
+    target_compile_options(reflector PRIVATE
+        -O3
+        -Wall -Wextra -Wpedantic -Werror
+        -DNDEBUG
+    )
+endif()

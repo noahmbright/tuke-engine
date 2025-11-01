@@ -1,4 +1,5 @@
 #include "filesystem_utils.h"
+#include "reflector.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -106,6 +107,15 @@ const char *read_file(const char *path, u64 *out_size) {
 ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirectory_list) {
   ShaderToCompileList shader_to_compile_list;
   memset(&shader_to_compile_list, 0, sizeof(shader_to_compile_list));
+  bool found_newer_shader = false;
+
+  struct stat out_header_stat;
+  if (stat(REFLECTOR_OUTPUT_FILE_PATH, &out_header_stat) != 0) {
+    if (errno == ENOENT) {
+      printf("%s does not exist, will recompile shaders.\n", REFLECTOR_OUTPUT_FILE_PATH);
+      shader_to_compile_list.needs_recompiled = true;
+    }
+  }
 
   for (u32 subdirectory_index = 0; subdirectory_index < subdirectory_list->num_subdirectories; subdirectory_index++) {
 
@@ -158,14 +168,19 @@ ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirect
         continue;
       }
 
-      struct stat st;
-      if (stat(full_path, &st) == -1) {
+      struct stat shader_stat;
+      if (stat(full_path, &shader_stat) == -1) {
         fprintf(stderr, "stat failed on '%s': %s\n", full_path, strerror(errno));
         continue;
       }
 
-      if (!S_ISREG(st.st_mode)) {
+      if (!S_ISREG(shader_stat.st_mode)) {
         continue;
+      }
+
+      if (shader_stat.st_mtime > out_header_stat.st_mtime) {
+        found_newer_shader = true;
+        shader_to_compile_list.needs_recompiled = true;
       }
 
       // points into my stack buffer here, can be safe
@@ -299,6 +314,10 @@ ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirect
     } // nested loop over files in subdir
     closedir(subdirectory);
   } // main loop over subdirectories
+
+  if (!found_newer_shader) {
+    printf("Found no shaders newer than %s, not recompiling.\n", REFLECTOR_OUTPUT_FILE_PATH);
+  }
 
   return shader_to_compile_list;
 }

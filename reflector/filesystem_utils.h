@@ -22,8 +22,9 @@ struct ShaderToCompile {
 };
 
 struct ShaderToCompileList {
-  u32 num_shaders;
   ShaderToCompile shaders[MAX_NUM_SHADERS];
+  u32 num_shaders;
+  bool needs_recompiled;
 };
 
 void free_shader_to_compile_list(ShaderToCompileList *shader_to_compile_list);

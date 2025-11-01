@@ -21,6 +21,7 @@ struct Camera {
   f32 fovy = 45.0f;
 
   void (*move_camera_function)(Camera *, f32, const glm::vec4 &);
+  glm::mat4 (*make_projection_function)(const Camera *camera, u32 window_width, u32 window_height);
 
   f32 last_mouse_x, last_mouse_y;
   bool has_moused_yet;

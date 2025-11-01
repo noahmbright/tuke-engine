@@ -6,6 +6,8 @@
 #include "tuke_engine.h"
 
 #include "glm/gtc/matrix_transform.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/compatibility.hpp"
 #include "glm/trigonometric.hpp"
 
 // TODO decouple from window
@@ -41,8 +43,8 @@ void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
   if (camera->pitch > pi_over_2) {
     camera->pitch = pi_over_2;
   }
-  if (camera->pitch < pi_over_2) {
-    camera->pitch = pi_over_2;
+  if (camera->pitch < -pi_over_2) {
+    camera->pitch = -pi_over_2;
   }
 
   camera->direction.x = glm::cos(camera->pitch) * glm::cos(camera->yaw);
@@ -51,6 +53,29 @@ void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
   camera->right = glm::cross(camera->direction, camera->up);
 }
 
+glm::mat4 perspective_projection_from_camera(const Camera *camera, u32 window_width, u32 window_height) {
+  f32 near_z = 0.1f;
+  f32 far_z = 100.0f;
+  glm::mat4 proj = glm::perspective(glm::radians(camera->fovy), f32(window_width) / f32(window_height), near_z, far_z);
+  proj[1][1] = camera->y_needs_inverted ? -proj[1][1] : proj[1][1];
+  return proj;
+}
+
+glm::mat4 orthogonal_projection_from_camera(const Camera *camera, u32 window_width, u32 window_height) {
+  f32 left = 0.0f;
+  f32 right = (f32)window_width;
+
+  f32 top = (f32)window_height;
+  f32 bottom = 0.0f;
+
+  f32 near_z = -1000.0f;
+  f32 far_z = 1000.0f;
+
+  glm::mat4 proj = glm::ortho(left, right, bottom, top, near_z, far_z);
+
+  proj[1][1] = camera->y_needs_inverted ? -proj[1][1] : proj[1][1];
+  return proj;
+}
 Camera new_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direction, const glm::vec3 &up,
                   const glm::vec3 &right) {
   Camera camera;
@@ -64,6 +89,7 @@ Camera new_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direct
 
   case CAMERA_TYPE_2D:
     camera.move_camera_function = move_camera_2d;
+    camera.make_projection_function = orthogonal_projection_from_camera;
     break;
 
   case CAMERA_TYPE_3D:
@@ -85,7 +111,9 @@ Camera new_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direct
     } else {
       camera.pitch = glm::atan(camera.direction.y / xz_magnitude);
     }
+
     camera.move_camera_function = move_camera_3d;
+    camera.make_projection_function = perspective_projection_from_camera;
     break;
   }
 
@@ -97,7 +125,6 @@ Camera new_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direct
 void move_camera_2d(Camera *camera, f32 delta_t, const glm::vec4 &movement_direction) {
 
   const glm::vec3 dir3{movement_direction.x, movement_direction.y, movement_direction.z};
-
   camera->position += camera->speed * delta_t * (movement_direction.w) * dir3;
 }
 
@@ -117,6 +144,9 @@ void move_camera(Camera *camera, f32 delta_t, const glm::vec4 &movement_directio
 }
 
 glm::mat4 look_at_from_camera(const Camera *camera) {
+  assert(glm::all(glm::isfinite(camera->direction)));
+  assert(glm::length(camera->direction) > 0.0f);
+
   return glm::lookAt(camera->position, camera->position + camera->direction, camera->up);
 }
 
@@ -125,18 +155,10 @@ glm::mat4 look_at_from_camera_with_offset(const Camera *camera, glm::vec3 offset
   return glm::lookAt(pos, pos + camera->direction, camera->up);
 }
 
-glm::mat4 perspective_projection_from_camera(const Camera *camera, u32 window_width, u32 window_height) {
-  f32 near_z = 0.1f;
-  f32 far_z = 100.0f;
-  glm::mat4 proj = glm::perspective(glm::radians(camera->fovy), f32(window_width) / f32(window_height), near_z, far_z);
-  proj[1][1] = camera->y_needs_inverted ? -proj[1][1] : proj[1][1];
-  return proj;
-}
-
 CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width, u32 window_height) {
   CameraMatrices camera_matrices;
   camera_matrices.view = look_at_from_camera(camera);
-  camera_matrices.projection = perspective_projection_from_camera(camera, window_width, window_height);
+  camera_matrices.projection = camera->make_projection_function(camera, window_width, window_height);
   return camera_matrices;
 }
 

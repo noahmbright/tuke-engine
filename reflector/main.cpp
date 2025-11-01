@@ -18,7 +18,12 @@ int main() {
   // 2) collect shaders
   ShaderToCompileList shader_to_compile_list = collect_shaders_to_compile(&subdirectory_list);
   if (shader_to_compile_list.num_shaders == 0) {
-    printf("Got no shaders to compile\n");
+    printf("Got no shaders to compile, not recompiling.\n");
+    return 0;
+  }
+
+  if (shader_to_compile_list.needs_recompiled == false) {
+    printf("Determined that we should not recompile, reflector exiting.\n");
     return 0;
   }
 
@@ -26,7 +31,7 @@ int main() {
   ParsedShadersIR parsed_shaders_ir = parse_all_shaders_and_populate_global_tables(&shader_to_compile_list);
 
   // 4) codegen
-  FILE *output_file = fopen("gen/c_reflector_bringup.h", "w");
+  FILE *output_file = fopen(REFLECTOR_OUTPUT_FILE_PATH, "w");
   codegen(output_file, &parsed_shaders_ir);
 
   // 5) cleanup

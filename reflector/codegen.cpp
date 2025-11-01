@@ -33,10 +33,10 @@ TemplateStringReplacement directive_replacement_version(GraphicsBackend backend)
 // turns into
 // layout(location = 0) for both opengl and vulkan
 TemplateStringReplacement directive_replacement_location(GraphicsBackend backend) {
+  TemplateStringReplacement replacement;
   switch (backend) {
   case GRAPHICS_BACKEND_OPENGL:
   case GRAPHICS_BACKEND_VULKAN: {
-    TemplateStringReplacement replacement;
     replacement.string = "layout(location = __) ";
     replacement.length = strlen(replacement.string);
     return replacement;
@@ -45,6 +45,8 @@ TemplateStringReplacement directive_replacement_location(GraphicsBackend backend
   default:
     assert(false);
   }
+
+  return replacement;
 }
 
 // only supporting set and binding numbers < 10
@@ -75,6 +77,8 @@ TemplateStringReplacement directive_replacement_set_binding(GraphicsBackend back
   default:
     assert(false);
   }
+
+  return replacement;
 }
 
 TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_slice, GraphicsBackend backend) {
