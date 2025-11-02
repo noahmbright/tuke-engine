@@ -9,6 +9,8 @@
 #include "glm/gtx/compatibility.hpp"
 #include "glm/trigonometric.hpp"
 
+#define CAMERA_PERSPECTIVE_PROJECTION_FAR_Z (100.f)
+
 enum CameraType { CAMERA_TYPE_2D, CAMERA_TYPE_3D, CAMERA_TYPE_FPS };
 
 struct Camera {
@@ -65,8 +67,8 @@ inline glm::mat4 camera_lookat_with_offset(const Camera *camera, glm::vec3 offse
 
 inline glm::mat4 camera_perspective_projection(const Camera *camera, u32 window_width, u32 window_height) {
   f32 near_z = 0.1f;
-  f32 far_z = 100.0f;
-  glm::mat4 proj = glm::perspective(glm::radians(camera->fovy), f32(window_width) / f32(window_height), near_z, far_z);
+  glm::mat4 proj = glm::perspective(glm::radians(camera->fovy), f32(window_width) / f32(window_height), near_z,
+                                    CAMERA_PERSPECTIVE_PROJECTION_FAR_Z);
   proj[1][1] = camera->y_needs_inverted ? -proj[1][1] : proj[1][1];
   return proj;
 }
