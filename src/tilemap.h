@@ -3,6 +3,8 @@
 #include "tuke_engine.h"
 #include <stdio.h>
 
+#define TILE_SIDE_LENGTH_METERS (1.0f)
+
 struct TileVertex {
   f32 texture_coords[2];
   f32 position[3];
@@ -12,7 +14,7 @@ struct TileVertex {
 struct Tilemap {
   u32 level_width;
   u32 level_height;
-  const u8 *level_map;
+  u8 *level_map;
 };
 
 struct TileQuad {
@@ -29,3 +31,13 @@ inline void log_tile_vertex(const TileVertex *tile_vertex) {
 
 Tilemap new_tilemap(const u32 width, const u32 height, const u8 *map);
 void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vertices);
+
+static inline u8 tilemap_get_at(const Tilemap *tilemap, u32 x, u32 y) {
+  return tilemap->level_map[y * tilemap->level_width + x];
+}
+
+// passing in the top left corner of the tilemap in whatever coordinate system it is in from the caller
+// pos is in the same coordinate system the caller is using for the map
+// pos is the position of the colliding object
+// unclear if it would be better to parametrize using the already processed position within the tilemap
+bool tilemap_check_collision(const Tilemap *tilemap, const glm::vec3 tilemap_top_left, glm::vec3 pos, glm::vec3 size);

@@ -8,7 +8,7 @@ const u32 width_in_tiles = 9;
 const u32 height_in_tiles = 20;
 
 // clang-format off
-const u8 tilemap_data[width_in_tiles * height_in_tiles] = {
+inline u8 tilemap_data[width_in_tiles * height_in_tiles] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1,
     1, 0, 0, 0, 0, 0, 0, 0, 1,
     1, 0, 0, 0, 0, 1, 1, 0, 1,

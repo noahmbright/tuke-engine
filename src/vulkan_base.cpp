@@ -415,16 +415,6 @@ VkDevice create_device(QueueFamilyIndices queue_family_indices, VkPhysicalDevice
   return device;
 }
 
-u32 clamp(u32 x, u32 min, u32 max) {
-  if (x < min) {
-    return min;
-  }
-  if (x > max) {
-    return max;
-  }
-  return x;
-}
-
 VkSurfaceFormatKHR get_surface_format(VkPhysicalDevice physical_device, VkSurfaceKHR surface) {
 
   u32 format_count = 0;
@@ -459,9 +449,9 @@ VkExtent2D get_swapchain_extent(GLFWwindow *window, VkSurfaceCapabilitiesKHR sur
     extent = surface_capabilities.currentExtent;
   } else {
     extent.width =
-        clamp(window_width, surface_capabilities.minImageExtent.width, surface_capabilities.maxImageExtent.width);
-    extent.height =
-        clamp(window_height, surface_capabilities.minImageExtent.height, surface_capabilities.maxImageExtent.height);
+        clamp_u32(window_width, surface_capabilities.minImageExtent.width, surface_capabilities.maxImageExtent.width);
+    extent.height = clamp_u32(window_height, surface_capabilities.minImageExtent.height,
+                              surface_capabilities.maxImageExtent.height);
   }
   return extent;
 }

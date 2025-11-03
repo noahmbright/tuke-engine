@@ -1,7 +1,5 @@
 #include "tilemap.h"
 
-#define TILE_SIDE_LENGTH_METERS (1.0f)
-
 static inline void populate_tile_vertex(f32 x, f32 y, f32 z, f32 u, f32 v, f32 texture_id,
                                         TileVertex *out_tile_vertex) {
   out_tile_vertex->texture_coords[0] = u;
@@ -55,4 +53,42 @@ void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vert
       i += 6;
     }
   }
+}
+
+bool tilemap_check_collision(const Tilemap *tilemap, const glm::vec3 tilemap_top_left, glm::vec3 pos, glm::vec3 size) {
+
+  glm::vec3 delta_r = pos - tilemap_top_left;
+  delta_r.y = -delta_r.y;
+  glm::vec3 half_size = 0.5f * size;
+  f32 x0 = delta_r.x - half_size.x;
+  f32 x1 = delta_r.x + half_size.x;
+  f32 y0 = delta_r.y - half_size.y;
+  f32 y1 = delta_r.y + half_size.y;
+
+  u32 nx0 = (x0 < EPSILON) ? 0 : x0 / TILE_SIDE_LENGTH_METERS;
+  u32 ny0 = (y0 < EPSILON) ? 0 : y0 / TILE_SIDE_LENGTH_METERS;
+
+  u32 nx1 = (x1 / TILE_SIDE_LENGTH_METERS) + 1;
+  u32 ny1 = (y1 / TILE_SIDE_LENGTH_METERS) + 1;
+
+  // TODO logging system
+#if 0
+  printf("tilemap_check_collision:\n");
+  printf("  pos is (%4.3f, %4.3f), size is (%4.3f, %4.3f), tilemap_top_left is (%4.3f, %4.3f)\n", pos.x, pos.y, size.x,
+         size.y, tilemap_top_left.x, tilemap_top_left.y);
+  printf("  delta r is (%4.3f, %4.3f)\n  iterating nx in [%u, %u), ny in [%u, %u)\n", delta_r.x, delta_r.y, nx0, nx1,
+         ny0, ny1);
+#endif
+
+  bool collided = false;
+  for (u32 ny = ny0; ny < ny1; ny++) {
+    for (u32 nx = nx0; nx < nx1; nx++) {
+      if (tilemap_get_at(tilemap, nx, ny) == 1) {
+        printf("collided\n");
+        return true;
+      }
+    }
+  }
+
+  return collided;
 }

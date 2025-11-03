@@ -5,23 +5,11 @@
 #include "tilemap.h"
 #include "topdown.h"
 #include "tuke_engine.h"
+#include "utils.h"
 #include "window.h"
 #include <stdio.h>
 
-void log_mat4(const glm::mat4 &m) {
-  printf("logging mat4...\n-----\n");
-  for (u32 row = 0; row < 4; ++row) {
-    for (u32 col = 0; col < 4; ++col) {
-      printf("%10.4f ", m[col][row]);
-    }
-    printf("\n");
-  }
-}
-
-bool matrix_has_nan(const glm::mat4 &mat) {
-  return glm::any(glm::isnan(mat[0])) || glm::any(glm::isnan(mat[1])) || glm::any(glm::isnan(mat[2])) ||
-         glm::any(glm::isnan(mat[3]));
-}
+#define PLAYER_SIDE_LENGTH_METERS (0.6f)
 
 void buffer_vp_matrix_to_gl_ubo(const Camera *camera, u32 ubo, u32 window_width, u32 window_height) {
   CameraMatrices camera_matrices = new_camera_matrices(camera, window_width, window_height);
@@ -59,26 +47,16 @@ int main() {
   u32 tilemap_vertices_sizes_bytes = num_vertices * sizeof(TileVertex);
   TileVertex *tilemap_vertices = (TileVertex *)malloc(tilemap_vertices_sizes_bytes);
   tilemap_generate_vertices(&tilemap, tilemap_vertices);
+  // assuming the tilemap is centered on 0, 0
+  f32 tilemap_top_left_x = -0.5f * TILE_SIDE_LENGTH_METERS * tilemap.level_width;
+  f32 tilemap_top_left_y = 0.5f * TILE_SIDE_LENGTH_METERS * tilemap.level_height;
+  glm::vec3 tilemap_top_left(tilemap_top_left_x, tilemap_top_left_y, 0.0f);
 
   Camera camera = new_camera(CAMERA_TYPE_2D);
   camera.position.z = 15.0f;
 
   Inputs inputs;
   init_inputs(&inputs);
-
-#if 0
-  for (u32 i = 0; i < num_tiles; i++) {
-    u32 j = i * 6;
-    log_tile_vertex(&tilemap_vertices[j + 0]);
-    log_tile_vertex(&tilemap_vertices[j + 1]);
-    log_tile_vertex(&tilemap_vertices[j + 2]);
-    printf("-------\n");
-    log_tile_vertex(&tilemap_vertices[j + 3]);
-    log_tile_vertex(&tilemap_vertices[j + 4]);
-    log_tile_vertex(&tilemap_vertices[j + 5]);
-    printf("\n");
-  }
-#endif
 
   u32 tilemap_program =
       shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_TILEMAP_VERT, SHADER_HANDLE_COMMON_TILEMAP_FRAG);
@@ -103,12 +81,6 @@ int main() {
   opengl_material_add_uniform(&player_material, player_ubo, UNIFORM_BUFFER_LABEL_PLAYER_MODEL, "PlayerModel");
   opengl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
-  // TODO need to figure out how I'm going to scale to realistic sizes/units e.g. meters
-  f32 tilemap_dw = 2.0f / (f32)tilemap.level_width;
-  f32 tilemap_dh = 2.0f / (f32)tilemap.level_height;
-  glm::mat4 player_model_scale(1.0f);
-  // player_model_scale = glm::scale(player_model_scale, glm::vec3(tilemap_dw, tilemap_dh, 1.0f));
-
   f64 t0 = glfwGetTime();
   while (glfwWindowShouldClose(window) == false) {
     f64 t = glfwGetTime();
@@ -123,16 +95,19 @@ int main() {
     glViewport(0, 0, window_width, window_height);
 
     const f32 speed = 5.0f;
+    glm::vec3 last_camera_pos = camera.position;
     move_camera(&camera, speed * (f32)dt * inputs_to_movement_vector(&inputs));
-    if (camera.position.z < 1.0f) {
-      camera.position.z = 1.0f;
-    }
-    if (camera.position.z > CAMERA_PERSPECTIVE_PROJECTION_FAR_Z) {
-      camera.position.z = CAMERA_PERSPECTIVE_PROJECTION_FAR_Z - EPSILON;
+    camera.position.z = clamp_f32(camera.position.z, 1.0f, CAMERA_PERSPECTIVE_PROJECTION_FAR_Z - EPSILON);
+    if (tilemap_check_collision(&tilemap, tilemap_top_left, camera.position, glm::vec3(PLAYER_SIDE_LENGTH_METERS))) {
+      camera.position = last_camera_pos;
     }
 
+    // TODO separate player position and camera position
+    // TODO will i consider the players position within a tilemap? within the whole world?
     glm::vec3 camera_xy(camera.position.x, camera.position.y, 0.0f);
-    glm::mat4 player_model = glm::translate(player_model_scale, camera_xy);
+
+    glm::mat4 player_model = glm::translate(glm::mat4(1.0f), camera_xy);
+    player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
     glBindBuffer(GL_UNIFORM_BUFFER, player_ubo);
     glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
 
