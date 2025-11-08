@@ -18,8 +18,8 @@ static inline void populate_tile_vertex(f32 x, f32 y, f32 z, f32 u, f32 v, f32 t
 // each tile in the map gets 6 vertices, BL, TL, TR - TR, BR, BL
 void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vertices) {
   // centering the tilemap at 0.0
-  const f32 dw = TILE_SIDE_LENGTH_METERS; /// (f32)tilemap->level_width;
-  const f32 dh = TILE_SIDE_LENGTH_METERS; /// (f32)tilemap->level_height;
+  const f32 dw = TILE_SIDE_LENGTH_METERS;
+  const f32 dh = TILE_SIDE_LENGTH_METERS;
   const f32 total_width = dw * tilemap->level_width;
   const f32 total_height = dh * tilemap->level_height;
   const f32 x0 = -0.5f * total_width;
@@ -58,7 +58,7 @@ void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vert
 bool tilemap_check_collision(const Tilemap *tilemap, const glm::vec3 tilemap_top_left, glm::vec3 pos, glm::vec3 size) {
 
   glm::vec3 delta_r = pos - tilemap_top_left;
-  delta_r.y = -delta_r.y;
+  delta_r.y = -delta_r.y; // tile index grows as we go downward in view space
   glm::vec3 half_size = 0.5f * size;
   f32 x0 = delta_r.x - half_size.x;
   f32 x1 = delta_r.x + half_size.x;
@@ -84,7 +84,6 @@ bool tilemap_check_collision(const Tilemap *tilemap, const glm::vec3 tilemap_top
   for (u32 ny = ny0; ny < ny1; ny++) {
     for (u32 nx = nx0; nx < nx1; nx++) {
       if (tilemap_get_at(tilemap, nx, ny) == 1) {
-        printf("collided\n");
         return true;
       }
     }

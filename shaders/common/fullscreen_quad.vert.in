@@ -9,8 +9,8 @@ vec2 positions[3] = vec2[](
 {{ LOCATION  0 }} out vec2 uv;
 
 void main() {
-    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+    gl_Position = vec4(positions[{{ VERTEX_INDEX }}], 0.0, 1.0);
 
     // Map clip-space [-1,1] -> texcoord [0,1]
-    uv = positions[gl_VertexIndex] * 0.5 + 0.5;
+    uv = positions[{{ VERTEX_INDEX }}] * 0.5 + 0.5;
 }

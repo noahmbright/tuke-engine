@@ -29,7 +29,9 @@ inline void free_generated_shader_vk_modules(VkDevice device) {
 
 inline void init_opengl_vertex_layout(VertexLayoutID vertex_layout_id, GLuint vao, GLuint *vbos, u32 num_vbos,
                                       GLuint ebo) {
-  generated_opengl_vertex_array_initializers[vertex_layout_id](vao, vbos, num_vbos, ebo);
+  if (generated_opengl_vertex_array_initializers[vertex_layout_id]) {
+    generated_opengl_vertex_array_initializers[vertex_layout_id](vao, vbos, num_vbos, ebo);
+  }
 }
 
 inline u32 shader_handles_to_opengl_program(ShaderHandle vertex_shader_handle, ShaderHandle fragment_shader_handle) {
@@ -37,9 +39,9 @@ inline u32 shader_handles_to_opengl_program(ShaderHandle vertex_shader_handle, S
                              generated_shader_specs[fragment_shader_handle]->opengl_glsl);
 }
 
-inline OpenGLMesh create_opengl_mesh_with_vertex_layout(const f32 *arr, f32 num_f32s, VertexLayoutID vertex_layout_id,
-                                                        u32 draw_mode) {
-  OpenGLMesh opengl_mesh = create_opengl_mesh(arr, num_f32s, draw_mode);
+inline OpenGLMesh create_opengl_mesh_with_vertex_layout(const f32 *arr, f32 num_f32s, u32 num_vertices,
+                                                        VertexLayoutID vertex_layout_id, u32 draw_mode) {
+  OpenGLMesh opengl_mesh = create_opengl_mesh(arr, num_f32s, num_vertices, draw_mode);
   init_opengl_vertex_layout(vertex_layout_id, opengl_mesh.vao, &opengl_mesh.vbo, 1, 0);
   return opengl_mesh;
 }

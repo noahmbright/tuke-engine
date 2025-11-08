@@ -23,23 +23,21 @@ int main() {
   printf("Compiled programs\n");
 
   // meshes
-  OpenGLMesh triangle_mesh = create_opengl_mesh_with_vertex_layout(triangle_vertices, sizeof(triangle_vertices),
+  OpenGLMesh triangle_mesh = create_opengl_mesh_with_vertex_layout(triangle_vertices, sizeof(triangle_vertices), 3,
                                                                    VERTEX_LAYOUT_BINDING0VERTEX_VEC3, GL_STATIC_DRAW);
-  triangle_mesh.num_vertices = 3;
   OpenGLMaterial triangle_material = create_opengl_material(program);
 
   OpenGLMesh transformed_mesh = create_opengl_mesh_with_vertex_layout(
-      triangle_vertices, sizeof(triangle_vertices), VERTEX_LAYOUT_BINDING0VERTEX_VEC3, GL_STATIC_DRAW);
-  transformed_mesh.num_vertices = 3;
+      triangle_vertices, sizeof(triangle_vertices), 3, VERTEX_LAYOUT_BINDING0VERTEX_VEC3, GL_STATIC_DRAW);
 
   u32 transformation_ubo = create_opengl_ubo(sizeof(TriangleTransformation), GL_DYNAMIC_DRAW);
   OpenGLMaterial transformed_material = create_opengl_material(transformed_program);
   opengl_material_add_uniform(&transformed_material, transformation_ubo, UNIFORM_BUFFER_LABEL_TRIANGLE_TRANSFORMATION,
                               "TriangleTransformation");
 
-  OpenGLMesh textured_quad_mesh = create_opengl_mesh_with_vertex_layout(
-      textured_quad_vertices, sizeof(textured_quad_vertices), VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
-  textured_quad_mesh.num_vertices = 6;
+  OpenGLMesh textured_quad_mesh =
+      create_opengl_mesh_with_vertex_layout(textured_quad_vertices, sizeof(textured_quad_vertices), 6,
+                                            VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
   OpenGLMaterial textured_quad_material = create_opengl_material(textured_quad_program);
   textured_quad_material.texture = load_texture_opengl("textures/girl_face.jpg");
 
