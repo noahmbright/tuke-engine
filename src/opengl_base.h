@@ -174,3 +174,22 @@ inline OpenGLLimits get_opengl_limits() {
 
   return limits;
 }
+
+// framebuffers
+
+inline u32 create_opengl_framebuffer() {
+  u32 fbo;
+  glGenFramebuffers(1, &fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+  return fbo;
+}
+
+// possibly may want to pass GL_COLOR_ATTACHMENTN as an argument
+inline void opengl_attach_texture2d_to_framebuffer(u32 fbo, u32 texture) {
+  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    printf("ERROR::FRAMEBUFFER:: Framebuffer is not complete!\n");
+  }
+}

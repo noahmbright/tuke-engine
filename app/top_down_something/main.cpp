@@ -71,7 +71,7 @@ int main() {
 
   OpenGLMesh tilemap_mesh =
       create_opengl_mesh_with_vertex_layout((f32 *)tilemap_vertices, tilemap_vertices_sizes_bytes, num_vertices,
-                                            VERTEX_LAYOUT_BINDING0VERTEX_VEC2_VEC3_FLOAT, GL_STATIC_DRAW);
+                                            VERTEX_LAYOUT_BINDING0VERTEX_VEC2_VEC3_UINT, GL_STATIC_DRAW);
 
   u32 vp_ubo = create_opengl_ubo(sizeof(VPUniform), GL_DYNAMIC_DRAW);
   OpenGLMaterial tilemap_material = create_opengl_material(tilemap_program);
@@ -84,15 +84,10 @@ int main() {
   opengl_material_add_uniform(&player_material, player_ubo, UNIFORM_BUFFER_LABEL_PLAYER_MODEL, "PlayerModel");
   opengl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
-  u32 fbo;
-  glGenFramebuffers(1, &fbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+  u32 fbo = create_opengl_framebuffer();
   OpenGLTextureConfig texture_config = create_default_opengl_texture_config(window_height, window_width);
   u32 fbo_texture = create_opengl_texture2d(&texture_config);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fbo_texture, 0);
-  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-    printf("ERROR::FRAMEBUFFER:: Framebuffer is not complete!\n");
-  }
+  opengl_attach_texture2d_to_framebuffer(fbo, fbo_texture);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   OpenGLMesh fullscreen_quad_mesh =

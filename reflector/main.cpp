@@ -7,7 +7,15 @@
 #include <stdio.h>
 #include <string.h>
 
-int main() {
+int main(int argc, char **argv) {
+  const char *force_shaders_string = "--force-shaders";
+  bool force_shaders = false;
+  if (argc > 1) {
+    if (strcmp(argv[1], force_shaders_string) == 0) {
+      force_shaders = true;
+    }
+  }
+
   // main flow:
   // 1) walk dirs 2) collect shaders 3) parse shaders and populate symbol tables 4) codegen
   // 1) walk dirs
@@ -22,7 +30,7 @@ int main() {
     return 0;
   }
 
-  if (shader_to_compile_list.needs_recompiled == false) {
+  if (!force_shaders && shader_to_compile_list.needs_recompiled == false) {
     printf("Determined that we should not recompile, reflector exiting.\n");
     return 0;
   }

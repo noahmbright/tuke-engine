@@ -1,6 +1,6 @@
 #include "tilemap.h"
 
-static inline void populate_tile_vertex(f32 x, f32 y, f32 z, f32 u, f32 v, f32 texture_id,
+static inline void populate_tile_vertex(f32 x, f32 y, f32 z, f32 u, f32 v, u32 texture_id,
                                         TileVertex *out_tile_vertex) {
   out_tile_vertex->texture_coords[0] = u;
   out_tile_vertex->texture_coords[1] = v;

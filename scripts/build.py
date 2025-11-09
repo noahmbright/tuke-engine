@@ -13,6 +13,8 @@ def main():
 
     if not args.no_shaders:
         invocations = ["./build/reflector"]
+        if args.force_shaders:
+            invocations.append("--force-shaders")
         subprocess.run(invocations, check=True)
 
     if not args.no_build:

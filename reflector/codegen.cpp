@@ -229,9 +229,9 @@ const char *glsl_type_to_vulkan_format(GLSLType type) {
     return "VK_FORMAT_R32G32B32_SFLOAT";
   case GLSL_TYPE_FLOAT:
     return "VK_FORMAT_R32_SFLOAT";
-
-    // TODO?
   case GLSL_TYPE_UINT:
+    return "VK_FORMAT_R32_UINT";
+    // TODO?
   case GLSL_TYPE_VEC4:
   case GLSL_TYPE_MAT2:
   case GLSL_TYPE_MAT3:
@@ -363,7 +363,7 @@ static u32 glsl_type_to_number_of_floats(GLSLType type) {
 
   case GLSL_TYPE_NULL:
   default:
-    fprintf(stderr, "vertex_attribute_rate_to_vulkan_enum_string got an invalid rate enum.\n");
+    fprintf(stderr, "glsl_type_to_number_of_floats got an GLSLType.\n");
     return 0;
   }
 }
@@ -393,14 +393,22 @@ void generate_opengl_vertex_layout_array(FILE *destination, const ParsedShadersI
       const VertexAttribute *attribute = &vertex_layout->attributes[i];
       u32 binding_stride = vertex_layout->binding_strides[attribute->binding];
 
-      // only supporting GL_FLOAT for now
       if (attribute->binding != current_binding) {
         fprintf(destination, "  glBindBuffer(GL_ARRAY_BUFFER, vbos[%u]);\n", attribute->binding);
         current_binding = attribute->binding;
       }
       fprintf(destination, "  glEnableVertexAttribArray(%u);\n", attribute->location);
-      fprintf(destination, "  glVertexAttribPointer(%u, %u, GL_FLOAT, GL_FALSE, %u, (void*)%u);\n", attribute->location,
-              glsl_type_to_number_of_floats(attribute->glsl_type), binding_stride, attribute->offset);
+
+      // supporting GL_FLOAT and GL_UNSIGNED_INT for now
+      // only konw that in uint takes glVertexAttribIPointer(n, m, GL_UNSIGNED_INT,.. ) for now
+      if (attribute->glsl_type == GLSL_TYPE_UINT) {
+        fprintf(destination, "  glVertexAttribIPointer(%u, %u, GL_UNSIGNED_INT, %u, (void*)%u);\n", attribute->location,
+                glsl_type_to_number_of_floats(attribute->glsl_type), binding_stride, attribute->offset);
+      } else {
+        fprintf(destination, "  glVertexAttribPointer(%u, %u, GL_FLOAT, GL_FALSE, %u, (void*)%u);\n",
+                attribute->location, glsl_type_to_number_of_floats(attribute->glsl_type), binding_stride,
+                attribute->offset);
+      }
 
       if (attribute->rate == VERTEX_ATTRIBUTE_RATE_INSTANCE) {
         fprintf(destination, "  glVertexAttribDivisor(%u, 1);\n", attribute->location);

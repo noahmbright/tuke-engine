@@ -316,7 +316,7 @@ ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirect
   } // main loop over subdirectories
 
   if (!found_newer_shader) {
-    printf("Found no shaders newer than %s, not recompiling.\n", REFLECTOR_OUTPUT_FILE_PATH);
+    printf("Found no shaders newer than %s.\n", REFLECTOR_OUTPUT_FILE_PATH);
   }
 
   return shader_to_compile_list;

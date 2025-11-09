@@ -8,7 +8,7 @@
 struct TileVertex {
   f32 texture_coords[2];
   f32 position[3];
-  f32 texture_id;
+  u32 texture_id;
 };
 
 struct Tilemap {
@@ -25,7 +25,7 @@ struct TileQuad {
 };
 
 inline void log_tile_vertex(const TileVertex *tile_vertex) {
-  printf("  %f %f %f, %f %f, %f\n", tile_vertex->position[0], tile_vertex->position[1], tile_vertex->position[2],
+  printf("  %f %f %f, %f %f, %u\n", tile_vertex->position[0], tile_vertex->position[1], tile_vertex->position[2],
          tile_vertex->texture_coords[0], tile_vertex->texture_coords[1], tile_vertex->texture_id);
 }
 
