@@ -15,6 +15,7 @@ struct Tilemap {
   u32 level_width;
   u32 level_height;
   u8 *level_map;
+  glm::vec3 top_left;
 };
 
 struct TileQuad {
@@ -29,8 +30,14 @@ inline void log_tile_vertex(const TileVertex *tile_vertex) {
          tile_vertex->texture_coords[0], tile_vertex->texture_coords[1], tile_vertex->texture_id);
 }
 
-Tilemap new_tilemap(const u32 width, const u32 height, const u8 *map);
-void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vertices);
+// by default, assume the center of the tilemap is at (0,0) in its local coordinate system
+inline Tilemap new_tilemap(const u32 width, const u32 height, u8 *map) {
+  glm::vec3 top_left;
+  top_left.x = -0.5f * TILE_SIDE_LENGTH_METERS * width;
+  top_left.y = 0.5f * TILE_SIDE_LENGTH_METERS * height;
+
+  return {.level_width = width, .level_height = height, .level_map = map, .top_left = top_left};
+}
 
 static inline u8 tilemap_get_at(const Tilemap *tilemap, u32 x, u32 y) {
   return tilemap->level_map[y * tilemap->level_width + x];
@@ -40,4 +47,6 @@ static inline u8 tilemap_get_at(const Tilemap *tilemap, u32 x, u32 y) {
 // pos is in the same coordinate system the caller is using for the map
 // pos is the position of the colliding object
 // unclear if it would be better to parametrize using the already processed position within the tilemap
-bool tilemap_check_collision(const Tilemap *tilemap, const glm::vec3 tilemap_top_left, glm::vec3 pos, glm::vec3 size);
+bool tilemap_check_collision(const Tilemap *tilemap, glm::vec3 pos, glm::vec3 size);
+
+void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vertices);

@@ -67,6 +67,7 @@ Camera new_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direct
     break;
   }
 
+  camera.y_needs_inverted = false;
   return camera;
 }
 

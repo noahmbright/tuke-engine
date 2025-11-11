@@ -21,6 +21,8 @@ target_link_libraries(opengl_test PRIVATE engine)
 
 add_executable(top_down_something ${CMAKE_SOURCE_DIR}/app/top_down_something/main.cpp)
 target_link_libraries(top_down_something PRIVATE engine)
+target_compile_options(top_down_something  PRIVATE -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined)
+target_link_options(top_down_something  PRIVATE -fsanitize=address,undefined)
 
 
 file(GLOB_RECURSE PONG_SOURCE_FILES

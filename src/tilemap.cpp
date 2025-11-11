@@ -55,9 +55,12 @@ void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vert
   }
 }
 
-bool tilemap_check_collision(const Tilemap *tilemap, const glm::vec3 tilemap_top_left, glm::vec3 pos, glm::vec3 size) {
+// tilemap top left is the position of the tilemap's topleft corner in some coordinate system, e.g. the entire world
+// pos is the position of the colliding object in that same coordinate system
+// idea is to allow for multiple tilemaps to be drawn together in the same world
+bool tilemap_check_collision(const Tilemap *tilemap, glm::vec3 pos, glm::vec3 size) {
 
-  glm::vec3 delta_r = pos - tilemap_top_left;
+  glm::vec3 delta_r = pos - tilemap->top_left;
   delta_r.y = -delta_r.y; // tile index grows as we go downward in view space
   glm::vec3 half_size = 0.5f * size;
   f32 x0 = delta_r.x - half_size.x;
@@ -75,7 +78,7 @@ bool tilemap_check_collision(const Tilemap *tilemap, const glm::vec3 tilemap_top
 #if 0
   printf("tilemap_check_collision:\n");
   printf("  pos is (%4.3f, %4.3f), size is (%4.3f, %4.3f), tilemap_top_left is (%4.3f, %4.3f)\n", pos.x, pos.y, size.x,
-         size.y, tilemap_top_left.x, tilemap_top_left.y);
+         size.y, tilemap->top_left.x, tilemap->top_left.y);
   printf("  delta r is (%4.3f, %4.3f)\n  iterating nx in [%u, %u), ny in [%u, %u)\n", delta_r.x, delta_r.y, nx0, nx1,
          ny0, ny1);
 #endif
