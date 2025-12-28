@@ -1,5 +1,11 @@
 #pragma once
 
+// Casey explaining the GJK algorithm
+// https://www.youtube.com/watch?v=Qupqu1xe7Io
+//
+// Decent Minkowski blog
+// https://www.spaderthomas.com/minkowski/
+
 #include "statistics.h"
 #include "tuke_engine.h"
 #include <math.h>

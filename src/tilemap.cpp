@@ -68,9 +68,12 @@ bool tilemap_check_collision(const Tilemap *tilemap, glm::vec3 pos, glm::vec3 si
   f32 y0 = delta_r.y - half_size.y;
   f32 y1 = delta_r.y + half_size.y;
 
+  // Integer indices into the tilemap height/width
+  // Lower bounds
   u32 nx0 = (x0 < EPSILON) ? 0 : x0 / TILE_SIDE_LENGTH_METERS;
   u32 ny0 = (y0 < EPSILON) ? 0 : y0 / TILE_SIDE_LENGTH_METERS;
 
+  // Upper bounds
   u32 nx1 = (x1 / TILE_SIDE_LENGTH_METERS) + 1;
   u32 ny1 = (y1 / TILE_SIDE_LENGTH_METERS) + 1;
 
@@ -83,14 +86,14 @@ bool tilemap_check_collision(const Tilemap *tilemap, glm::vec3 pos, glm::vec3 si
          ny0, ny1);
 #endif
 
-  bool collided = false;
   for (u32 ny = ny0; ny < ny1; ny++) {
     for (u32 nx = nx0; nx < nx1; nx++) {
+      // TODO will probably want to change this condition from == 1 to something like is_collidable()
       if (tilemap_get_at(tilemap, nx, ny) == 1) {
         return true;
       }
     }
   }
 
-  return collided;
+  return false;
 }

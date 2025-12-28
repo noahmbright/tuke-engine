@@ -42,6 +42,7 @@ void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
       [INPUT_KEY_S] = GLFW_KEY_S,
       [INPUT_KEY_D] = GLFW_KEY_D,
       [INPUT_KEY_H] = GLFW_KEY_H,
+      [INPUT_KEY_T] = GLFW_KEY_T,
 
       [INPUT_KEY_LEFT_ARROW] = GLFW_KEY_LEFT,
       [INPUT_KEY_RIGHT_ARROW] = GLFW_KEY_RIGHT,

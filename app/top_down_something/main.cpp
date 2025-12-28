@@ -19,6 +19,12 @@ int main() {
   TileVertex *tilemap_vertices = (TileVertex *)malloc(tilemap_vertices_sizes_bytes);
   tilemap_generate_vertices(&tilemap, tilemap_vertices);
 
+  u32 num_tiles1 = tilemap.level_height * tilemap.level_width;
+  u32 num_vertices1 = num_tiles1 * 6;
+  u32 tilemap_vertices_sizes_bytes1 = num_vertices1 * sizeof(TileVertex);
+  TileVertex *tilemap1_vertices = (TileVertex *)malloc(tilemap_vertices_sizes_bytes1);
+  tilemap_generate_vertices(&tilemap1, tilemap1_vertices);
+
   Camera camera = new_camera(CAMERA_TYPE_2D);
   camera.position.z = 15.0f;
 
@@ -36,6 +42,10 @@ int main() {
 
   OpenGLMesh tilemap_mesh =
       create_opengl_mesh_with_vertex_layout((f32 *)tilemap_vertices, tilemap_vertices_sizes_bytes, num_vertices,
+                                            VERTEX_LAYOUT_BINDING0VERTEX_VEC2_VEC3_UINT, GL_STATIC_DRAW);
+
+  OpenGLMesh tilemap1_mesh =
+      create_opengl_mesh_with_vertex_layout((f32 *)tilemap1_vertices, tilemap_vertices_sizes_bytes1, num_vertices1,
                                             VERTEX_LAYOUT_BINDING0VERTEX_VEC2_VEC3_UINT, GL_STATIC_DRAW);
 
   u32 vp_ubo = create_opengl_ubo(sizeof(VPUniform), GL_DYNAMIC_DRAW);
@@ -74,6 +84,21 @@ int main() {
       .tilemap_material = tilemap_material,
   };
 
+  // lol
+  Scene0Data scene1{
+      .player_pos = camera.position,
+      .camera = camera,
+      .tilemap = &tilemap1,
+      .vp_ubo = vp_ubo,
+      .player_ubo = player_ubo,
+      .player_mesh = player_mesh,
+      .player_material = player_material,
+      .tilemap_mesh = tilemap1_mesh,
+      .tilemap_material = tilemap_material,
+  };
+
+  Scene0Data *scene = &scene0;
+
   // main loop
   f64 t0 = glfwGetTime();
   while (glfwWindowShouldClose(window) == false) {
@@ -82,12 +107,16 @@ int main() {
     t0 = t;
     update_key_inputs_glfw(&inputs, window);
 
+    if (key_pressed(&inputs, INPUT_KEY_T)) {
+      scene = (scene == &scene0) ? &scene1 : &scene0;
+    }
+
     glClear(GL_COLOR_BUFFER_BIT);
     glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);
     glViewport(0, 0, global_state.window_width, global_state.window_height);
 
-    scene0_update(&scene0, &global_state, &inputs, dt);
-    scene0_draw(&scene0);
+    scene0_update(scene, &global_state, &inputs, dt);
+    scene0_draw(scene);
 
     // glBindFramebuffer(GL_FRAMEBUFFER, 0);
     // glClear(GL_COLOR_BUFFER_BIT);

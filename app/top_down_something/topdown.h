@@ -54,6 +54,8 @@ inline u8 tilemap1_data[width_in_tiles1 * height_in_tiles1] = {
     1, 1, 1, 1,   1, 1, 1, 1,   1, 1, 1, 1,   1, 1, 1, 1,
 };
 
+inline Tilemap tilemap1 = new_tilemap(width_in_tiles1, height_in_tiles1, &tilemap1_data[0]);
+
 const f32 player_vertices[] = {
   // x,y,z            u, v
   -0.5f, -0.5f,  0.0f,  0.0f, 0.0f, // BL
@@ -64,13 +66,6 @@ const f32 player_vertices[] = {
    0.5f, -0.5f,  0.0f,  1.0f, 0.0f, // BR
   -0.5f, -0.5f,  0.0f,  0.0f, 0.0f, // BL
 };
-
-const Tilemap tilemap1 = {
-    .level_map = &tilemap1_data[0],
-    .level_width = width_in_tiles1,
-    .level_height = height_in_tiles1
-};
-
 // clang-format on
 
 inline void buffer_vp_matrix_to_gl_ubo(const Camera *camera, u32 ubo, u32 window_width, u32 window_height) {
@@ -103,13 +98,27 @@ inline glm::vec3 inputs_to_movement_vector(const Inputs *inputs) {
 }
 
 inline void move_camera_in_tilemap(Camera *camera, const Tilemap *tilemap, const Inputs *inputs, f32 dt) {
+
   const f32 speed = 5.0f;
+  const glm::vec3 tile_size(PLAYER_SIDE_LENGTH_METERS);
+
   glm::vec3 last_camera_pos = camera->position;
-  move_camera(camera, speed * (f32)dt * inputs_to_movement_vector(inputs));
-  camera->position.z = clamp_f32(camera->position.z, 1.0f, CAMERA_PERSPECTIVE_PROJECTION_FAR_Z - EPSILON);
-  if (tilemap_check_collision(tilemap, camera->position, glm::vec3(PLAYER_SIDE_LENGTH_METERS))) {
-    camera->position = last_camera_pos;
+  glm::vec3 input_movement_vector = speed * dt * inputs_to_movement_vector(inputs);
+  glm::vec3 final_movement_vector(0.0f);
+
+  glm::vec3 x_moved_position = last_camera_pos + glm::vec3(input_movement_vector.x, 0.0f, 0.0f);
+  if (!tilemap_check_collision(tilemap, x_moved_position, tile_size)) {
+    final_movement_vector.x = input_movement_vector.x;
   }
+
+  glm::vec3 y_moved_position = last_camera_pos + glm::vec3(0.0f, input_movement_vector.y, 0.0f);
+  if (!tilemap_check_collision(tilemap, y_moved_position, tile_size)) {
+    final_movement_vector.y = input_movement_vector.y;
+  }
+
+  camera->position.z = clamp_f32(camera->position.z, 1.0f, CAMERA_PERSPECTIVE_PROJECTION_FAR_Z - EPSILON);
+
+  move_camera(camera, final_movement_vector);
 }
 
 struct GlobalState {
