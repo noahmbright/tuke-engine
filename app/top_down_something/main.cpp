@@ -72,30 +72,39 @@ int main() {
   OpenGLMaterial fullscreen_quad_material = create_opengl_material(fullscreen_quad_program);
   fullscreen_quad_material.texture = fbo_texture;
 
-  Scene0Data scene0{.player_pos = camera.position,
-                    .camera = camera,
-                    .tilemap = &tilemap,
-                    .vp_ubo = vp_ubo,
-                    .player_ubo = player_ubo,
-                    .player_mesh = player_mesh,
-                    .player_material = player_material,
-                    .tilemap_mesh = tilemap_mesh,
-                    .tilemap_material = tilemap_material,
-                    .other_scene = SCENE1,
-                    .just_transitioned = false};
+  OverworldSceneData scene0_data{.player_pos = camera.position,
+                                 .camera = camera,
+                                 .tilemap = &tilemap,
+                                 .vp_ubo = vp_ubo,
+                                 .player_ubo = player_ubo,
+                                 .player_mesh = player_mesh,
+                                 .player_material = player_material,
+                                 .tilemap_mesh = tilemap_mesh,
+                                 .tilemap_material = tilemap_material,
+                                 .other_scene = SCENE1,
+                                 .just_transitioned = false};
 
-  // lol
-  Scene0Data scene1{.player_pos = camera.position,
-                    .camera = camera,
-                    .tilemap = &tilemap1,
-                    .vp_ubo = vp_ubo,
-                    .player_ubo = player_ubo,
-                    .player_mesh = player_mesh,
-                    .player_material = player_material,
-                    .tilemap_mesh = tilemap1_mesh,
-                    .tilemap_material = tilemap_material,
-                    .other_scene = SCENE0,
-                    .just_transitioned = false};
+  OverworldSceneData scene1_data{.player_pos = camera.position,
+                                 .camera = camera,
+                                 .tilemap = &tilemap1,
+                                 .vp_ubo = vp_ubo,
+                                 .player_ubo = player_ubo,
+                                 .player_mesh = player_mesh,
+                                 .player_material = player_material,
+                                 .tilemap_mesh = tilemap1_mesh,
+                                 .tilemap_material = tilemap_material,
+                                 .other_scene = SCENE0,
+                                 .just_transitioned = false};
+
+  Scene scene0{};
+  scene0.render = scene0_draw;
+  scene0.update = scene0_update;
+  scene0.data = &scene0_data;
+
+  Scene scene1{};
+  scene1.render = scene0_draw;
+  scene1.update = scene0_update;
+  scene1.data = &scene1_data;
 
   global_state.scene_manager.scene_registry[SCENE0] = &scene0;
   global_state.scene_manager.scene_registry[SCENE1] = &scene1;
@@ -113,10 +122,10 @@ int main() {
     glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);
     glViewport(0, 0, global_state.window_width, global_state.window_height);
 
-    Scene0Data *current_scene = get_current_scene(&global_state.scene_manager);
+    Scene *current_scene = get_current_scene(&global_state.scene_manager);
     assert(current_scene != NULL);
-    scene0_update(current_scene, &global_state, dt);
-    scene0_draw(current_scene);
+    current_scene->update(current_scene->data, &global_state, dt);
+    current_scene->render(current_scene->data);
     handle_scene_action(&global_state.scene_manager);
 
     glfwSwapBuffers(window);

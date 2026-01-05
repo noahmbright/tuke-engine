@@ -100,7 +100,7 @@ inline glm::vec3 inputs_to_movement_vector(const Inputs *inputs) {
 
 enum SceneID { SCENE0, SCENE1, NUM_SCENES, SCENE_NONE };
 
-struct Scene0Data {
+struct OverworldSceneData {
   glm::vec3 player_pos;
   Camera camera;
   Tilemap *tilemap;
@@ -120,21 +120,27 @@ struct Scene0Data {
 
 enum SceneAction { SCENE_ACTION_NONE, SCENE_ACTION_SET, SCENE_ACTION_PUSH, SCENE_ACTION_POP };
 
-// top points to the top valid scene, the current scene. Not one past the end
+struct GlobalState;
+
+struct Scene {
+  void (*update)(void *, GlobalState *, f32 dt);
+  void (*render)(const void *);
+  void *data;
+};
+
+// top points to the top valid scene, i.e., the current scene. Not one past the end.
 struct SceneManager {
-  Scene0Data *scene_registry[NUM_SCENES];
-  Scene0Data *stack[MAX_SCENES];
+  Scene *scene_registry[NUM_SCENES];
+  Scene *stack[MAX_SCENES];
   u32 top;
 
   SceneAction pending_scene_action;
   SceneID pending_scene;
 };
 
-inline Scene0Data *get_current_scene(const SceneManager *scene_manager) {
-  return scene_manager->stack[scene_manager->top];
-}
+inline Scene *get_current_scene(const SceneManager *scene_manager) { return scene_manager->stack[scene_manager->top]; }
 
-inline void push_scene(SceneManager *scene_manager, Scene0Data *scene_data) {
+inline void push_scene(SceneManager *scene_manager, Scene *scene_data) {
   assert(scene_manager->top + 1 < MAX_SCENES);
   scene_manager->stack[++scene_manager->top] = scene_data;
 }
@@ -151,14 +157,14 @@ inline void handle_scene_action(SceneManager *scene_manager) {
     return;
 
   case SCENE_ACTION_SET: {
-    Scene0Data *next_scene = scene_manager->scene_registry[scene_manager->pending_scene];
+    Scene *next_scene = scene_manager->scene_registry[scene_manager->pending_scene];
     scene_manager->stack[scene_manager->top] = next_scene;
     // TODO exit current scene, enter next scene
     break;
   }
 
   case SCENE_ACTION_PUSH: {
-    Scene0Data *next_scene = scene_manager->scene_registry[scene_manager->pending_scene];
+    Scene *next_scene = scene_manager->scene_registry[scene_manager->pending_scene];
     push_scene(scene_manager, next_scene);
     break;
   }
@@ -177,10 +183,13 @@ struct GlobalState {
   Inputs inputs;
 };
 
-inline void move_camera_in_tilemap(Camera *camera, const Tilemap *tilemap, GlobalState *global_state, f32 dt) {
+inline void move_camera_in_tilemap(OverworldSceneData *scene_data, GlobalState *global_state, f32 dt) {
 
   const f32 speed = 5.0f;
   const glm::vec3 tile_size(PLAYER_SIDE_LENGTH_METERS);
+
+  Camera *camera = &scene_data->camera;
+  Tilemap *tilemap = scene_data->tilemap;
 
   glm::vec3 last_camera_pos = camera->position;
   glm::vec3 input_movement_vector = speed * dt * inputs_to_movement_vector(&global_state->inputs);
@@ -200,32 +209,34 @@ inline void move_camera_in_tilemap(Camera *camera, const Tilemap *tilemap, Globa
   move_camera(camera, final_movement_vector);
 
   // TODO Define magic numbers in the tilemap
-  Scene0Data *current_scene = get_current_scene(&global_state->scene_manager);
   bool should_transition = (x_tile == 2 || y_tile == 2 || key_pressed(&global_state->inputs, INPUT_KEY_T));
-  if (!current_scene->just_transitioned && should_transition) {
-    printf("Transitioning scenes\n");
-    current_scene->just_transitioned = true;
-    global_state->scene_manager.pending_scene = current_scene->other_scene;
+  if (!scene_data->just_transitioned && should_transition) {
+    scene_data->just_transitioned = true;
+    global_state->scene_manager.pending_scene = scene_data->other_scene;
     global_state->scene_manager.pending_scene_action = SCENE_ACTION_SET;
   }
-  current_scene->just_transitioned = should_transition;
+  scene_data->just_transitioned = should_transition;
 }
 
 // TODO separate player position and camera position
 // TODO will i consider the players position within a tilemap? within the whole world?
-inline void scene0_update(Scene0Data *scene, GlobalState *global_state, f32 dt) {
-  move_camera_in_tilemap(&scene->camera, scene->tilemap, global_state, dt);
+inline void scene0_update(void *scene_data, GlobalState *global_state, f32 dt) {
+  // overworld_scene_data
+  OverworldSceneData *overworld_sd = (OverworldSceneData *)scene_data;
+  move_camera_in_tilemap(overworld_sd, global_state, dt);
 
-  glm::vec3 camera_xy(scene->camera.position.x, scene->camera.position.y, 0.0f);
+  glm::vec3 camera_xy(overworld_sd->camera.position.x, overworld_sd->camera.position.y, 0.0f);
   glm::mat4 player_model = glm::translate(glm::mat4(1.0f), camera_xy);
   player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
-  glBindBuffer(GL_UNIFORM_BUFFER, scene->player_ubo);
+  glBindBuffer(GL_UNIFORM_BUFFER, overworld_sd->player_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
-  buffer_vp_matrix_to_gl_ubo(&scene->camera, scene->vp_ubo, global_state->window_width, global_state->window_height);
+  buffer_vp_matrix_to_gl_ubo(&overworld_sd->camera, overworld_sd->vp_ubo, global_state->window_width,
+                             global_state->window_height);
 }
 
-inline void scene0_draw(const Scene0Data *scene) {
+inline void scene0_draw(const void *scene_data) {
+  OverworldSceneData *overworld_data = (OverworldSceneData *)scene_data;
   glClear(GL_COLOR_BUFFER_BIT);
-  draw_opengl_mesh(&scene->tilemap_mesh, scene->tilemap_material);
-  draw_opengl_mesh(&scene->player_mesh, scene->player_material);
+  draw_opengl_mesh(&overworld_data->tilemap_mesh, overworld_data->tilemap_material);
+  draw_opengl_mesh(&overworld_data->player_mesh, overworld_data->player_material);
 }
