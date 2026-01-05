@@ -47,6 +47,6 @@ static inline u8 tilemap_get_at(const Tilemap *tilemap, u32 x, u32 y) {
 // pos is in the same coordinate system the caller is using for the map
 // pos is the position of the colliding object
 // unclear if it would be better to parametrize using the already processed position within the tilemap
-bool tilemap_check_collision(const Tilemap *tilemap, glm::vec3 pos, glm::vec3 size);
+int tilemap_check_collision(const Tilemap *tilemap, glm::vec3 pos, glm::vec3 size);
 
 void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vertices);

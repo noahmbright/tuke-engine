@@ -10,8 +10,11 @@
 
 int main() {
   GLFWwindow *window = new_window(false /* is vulkan */);
+
   GlobalState global_state;
   glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);
+  init_inputs(&global_state.inputs);
+  memset(&global_state.scene_manager, 0, sizeof(SceneManager));
 
   u32 num_tiles = tilemap.level_height * tilemap.level_width;
   u32 num_vertices = num_tiles * 6;
@@ -27,9 +30,6 @@ int main() {
 
   Camera camera = new_camera(CAMERA_TYPE_2D);
   camera.position.z = 15.0f;
-
-  Inputs inputs;
-  init_inputs(&inputs);
 
   u32 tilemap_program =
       shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_TILEMAP_VERT, SHADER_HANDLE_COMMON_TILEMAP_FRAG);
@@ -72,32 +72,34 @@ int main() {
   OpenGLMaterial fullscreen_quad_material = create_opengl_material(fullscreen_quad_program);
   fullscreen_quad_material.texture = fbo_texture;
 
-  Scene0Data scene0{
-      .player_pos = camera.position,
-      .camera = camera,
-      .tilemap = &tilemap,
-      .vp_ubo = vp_ubo,
-      .player_ubo = player_ubo,
-      .player_mesh = player_mesh,
-      .player_material = player_material,
-      .tilemap_mesh = tilemap_mesh,
-      .tilemap_material = tilemap_material,
-  };
+  Scene0Data scene0{.player_pos = camera.position,
+                    .camera = camera,
+                    .tilemap = &tilemap,
+                    .vp_ubo = vp_ubo,
+                    .player_ubo = player_ubo,
+                    .player_mesh = player_mesh,
+                    .player_material = player_material,
+                    .tilemap_mesh = tilemap_mesh,
+                    .tilemap_material = tilemap_material,
+                    .other_scene = SCENE1,
+                    .just_transitioned = false};
 
   // lol
-  Scene0Data scene1{
-      .player_pos = camera.position,
-      .camera = camera,
-      .tilemap = &tilemap1,
-      .vp_ubo = vp_ubo,
-      .player_ubo = player_ubo,
-      .player_mesh = player_mesh,
-      .player_material = player_material,
-      .tilemap_mesh = tilemap1_mesh,
-      .tilemap_material = tilemap_material,
-  };
+  Scene0Data scene1{.player_pos = camera.position,
+                    .camera = camera,
+                    .tilemap = &tilemap1,
+                    .vp_ubo = vp_ubo,
+                    .player_ubo = player_ubo,
+                    .player_mesh = player_mesh,
+                    .player_material = player_material,
+                    .tilemap_mesh = tilemap1_mesh,
+                    .tilemap_material = tilemap_material,
+                    .other_scene = SCENE0,
+                    .just_transitioned = false};
 
-  Scene0Data *scene = &scene0;
+  global_state.scene_manager.scene_registry[SCENE0] = &scene0;
+  global_state.scene_manager.scene_registry[SCENE1] = &scene1;
+  global_state.scene_manager.stack[0] = &scene0;
 
   // main loop
   f64 t0 = glfwGetTime();
@@ -105,22 +107,17 @@ int main() {
     f64 t = glfwGetTime();
     f64 dt = t - t0;
     t0 = t;
-    update_key_inputs_glfw(&inputs, window);
-
-    if (key_pressed(&inputs, INPUT_KEY_T)) {
-      scene = (scene == &scene0) ? &scene1 : &scene0;
-    }
+    update_key_inputs_glfw(&global_state.inputs, window);
 
     glClear(GL_COLOR_BUFFER_BIT);
     glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);
     glViewport(0, 0, global_state.window_width, global_state.window_height);
 
-    scene0_update(scene, &global_state, &inputs, dt);
-    scene0_draw(scene);
-
-    // glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    // glClear(GL_COLOR_BUFFER_BIT);
-    // draw_opengl_mesh(&fullscreen_quad_mesh, fullscreen_quad_material);
+    Scene0Data *current_scene = get_current_scene(&global_state.scene_manager);
+    assert(current_scene != NULL);
+    scene0_update(current_scene, &global_state, dt);
+    scene0_draw(current_scene);
+    handle_scene_action(&global_state.scene_manager);
 
     glfwSwapBuffers(window);
   }
