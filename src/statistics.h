@@ -11,9 +11,7 @@ struct RNG {
 };
 
 // rotate left
-static inline u64 rotl(const u64 x, i32 k) {
-  return (x << k) | (x >> (64 - k));
-}
+static inline u64 rotl(const u64 x, i32 k) { return (x << k) | (x >> (64 - k)); }
 
 static inline u64 random_u64_splitmix64(RNG *rng) {
   rng->state += 0x9e3779b97f4a7c15;
@@ -60,22 +58,20 @@ static inline f32 random_f32_xoroshiro128_plus(RNG *rng) {
   return n * x;
 }
 
-static inline f32 random_f32_in_range_xoroshiro128_plus(RNG *rng, f32 min,
-                                                        f32 max) {
+static inline f32 random_f32_in_range_xoroshiro128_plus(RNG *rng, f32 min, f32 max) {
   f32 rand = random_f32_xoroshiro128_plus(rng);
   return (max - min) * rand + min;
 }
 
-// noise
+// Noise
+// f(t) = 3t^2 - 2t^3
+// f'(t) = 6t - 6t^2
+//  derivative 0 at t = 0 and 1
 static inline f32 quadratic_fade(f32 t) { return t * t * (3 - 2 * t); }
 
-static inline f32 quintic_fade(f32 t) {
-  return t * t * t * (t * (6.0f * t - 15.0f) + 10.0f * t);
-}
-
-// alias method
+// Alias method
 // https://en.wikipedia.org/wiki/Alias_method
-// potentially requires freed after usage using destroy_alias_method
+// Potentially requires freed after usage using destroy_alias_method
 // TODO reconsider how to manage the allocation of static storage
 struct AliasMethod {
   RNG rng;
@@ -91,6 +87,5 @@ struct AliasMethod {
 
 u32 draw_alias_method(AliasMethod *alias_method);
 void destroy_alias_method(AliasMethod *alias_method);
-void init_alias_method(AliasMethod *alias_method, u32 n, const f32 *weights,
-                       u64 seed);
+void init_alias_method(AliasMethod *alias_method, u32 n, const f32 *weights, u64 seed);
 void log_alias_method(const AliasMethod *alias_method);

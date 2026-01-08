@@ -23,13 +23,14 @@ inline u32 clamp_u32(u32 x, u32 min, u32 max) {
   return x;
 }
 
-inline u32 clamp_f32(f32 x, f32 min, f32 max) {
+inline f32 clamp_f32(f32 x, f32 min, f32 max) {
   if (x < min) {
     return min;
   }
   if (x > max) {
     return max;
   }
+
   return x;
 }
 

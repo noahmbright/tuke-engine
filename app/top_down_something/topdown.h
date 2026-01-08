@@ -13,6 +13,11 @@
 const u32 width_in_tiles = 9;
 const u32 height_in_tiles = 20;
 
+const f32 BULLET_HELL_ARENA_WIDTH = 10.0f;
+const f32 BULLET_HELL_ARENA_HEIGHT = 8.0f;
+const f32 BULLET_HELL_ARENA_HALF_WIDTH = BULLET_HELL_ARENA_WIDTH / 2.0;
+const f32 BULLET_HELL_ARENA_HALF_HEIGHT = BULLET_HELL_ARENA_HEIGHT / 2.0;
+
 // clang-format off
 inline u8 tilemap_data[width_in_tiles * height_in_tiles] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1,
@@ -58,7 +63,7 @@ inline u8 tilemap1_data[width_in_tiles1 * height_in_tiles1] = {
 inline Tilemap tilemap1 = new_tilemap(width_in_tiles1, height_in_tiles1, &tilemap1_data[0]);
 
 const f32 player_vertices[] = {
-  // x,y,z            u, v
+  // x,y,z              u, v
   -0.5f, -0.5f,  0.0f,  0.0f, 0.0f, // BL
   -0.5f,  0.5f,  0.0f,  0.0f, 1.0f, // TL
    0.5f,  0.5f,  0.0f,  1.0f, 1.0f, // TR
@@ -66,6 +71,17 @@ const f32 player_vertices[] = {
    0.5f,  0.5f,  0.0f,  1.0f, 1.0f, // TR
    0.5f, -0.5f,  0.0f,  1.0f, 0.0f, // BR
   -0.5f, -0.5f,  0.0f,  0.0f, 0.0f, // BL
+};
+
+const f32 arena_vertices[] = {
+  // x,y,z              u, v
+  -BULLET_HELL_ARENA_HALF_WIDTH, -BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  0.0f, 0.0f, // BL
+  -BULLET_HELL_ARENA_HALF_WIDTH,  BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  0.0f, 1.0f, // TL
+   BULLET_HELL_ARENA_HALF_WIDTH,  BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  1.0f, 1.0f, // TR
+
+   BULLET_HELL_ARENA_HALF_WIDTH,  BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  1.0f, 1.0f, // TR
+   BULLET_HELL_ARENA_HALF_WIDTH, -BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  1.0f, 0.0f, // BR
+  -BULLET_HELL_ARENA_HALF_WIDTH, -BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  0.0f, 0.0f, // BL
 };
 // clang-format on
 
@@ -98,7 +114,7 @@ inline glm::vec3 inputs_to_movement_vector(const Inputs *inputs) {
   return movement_vector;
 }
 
-enum SceneID { SCENE0, SCENE1, NUM_SCENES, SCENE_NONE };
+enum SceneID { SCENE0, SCENE1, SCENE_BULLET_HELL, NUM_SCENES, SCENE_NONE };
 
 struct OverworldSceneData {
   glm::vec3 player_pos;
@@ -107,7 +123,7 @@ struct OverworldSceneData {
 
   u32 vp_ubo;
 
-  u32 player_ubo;
+  u32 player_model_ubo;
   OpenGLMesh player_mesh;
   OpenGLMaterial player_material;
 
@@ -116,6 +132,22 @@ struct OverworldSceneData {
 
   SceneID other_scene;
   bool just_transitioned;
+};
+
+struct BulletHellSceneData {
+  // player_pos is the position within the bullet hell arena
+  // The arena's center is (0.0, 0.0)
+  glm::vec3 player_pos;
+
+  Camera camera;
+  u32 vp_ubo;
+
+  u32 player_model_ubo;
+  OpenGLMesh player_mesh;
+  OpenGLMaterial player_material;
+
+  OpenGLMesh arena_mesh;
+  OpenGLMaterial arena_material;
 };
 
 enum SceneAction { SCENE_ACTION_NONE, SCENE_ACTION_SET, SCENE_ACTION_PUSH, SCENE_ACTION_POP };
@@ -228,7 +260,7 @@ inline void scene0_update(void *scene_data, GlobalState *global_state, f32 dt) {
   glm::vec3 camera_xy(overworld_sd->camera.position.x, overworld_sd->camera.position.y, 0.0f);
   glm::mat4 player_model = glm::translate(glm::mat4(1.0f), camera_xy);
   player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
-  glBindBuffer(GL_UNIFORM_BUFFER, overworld_sd->player_ubo);
+  glBindBuffer(GL_UNIFORM_BUFFER, overworld_sd->player_model_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
   buffer_vp_matrix_to_gl_ubo(&overworld_sd->camera, overworld_sd->vp_ubo, global_state->window_width,
                              global_state->window_height);
@@ -239,4 +271,45 @@ inline void scene0_draw(const void *scene_data) {
   glClear(GL_COLOR_BUFFER_BIT);
   draw_opengl_mesh(&overworld_data->tilemap_mesh, overworld_data->tilemap_material);
   draw_opengl_mesh(&overworld_data->player_mesh, overworld_data->player_material);
+}
+
+inline void bullet_hell_move_player(BulletHellSceneData *scene_data, GlobalState *global_state, f32 dt) {
+
+  const f32 X_BOUNDARY = 0.5 * (BULLET_HELL_ARENA_WIDTH - PLAYER_SIDE_LENGTH_METERS);
+  const f32 Y_BOUNDARY = 0.5 * (BULLET_HELL_ARENA_HEIGHT - PLAYER_SIDE_LENGTH_METERS);
+
+  const f32 speed = 5.0f;
+  glm::vec3 input_movement_vector = speed * dt * inputs_to_movement_vector(&global_state->inputs);
+
+  glm::vec3 *player_pos = &scene_data->player_pos;
+
+  f32 next_x = player_pos->x + input_movement_vector.x;
+  f32 clamped_next_x = clamp_f32(next_x, -X_BOUNDARY, X_BOUNDARY);
+
+  f32 next_y = player_pos->y + input_movement_vector.y;
+  f32 clamped_next_y = clamp_f32(next_y, -Y_BOUNDARY, Y_BOUNDARY);
+
+  player_pos->x = clamped_next_x;
+  player_pos->y = clamped_next_y;
+}
+
+inline void bullet_hell_update(void *scene_data, GlobalState *global_state, f32 dt) {
+  BulletHellSceneData *data = (BulletHellSceneData *)scene_data;
+
+  bullet_hell_move_player(data, global_state, dt);
+
+  glm::mat4 player_model = glm::translate(glm::mat4(1.0f), data->player_pos);
+  player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
+  glBindBuffer(GL_UNIFORM_BUFFER, data->player_model_ubo);
+  glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
+
+  // TODO: Need window resize callback. Want to only update and rebuffer when there's new data.
+  buffer_vp_matrix_to_gl_ubo(&data->camera, data->vp_ubo, global_state->window_width, global_state->window_height);
+}
+
+inline void bullet_hell_draw(const void *scene_data) {
+  BulletHellSceneData *data = (BulletHellSceneData *)scene_data;
+  glClear(GL_COLOR_BUFFER_BIT);
+  draw_opengl_mesh(&data->arena_mesh, data->arena_material);
+  draw_opengl_mesh(&data->player_mesh, data->player_material);
 }
