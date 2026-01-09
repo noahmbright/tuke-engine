@@ -121,6 +121,9 @@ TokenType string_slice_to_keyword_or_identifier(const char *string, u32 length) 
   if (length == 12 && strncmp(string, "VERTEX_INDEX", length) == 0) {
     return TOKEN_TYPE_DIRECTIVE_VERTEX_INDEX;
   }
+  if (length == 14 && strncmp(string, "INSTANCE_INDEX", length) == 0) {
+    return TOKEN_TYPE_DIRECTIVE_INSTANCE_INDEX;
+  }
 
   return TOKEN_TYPE_TEXT;
 }
@@ -483,6 +486,23 @@ void parse_vertex_index_directive(Parser *parser, TemplateStringSlice *template_
   if (current_token.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
     report_parser_error(parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
                         "Expected DOUBLE_R_BRACE after VERTEX_INDEX in vertex index directive, got %s",
+                        token_type_to_string[current_token.type]);
+    return;
+  }
+
+  current_token = parser_advance_and_get_next_token(parser);
+  template_string_slice->end = current_token.start;
+}
+
+// {{ VERSION }}
+void parse_instance_index_directive(Parser *parser, TemplateStringSlice *template_string_slice) {
+  Token current_token = parser_get_current_token(parser);
+  assert(current_token.type == TOKEN_TYPE_DIRECTIVE_INSTANCE_INDEX);
+
+  current_token = parser_advance_and_get_next_token(parser);
+  if (current_token.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
+    report_parser_error(parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+                        "Expected DOUBLE_R_BRACE after INSTANCE_INDEX in instance index directive, got %s",
                         token_type_to_string[current_token.type]);
     return;
   }
@@ -1356,6 +1376,13 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
     case TOKEN_TYPE_DIRECTIVE_VERTEX_INDEX: {
       template_string_slice.type = DIRECTIVE_TYPE_VERTEX_INDEX;
       parse_vertex_index_directive(&parser, &template_string_slice);
+      glsl_string_slice.start = parser_get_current_token(&parser).start;
+      break;
+    }
+
+    case TOKEN_TYPE_DIRECTIVE_INSTANCE_INDEX: {
+      template_string_slice.type = DIRECTIVE_TYPE_INSTANCE_INDEX;
+      parse_instance_index_directive(&parser, &template_string_slice);
       glsl_string_slice.start = parser_get_current_token(&parser).start;
       break;
     }

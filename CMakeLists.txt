@@ -41,8 +41,8 @@ file(GLOB_RECURSE REFLECTOR_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/reflector/subprocess.cpp
 )
 
-# reflector stuff
-option(DEBUG_REFLECTOR "Build reflector in debug mode, default to opimized for faster engine dev" OFF)
+# Reflector
+option(DEBUG_REFLECTOR "Build reflector in debug mode, default to optimized for faster engine dev" OFF)
 add_executable(reflector ${REFLECTOR_SOURCE_FILES})
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR DEBUG_REFLECTOR)
     message("Building reflector in debug mode")

@@ -47,6 +47,24 @@ TemplateStringReplacement directive_replacement_vertex_index(GraphicsBackend bac
   return replacement;
 }
 
+TemplateStringReplacement directive_replacement_instance_index(GraphicsBackend backend) {
+  TemplateStringReplacement replacement;
+
+  switch (backend) {
+  case GRAPHICS_BACKEND_OPENGL:
+    replacement.string = "gl_InstanceID";
+    break;
+  case GRAPHICS_BACKEND_VULKAN:
+    replacement.string = "gl_InstanceIndex";
+    break;
+  default:
+    assert(false);
+  }
+
+  replacement.length = strlen(replacement.string);
+  return replacement;
+}
+
 // {{ LOCATION 0 BINDING 0 RATE_VERTEX OFFSET TIGHTLY_PACKED }}
 // turns into
 // layout(location = 0) for both opengl and vulkan
@@ -110,6 +128,8 @@ TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_
     return directive_replacement_version(backend);
   case DIRECTIVE_TYPE_VERTEX_INDEX:
     return directive_replacement_vertex_index(backend);
+  case DIRECTIVE_TYPE_INSTANCE_INDEX:
+    return directive_replacement_instance_index(backend);
   case DIRECTIVE_TYPE_LOCATION:
     return directive_replacement_location(backend);
   case DIRECTIVE_TYPE_SET_BINDING:
