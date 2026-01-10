@@ -2,21 +2,66 @@
 
 #include "glad/gl.h"
 #include "tuke_engine.h"
+#include <OpenGL/OpenGL.h>
+
+#define MAX_NUM_VBOS (4)
+
+enum VBOTypes { VBO_VERTEX, VBO_INSTANCE };
 
 struct OpenGLMesh {
-  const f32 *data;
-  u32 data_num_f32s;
+  u32 vao;
 
-  u32 vao, vbo;
+  u32 vbo; // Goal is to delete this vbo
+  u32 vbos[MAX_NUM_VBOS];
+  u32 num_vbos;
+
   u32 num_vertices;
 };
 
-// OpenGLMaterial, materials for opengl
+inline u32 create_vbo() {
+  u32 vbo;
+  glGenBuffers(1, &vbo);
+  return vbo;
+}
 
+inline u32 allocate_vbo(u32 num_bytes, u32 draw_mode) {
+  u32 vbo;
+  glGenBuffers(1, &vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBufferData(GL_ARRAY_BUFFER, num_bytes, NULL, draw_mode);
+  return vbo;
+}
+
+inline u32 allocate_vbo_with_data(const void *arr, u32 num_bytes, u32 draw_mode) {
+  u32 vbo;
+  glGenBuffers(1, &vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBufferData(GL_ARRAY_BUFFER, num_bytes, arr, draw_mode);
+  return vbo;
+}
+
+inline u32 create_vao() {
+  u32 vao;
+  glGenVertexArrays(1, &vao);
+  return vao;
+}
+
+inline OpenGLMesh create_opengl_mesh(const void *arr, u32 num_bytes, u32 num_vertices, u32 draw_mode) {
+  OpenGLMesh opengl_mesh;
+
+  opengl_mesh.vbo = allocate_vbo_with_data(arr, num_bytes, draw_mode);
+  opengl_mesh.vao = create_vao();
+  opengl_mesh.num_vertices = num_vertices;
+
+  return opengl_mesh;
+}
+
+// OpenGLMaterial
 struct OpenGLMaterial {
   u32 program;
   u32 texture;
   u32 uniform;
+  GLenum primitive;
 };
 
 inline OpenGLMaterial create_opengl_material(u32 program) {
@@ -24,6 +69,7 @@ inline OpenGLMaterial create_opengl_material(u32 program) {
       .program = program,
       .texture = 0,
       .uniform = 0,
+      .primitive = GL_TRIANGLES,
   };
 }
 
@@ -31,6 +77,7 @@ inline u32 create_opengl_ubo(u32 size, u32 draw_mode) {
   u32 ubo;
   glGenBuffers(1, &ubo);
   assert(ubo != 0 && "Tried to bind null UBO");
+
   glBindBuffer(GL_UNIFORM_BUFFER, ubo);
   glBufferData(GL_UNIFORM_BUFFER, size, NULL, draw_mode);
   glBindBuffer(GL_UNIFORM_BUFFER, 0);
@@ -45,41 +92,11 @@ inline void opengl_material_add_uniform(OpenGLMaterial *opengl_material, u32 ubo
     fprintf(stderr, "Uniform block '%s' not found in program %u\n", block_name, opengl_material->program);
     return;
   }
+
   opengl_material->uniform = ubo;
 
   glUniformBlockBinding(opengl_material->program, block_index, binding_point);
   glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, opengl_material->uniform);
-}
-
-inline u32 create_vao() {
-  u32 vao;
-  glGenVertexArrays(1, &vao);
-  return vao;
-}
-
-inline u32 create_vbo() {
-  u32 vbo;
-  glGenBuffers(1, &vbo);
-  return vbo;
-}
-
-inline u32 create_vbo_from_f32_array(const f32 *arr, f32 num_f32s, u32 draw_mode) {
-  u32 vbo = create_vbo();
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, num_f32s, arr, draw_mode);
-  return vbo;
-}
-
-inline OpenGLMesh create_opengl_mesh(const f32 *arr, f32 num_f32s, u32 num_vertices, u32 draw_mode) {
-  OpenGLMesh opengl_mesh;
-
-  opengl_mesh.data = arr;
-  opengl_mesh.data_num_f32s = num_f32s;
-  opengl_mesh.vbo = create_vbo_from_f32_array(arr, num_f32s, draw_mode);
-  opengl_mesh.vao = create_vao();
-  opengl_mesh.num_vertices = num_vertices;
-
-  return opengl_mesh;
 }
 
 inline void draw_opengl_mesh(const OpenGLMesh *opengl_mesh, OpenGLMaterial material) {
@@ -95,7 +112,7 @@ inline void draw_opengl_mesh_instanced(const OpenGLMesh *opengl_mesh, OpenGLMate
   glBindBuffer(GL_UNIFORM_BUFFER, material.uniform);
   glUseProgram(material.program);
   glBindVertexArray(opengl_mesh->vao);
-  glDrawArraysInstanced(GL_TRIANGLES, 0, opengl_mesh->num_vertices, num_instances);
+  glDrawArraysInstanced(material.primitive, 0, opengl_mesh->num_vertices, num_instances);
 }
 
 // textures

@@ -1,6 +1,9 @@
 #pragma once
 
+#include "c_reflector_bringup.h"
+#include "opengl_base.h"
 #include "topdown.h"
+#include <OpenGL/OpenGL.h>
 
 #define MAX_NUM_BULLETS (512)
 
@@ -38,7 +41,10 @@ struct Bullet {
 
 struct BulletManager {
   Bullet bullets[MAX_NUM_BULLETS];
-  glm::vec2 render_positions[MAX_NUM_BULLETS];
+
+  // Render data: xy = position offset, z = quad scale
+  // May need to expand over time
+  glm::vec3 render_data[MAX_NUM_BULLETS];
 
   u32 num_live_bullets;
 };
@@ -58,6 +64,9 @@ struct BulletHellSceneData {
 
   OpenGLMesh arena_mesh;
   OpenGLMaterial arena_material;
+
+  OpenGLMesh bullet_mesh;
+  OpenGLMaterial bullet_material;
 };
 
 inline void bullet_hell_move_player(BulletHellSceneData *scene_data, GlobalState *global_state, f32 dt) {
@@ -91,6 +100,10 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   glBindBuffer(GL_UNIFORM_BUFFER, data->player_model_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
 
+  glBindBuffer(GL_ARRAY_BUFFER, data->bullet_mesh.vbos[VBO_INSTANCE]);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(glm::vec2) * data->bullet_manager->num_live_bullets,
+                  &data->bullet_manager->render_data);
+
   // TODO: Need window resize callback. Want to only update and rebuffer when there's new data.
   buffer_vp_matrix_to_gl_ubo(&data->camera, data->vp_ubo, gs->window_width, gs->window_height);
 }
@@ -99,16 +112,21 @@ inline void bullet_hell_draw(const void *scene_data) {
   BulletHellSceneData *data = (BulletHellSceneData *)scene_data;
   glClear(GL_COLOR_BUFFER_BIT);
   draw_opengl_mesh(&data->arena_mesh, data->arena_material);
-  draw_opengl_mesh_instanced(&data->arena_mesh, data->arena_material, data->bullet_manager->num_live_bullets);
+  draw_opengl_mesh_instanced(&data->bullet_mesh, data->bullet_material, data->bullet_manager->num_live_bullets);
   draw_opengl_mesh(&data->player_mesh, data->player_material);
 }
 
 // inline void spawn_bullets(BulletHellSceneData *scene, u32 num_bullets, BulletPattern pattern) { }
 
 inline BulletHellSceneData new_bullet_hell_scene(u32 vp_ubo) {
+
+  BulletManager *bullet_manager = (BulletManager *)malloc(sizeof(BulletManager));
+  memset(bullet_manager, 0, sizeof(BulletManager));
+
   Camera bullet_hell_camera = new_camera(CAMERA_TYPE_2D);
   bullet_hell_camera.position.z = 15.0f;
 
+  // Player
   u32 player_program =
       shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_PLAYER_VERT, SHADER_HANDLE_COMMON_PLAYER_FRAG);
 
@@ -118,20 +136,37 @@ inline BulletHellSceneData new_bullet_hell_scene(u32 vp_ubo) {
                               "PlayerModel");
   opengl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
-  u32 arena_program =
-      shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_ARENA_VERT, SHADER_HANDLE_TOPDOWN_ARENA_FRAG);
-
   OpenGLMesh bullet_player_mesh = create_opengl_mesh_with_vertex_layout(
       player_vertices, sizeof(player_vertices), 6, VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
   OpenGLMaterial bullet_player_material = create_opengl_material(player_program);
   opengl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_PLAYER_MODEL, "PlayerModel");
   opengl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
+  // Arena
+  u32 arena_program =
+      shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_ARENA_VERT, SHADER_HANDLE_TOPDOWN_ARENA_FRAG);
+
   OpenGLMesh arena_mesh = create_opengl_mesh_with_vertex_layout(arena_vertices, sizeof(arena_vertices), 6,
                                                                 VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
   OpenGLMaterial arena_material = create_opengl_material(arena_program);
   opengl_material_add_uniform(&arena_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
+  // Bullets
+  u32 bullet_program =
+      shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_BULLET_VERT, SHADER_HANDLE_TOPDOWN_BULLET_FRAG);
+
+  OpenGLMesh bullet_mesh;
+  bullet_mesh.vao = create_vao();
+  bullet_mesh.vbos[VBO_INSTANCE] = allocate_vbo(sizeof(bullet_manager->render_data), GL_DYNAMIC_DRAW);
+  bullet_mesh.num_vbos = 1;
+  bullet_mesh.num_vertices = 4;
+  init_vertex_layoutVERTEX_LAYOUT_BINDING0INSTANCE_VEC3(bullet_mesh.vao, bullet_mesh.vbos, bullet_mesh.num_vbos, 0);
+
+  OpenGLMaterial bullet_material = create_opengl_material(bullet_program);
+  bullet_material.primitive = GL_TRIANGLE_STRIP;
+  opengl_material_add_uniform(&bullet_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
+
+  // Make Scene
   BulletHellSceneData bullet_hell{
       .camera = bullet_hell_camera,
       .player_pos = glm::vec3(0.0f, 0.0f, 0.0f),
@@ -141,21 +176,25 @@ inline BulletHellSceneData new_bullet_hell_scene(u32 vp_ubo) {
       .player_material = bullet_player_material,
       .arena_mesh = arena_mesh,
       .arena_material = arena_material,
+      .bullet_manager = bullet_manager,
+      .bullet_mesh = bullet_mesh,
+      .bullet_material = bullet_material,
   };
-
-  bullet_hell.bullet_manager = (BulletManager *)malloc(sizeof(BulletManager));
-  memset(bullet_hell.bullet_manager, 0, sizeof(BulletManager));
 
   // RENDERER BRINGUP
   // render a line of bullets in the middle of the arena
   u32 NUM_BULLETS = 10;
-  f32 dx = BULLET_HELL_ARENA_HALF_WIDTH / (f32)NUM_BULLETS;
+  f32 dx = BULLET_HELL_ARENA_WIDTH / (f32)NUM_BULLETS;
   for (u32 i = 0; i < NUM_BULLETS; i++) {
+    f32 x = -BULLET_HELL_ARENA_HALF_WIDTH + i * 2 * dx;
     bullet_hell.bullet_manager->bullets->pattern = BULLET_PATTERN_LINEAR;
-    bullet_hell.bullet_manager->bullets->position.x = -BULLET_HELL_ARENA_HALF_WIDTH + i * dx;
+    bullet_hell.bullet_manager->bullets->position.x = x;
     bullet_hell.bullet_manager->bullets->position.y = 0.0f;
     bullet_hell.bullet_manager->bullets->size = glm::vec3(0.3f);
     bullet_hell.bullet_manager->bullets->velocity = glm::vec3(0.0f);
+
+    bullet_hell.bullet_manager->render_data[i].x = x;
+    bullet_hell.bullet_manager->render_data[i].z = (x == 0.0f) ? 1.0 : 1.0 / fabs(x);
   }
 
   bullet_hell.bullet_manager->num_live_bullets = NUM_BULLETS;

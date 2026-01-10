@@ -1,5 +1,7 @@
 #include "generated_shader_utils.h"
 
+#define BUFFER_SIZE 512
+
 VkShaderModule shader_modules[NUM_SHADER_HANDLES] = {0};
 
 VkPipeline shader_handles_to_graphics_pipeline(const VulkanContext *context, VkRenderPass render_pass,
@@ -16,7 +18,6 @@ VkPipeline shader_handles_to_graphics_pipeline(const VulkanContext *context, VkR
                                           pipeline_layout);
 }
 
-#define BUFFER_SIZE 512
 u32 link_shader_program(const char *vertex_shader_source, const char *fragment_shader_source) {
   int success;
   char info_log[BUFFER_SIZE];
@@ -54,4 +55,5 @@ u32 link_shader_program(const char *vertex_shader_source, const char *fragment_s
 
   return shader_program;
 }
-#define BUFFER_SIZE 512
+
+#undef BUFFER_SIZE

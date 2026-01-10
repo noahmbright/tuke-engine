@@ -39,6 +39,7 @@ inline u32 shader_handles_to_opengl_program(ShaderHandle vertex_shader_handle, S
                              generated_shader_specs[fragment_shader_handle]->opengl_glsl);
 }
 
+// TODO deprecate lol
 inline OpenGLMesh create_opengl_mesh_with_vertex_layout(const f32 *arr, f32 num_f32s, u32 num_vertices,
                                                         VertexLayoutID vertex_layout_id, u32 draw_mode) {
   OpenGLMesh opengl_mesh = create_opengl_mesh(arr, num_f32s, num_vertices, draw_mode);
