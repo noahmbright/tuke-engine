@@ -3,20 +3,15 @@
 #include "camera.h"
 #include "generated_shader_utils.h"
 #include "opengl_base.h"
+#include "scene_manager.h"
 #include "tilemap.h"
 #include "tuke_engine.h"
 #include "utils.h"
 
 #define PLAYER_SIDE_LENGTH_METERS (0.6f)
-#define MAX_SCENES 4
 
 const u32 width_in_tiles = 9;
 const u32 height_in_tiles = 20;
-
-const f32 BULLET_HELL_ARENA_WIDTH = 10.0f;
-const f32 BULLET_HELL_ARENA_HEIGHT = 8.0f;
-const f32 BULLET_HELL_ARENA_HALF_WIDTH = BULLET_HELL_ARENA_WIDTH / 2.0;
-const f32 BULLET_HELL_ARENA_HALF_HEIGHT = BULLET_HELL_ARENA_HEIGHT / 2.0;
 
 // clang-format off
 inline u8 tilemap_data[width_in_tiles * height_in_tiles] = {
@@ -72,17 +67,6 @@ const f32 player_vertices[] = {
    0.5f, -0.5f,  0.0f,  1.0f, 0.0f, // BR
   -0.5f, -0.5f,  0.0f,  0.0f, 0.0f, // BL
 };
-
-const f32 arena_vertices[] = {
-  // x,y,z              u, v
-  -BULLET_HELL_ARENA_HALF_WIDTH, -BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  0.0f, 0.0f, // BL
-  -BULLET_HELL_ARENA_HALF_WIDTH,  BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  0.0f, 1.0f, // TL
-   BULLET_HELL_ARENA_HALF_WIDTH,  BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  1.0f, 1.0f, // TR
-
-   BULLET_HELL_ARENA_HALF_WIDTH,  BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  1.0f, 1.0f, // TR
-   BULLET_HELL_ARENA_HALF_WIDTH, -BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  1.0f, 0.0f, // BR
-  -BULLET_HELL_ARENA_HALF_WIDTH, -BULLET_HELL_ARENA_HALF_HEIGHT,  0.0f,  0.0f, 0.0f, // BL
-};
 // clang-format on
 
 inline void buffer_vp_matrix_to_gl_ubo(const Camera *camera, u32 ubo, u32 window_width, u32 window_height) {
@@ -134,81 +118,6 @@ struct OverworldSceneData {
   bool just_transitioned;
 };
 
-struct BulletHellSceneData {
-  // player_pos is the position within the bullet hell arena
-  // The arena's center is (0.0, 0.0)
-  glm::vec3 player_pos;
-
-  Camera camera;
-  u32 vp_ubo;
-
-  u32 player_model_ubo;
-  OpenGLMesh player_mesh;
-  OpenGLMaterial player_material;
-
-  OpenGLMesh arena_mesh;
-  OpenGLMaterial arena_material;
-};
-
-enum SceneAction { SCENE_ACTION_NONE, SCENE_ACTION_SET, SCENE_ACTION_PUSH, SCENE_ACTION_POP };
-
-struct GlobalState;
-
-struct Scene {
-  void (*update)(void *, GlobalState *, f32 dt);
-  void (*render)(const void *);
-  void *data;
-};
-
-// top points to the top valid scene, i.e., the current scene. Not one past the end.
-struct SceneManager {
-  Scene *scene_registry[NUM_SCENES];
-  Scene *stack[MAX_SCENES];
-  u32 top;
-
-  SceneAction pending_scene_action;
-  SceneID pending_scene;
-};
-
-inline Scene *get_current_scene(const SceneManager *scene_manager) { return scene_manager->stack[scene_manager->top]; }
-
-inline void push_scene(SceneManager *scene_manager, Scene *scene_data) {
-  assert(scene_manager->top + 1 < MAX_SCENES);
-  scene_manager->stack[++scene_manager->top] = scene_data;
-}
-
-inline void pop_scene(SceneManager *scene_manager) {
-  assert(scene_manager->top > 0);
-  scene_manager->top--;
-}
-
-inline void handle_scene_action(SceneManager *scene_manager) {
-  switch (scene_manager->pending_scene_action) {
-
-  case SCENE_ACTION_NONE:
-    return;
-
-  case SCENE_ACTION_SET: {
-    Scene *next_scene = scene_manager->scene_registry[scene_manager->pending_scene];
-    scene_manager->stack[scene_manager->top] = next_scene;
-    // TODO exit current scene, enter next scene
-    break;
-  }
-
-  case SCENE_ACTION_PUSH: {
-    Scene *next_scene = scene_manager->scene_registry[scene_manager->pending_scene];
-    push_scene(scene_manager, next_scene);
-    break;
-  }
-
-  case SCENE_ACTION_POP:
-    pop_scene(scene_manager);
-    break;
-  }
-
-  scene_manager->pending_scene_action = SCENE_ACTION_NONE;
-}
-
 struct GlobalState {
   int window_width, window_height;
   SceneManager scene_manager;
@@ -227,7 +136,7 @@ inline void move_camera_in_tilemap(OverworldSceneData *scene_data, GlobalState *
   glm::vec3 input_movement_vector = speed * dt * inputs_to_movement_vector(&global_state->inputs);
   glm::vec3 final_movement_vector(0.0f);
 
-  // Right now, tile = 0 means no movement. Otherwise, move
+  // Right now, tile == 0 means move. Otherwise, reset motion
   glm::vec3 x_moved_position = last_camera_pos + glm::vec3(input_movement_vector.x, 0.0f, 0.0f);
   u8 x_tile = tilemap_check_collision(tilemap, x_moved_position, tile_size);
   final_movement_vector.x = (x_tile == 0) * input_movement_vector.x;
@@ -236,7 +145,8 @@ inline void move_camera_in_tilemap(OverworldSceneData *scene_data, GlobalState *
   u8 y_tile = tilemap_check_collision(tilemap, y_moved_position, tile_size);
   final_movement_vector.y = (y_tile == 0) * input_movement_vector.y;
 
-  camera->position.z = clamp_f32(camera->position.z, 1.0f, CAMERA_PERSPECTIVE_PROJECTION_FAR_Z - EPSILON);
+  f32 z_moved_position = camera->position.z + input_movement_vector.z;
+  camera->position.z = clamp_f32(z_moved_position, 1.0f, CAMERA_PERSPECTIVE_PROJECTION_FAR_Z - EPSILON);
 
   move_camera(camera, final_movement_vector);
 
@@ -252,18 +162,21 @@ inline void move_camera_in_tilemap(OverworldSceneData *scene_data, GlobalState *
 
 // TODO separate player position and camera position
 // TODO will i consider the players position within a tilemap? within the whole world?
-inline void scene0_update(void *scene_data, GlobalState *global_state, f32 dt) {
-  // overworld_scene_data
+inline void scene0_update(void *scene_data, void *global_state, f32 dt) {
+
+  GlobalState *gs = (GlobalState *)global_state;
   OverworldSceneData *overworld_sd = (OverworldSceneData *)scene_data;
-  move_camera_in_tilemap(overworld_sd, global_state, dt);
+
+  move_camera_in_tilemap(overworld_sd, gs, dt);
 
   glm::vec3 camera_xy(overworld_sd->camera.position.x, overworld_sd->camera.position.y, 0.0f);
   glm::mat4 player_model = glm::translate(glm::mat4(1.0f), camera_xy);
   player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
+
   glBindBuffer(GL_UNIFORM_BUFFER, overworld_sd->player_model_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
-  buffer_vp_matrix_to_gl_ubo(&overworld_sd->camera, overworld_sd->vp_ubo, global_state->window_width,
-                             global_state->window_height);
+
+  buffer_vp_matrix_to_gl_ubo(&overworld_sd->camera, overworld_sd->vp_ubo, gs->window_width, gs->window_height);
 }
 
 inline void scene0_draw(const void *scene_data) {
@@ -271,45 +184,4 @@ inline void scene0_draw(const void *scene_data) {
   glClear(GL_COLOR_BUFFER_BIT);
   draw_opengl_mesh(&overworld_data->tilemap_mesh, overworld_data->tilemap_material);
   draw_opengl_mesh(&overworld_data->player_mesh, overworld_data->player_material);
-}
-
-inline void bullet_hell_move_player(BulletHellSceneData *scene_data, GlobalState *global_state, f32 dt) {
-
-  const f32 X_BOUNDARY = 0.5 * (BULLET_HELL_ARENA_WIDTH - PLAYER_SIDE_LENGTH_METERS);
-  const f32 Y_BOUNDARY = 0.5 * (BULLET_HELL_ARENA_HEIGHT - PLAYER_SIDE_LENGTH_METERS);
-
-  const f32 speed = 5.0f;
-  glm::vec3 input_movement_vector = speed * dt * inputs_to_movement_vector(&global_state->inputs);
-
-  glm::vec3 *player_pos = &scene_data->player_pos;
-
-  f32 next_x = player_pos->x + input_movement_vector.x;
-  f32 clamped_next_x = clamp_f32(next_x, -X_BOUNDARY, X_BOUNDARY);
-
-  f32 next_y = player_pos->y + input_movement_vector.y;
-  f32 clamped_next_y = clamp_f32(next_y, -Y_BOUNDARY, Y_BOUNDARY);
-
-  player_pos->x = clamped_next_x;
-  player_pos->y = clamped_next_y;
-}
-
-inline void bullet_hell_update(void *scene_data, GlobalState *global_state, f32 dt) {
-  BulletHellSceneData *data = (BulletHellSceneData *)scene_data;
-
-  bullet_hell_move_player(data, global_state, dt);
-
-  glm::mat4 player_model = glm::translate(glm::mat4(1.0f), data->player_pos);
-  player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
-  glBindBuffer(GL_UNIFORM_BUFFER, data->player_model_ubo);
-  glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
-
-  // TODO: Need window resize callback. Want to only update and rebuffer when there's new data.
-  buffer_vp_matrix_to_gl_ubo(&data->camera, data->vp_ubo, global_state->window_width, global_state->window_height);
-}
-
-inline void bullet_hell_draw(const void *scene_data) {
-  BulletHellSceneData *data = (BulletHellSceneData *)scene_data;
-  glClear(GL_COLOR_BUFFER_BIT);
-  draw_opengl_mesh(&data->arena_mesh, data->arena_material);
-  draw_opengl_mesh(&data->player_mesh, data->player_material);
 }

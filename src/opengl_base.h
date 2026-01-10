@@ -90,6 +90,14 @@ inline void draw_opengl_mesh(const OpenGLMesh *opengl_mesh, OpenGLMaterial mater
   glDrawArrays(GL_TRIANGLES, 0, opengl_mesh->num_vertices);
 }
 
+inline void draw_opengl_mesh_instanced(const OpenGLMesh *opengl_mesh, OpenGLMaterial material, u32 num_instances) {
+  glBindTexture(GL_TEXTURE_2D, material.texture);
+  glBindBuffer(GL_UNIFORM_BUFFER, material.uniform);
+  glUseProgram(material.program);
+  glBindVertexArray(opengl_mesh->vao);
+  glDrawArraysInstanced(GL_TRIANGLES, 0, opengl_mesh->num_vertices, num_instances);
+}
+
 // textures
 
 struct OpenGLTextureConfig {

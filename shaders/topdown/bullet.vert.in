@@ -1,0 +1,15 @@
+#version {{ VERSION }}
+
+{{ SET_BINDING 0 0 BUFFER_LABEL CAMERA_VP }} uniform VPUniform {
+    mat4 vp;
+} u_vp;
+
+{{ SET_BINDING 1 0 BUFFER_LABEL BULLET_OFFSETS }} uniform BulletOffsets {
+    vec2 offsets[512];
+} bullet_offsets;
+
+void main(){
+    vec2 offset = bullet_offsets.offsets[{{ INSTANCE_INDEX }}];
+    gl_Position = vec4(offset, 0.0, 1.0);
+}
+

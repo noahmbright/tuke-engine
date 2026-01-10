@@ -2,16 +2,19 @@
 #include "camera.h"
 #include "generated_shader_utils.h"
 #include "opengl_base.h"
+#include "scene_manager.h"
 #include "tilemap.h"
-#include "topdown.h"
 #include "tuke_engine.h"
 #include "window.h"
 #include <stdio.h>
 
+#include "bullet_hell.h"
+#include "topdown.h"
+
 int main() {
   // Global State
-  const u32 WINDOW_WIDTH = 800;
-  const u32 WINDOW_HEIGHT = 600;
+  const u32 WINDOW_WIDTH = 1600;
+  const u32 WINDOW_HEIGHT = 1200;
   GLFWwindow *window = new_window(false /* is vulkan */, "topdown", WINDOW_WIDTH, WINDOW_HEIGHT);
   GlobalState global_state;
   glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);
@@ -41,10 +44,6 @@ int main() {
   u32 player_program =
       shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_PLAYER_VERT, SHADER_HANDLE_COMMON_PLAYER_FRAG);
 
-  // TODO make a real arena shader, this is cheat for getting a quad rendering
-  u32 arena_program =
-      shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_ARENA_VERT, SHADER_HANDLE_COMMON_ARENA_FRAG);
-
   u32 fullscreen_quad_program = shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT,
                                                                  SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG);
 
@@ -67,19 +66,9 @@ int main() {
   OpenGLMesh player_mesh = create_opengl_mesh_with_vertex_layout(
       player_vertices, sizeof(player_vertices), 6, VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
   OpenGLMaterial player_material = create_opengl_material(player_program);
-  opengl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_PLAYER_MODEL, "PlayerModel");
+  opengl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_OVERWORLD_PLAYER_MODEL,
+                              "PlayerModel");
   opengl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
-
-  OpenGLMesh bullet_player_mesh = create_opengl_mesh_with_vertex_layout(
-      player_vertices, sizeof(player_vertices), 6, VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
-  OpenGLMaterial bullet_player_material = create_opengl_material(player_program);
-  opengl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_PLAYER_MODEL, "PlayerModel");
-  opengl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
-
-  OpenGLMesh arena_mesh = create_opengl_mesh_with_vertex_layout(arena_vertices, sizeof(arena_vertices), 6,
-                                                                VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
-  OpenGLMaterial arena_material = create_opengl_material(arena_program);
-  opengl_material_add_uniform(&arena_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
   // Framebuffer
   u32 fbo = create_opengl_framebuffer();
@@ -97,7 +86,6 @@ int main() {
   fullscreen_quad_material.texture = fbo_texture;
 
   // Scenes
-  // Overworld scene
   OverworldSceneData scene0_data{.player_pos = camera.position,
                                  .camera = camera,
                                  .tilemap = &tilemap,
@@ -122,46 +110,23 @@ int main() {
                                  .other_scene = SCENE0,
                                  .just_transitioned = false};
 
-  // Bullet hell scene
+  Scene scene0 = new_scene(scene0_update, scene0_draw, &scene0_data);
+  Scene scene1 = new_scene(scene0_update, scene0_draw, &scene1_data);
 
-  Camera bullet_hell_camera = new_camera(CAMERA_TYPE_2D);
-  bullet_hell_camera.position.z = 15.0f;
-
-  BulletHellSceneData bullet_hell{
-      .camera = bullet_hell_camera,
-      .player_pos = glm::vec3(0.0f, 0.0f, 0.0f),
-      .vp_ubo = vp_ubo,
-      .player_model_ubo = player_model_ubo,
-      .player_mesh = bullet_player_mesh,
-      .player_material = bullet_player_material,
-      .arena_mesh = arena_mesh,
-      .arena_material = arena_material,
-  };
+  BulletHellSceneData bullet_hell_scene_data = new_bullet_hell_scene(vp_ubo);
+  Scene scene_bullet_hell = new_scene(bullet_hell_update, bullet_hell_draw, &bullet_hell_scene_data);
 
   // Register scenes
-  Scene scene0;
-  scene0.render = scene0_draw;
-  scene0.update = scene0_update;
-  scene0.data = &scene0_data;
-
-  Scene scene1;
-  scene1.render = scene0_draw;
-  scene1.update = scene0_update;
-  scene1.data = &scene1_data;
-
-  Scene scene_bullet_hell;
-  scene_bullet_hell.render = bullet_hell_draw;
-  scene_bullet_hell.update = bullet_hell_update;
-  scene_bullet_hell.data = &bullet_hell;
-
   global_state.scene_manager.scene_registry[SCENE0] = &scene0;
   global_state.scene_manager.scene_registry[SCENE1] = &scene1;
   global_state.scene_manager.scene_registry[SCENE_BULLET_HELL] = &scene_bullet_hell;
-  global_state.scene_manager.stack[0] = &scene_bullet_hell;
+
+  set_base_scene(&global_state.scene_manager, &scene_bullet_hell);
 
   // Main loop
   f64 t0 = glfwGetTime();
   while (glfwWindowShouldClose(window) == false) {
+
     f64 t = glfwGetTime();
     f64 dt = t - t0;
     t0 = t;
@@ -180,6 +145,8 @@ int main() {
     glfwSwapBuffers(window);
   }
 
+  // Cleanup
+  free(bullet_hell_scene_data.bullet_manager);
   glDeleteFramebuffers(1, &fbo);
   glfwDestroyWindow(window);
   glfwTerminate();
