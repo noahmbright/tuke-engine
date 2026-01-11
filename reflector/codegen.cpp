@@ -600,6 +600,7 @@ void codegen_vulkan_shader_module_creation(FILE *destination) {
 
 void codegen_footer(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
   fprintf(destination, "const uint32_t num_generated_specs = %u;\n", parsed_shaders_ir->num_parsed_shaders);
+
   fprintf(destination, "static const ShaderSpec* generated_shader_specs[] = {\n");
   for (u32 i = 0; i < parsed_shaders_ir->num_parsed_shaders; i++) {
     fprintf(destination, "  &%s_shader_spec,\n", parsed_shaders_ir->parsed_shaders[i].name);

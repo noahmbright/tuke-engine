@@ -46,3 +46,10 @@ inline OpenGLMesh create_opengl_mesh_with_vertex_layout(const f32 *arr, f32 num_
   init_opengl_vertex_layout(vertex_layout_id, opengl_mesh.vao, &opengl_mesh.vbo, 1, 0);
   return opengl_mesh;
 }
+
+inline void init_opengl_mesh_vao(OpenGLMesh *opengl_mesh, ShaderHandle shader_handle) {
+  VertexLayoutID vertex_layout_id = generated_shader_specs[shader_handle]->vertex_layout_id;
+  u32 vao = create_vao();
+  init_opengl_vertex_layout(vertex_layout_id, vao, opengl_mesh->vbos, opengl_mesh->num_vbos, 0);
+  opengl_mesh->vao = vao;
+}

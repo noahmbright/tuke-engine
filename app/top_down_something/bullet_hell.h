@@ -1,6 +1,7 @@
 #pragma once
 
 #include "c_reflector_bringup.h"
+#include "generated_shader_utils.h"
 #include "opengl_base.h"
 #include "topdown.h"
 #include <OpenGL/OpenGL.h>
@@ -156,11 +157,10 @@ inline BulletHellSceneData new_bullet_hell_scene(u32 vp_ubo) {
       shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_BULLET_VERT, SHADER_HANDLE_TOPDOWN_BULLET_FRAG);
 
   OpenGLMesh bullet_mesh;
-  bullet_mesh.vao = create_vao();
   bullet_mesh.vbos[VBO_INSTANCE] = allocate_vbo(sizeof(bullet_manager->render_data), GL_DYNAMIC_DRAW);
   bullet_mesh.num_vbos = 1;
   bullet_mesh.num_vertices = 4;
-  init_vertex_layoutVERTEX_LAYOUT_BINDING0INSTANCE_VEC3(bullet_mesh.vao, bullet_mesh.vbos, bullet_mesh.num_vbos, 0);
+  init_opengl_mesh_vao(&bullet_mesh, SHADER_HANDLE_TOPDOWN_BULLET_VERT);
 
   OpenGLMaterial bullet_material = create_opengl_material(bullet_program);
   bullet_material.primitive = GL_TRIANGLE_STRIP;
