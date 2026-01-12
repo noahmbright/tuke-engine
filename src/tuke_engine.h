@@ -3,6 +3,8 @@
 #include "glm/glm.hpp"
 #include <stdint.h>
 
+#define member_size(type, member) (sizeof(((type *)0)->member))
+
 using u8 = uint8_t;
 using u16 = uint16_t;
 using u32 = uint32_t;
@@ -28,5 +30,13 @@ static inline void log_vec3(const glm::vec3 *v) {
   printf(fmt, v->y);
   printf(" ");
   printf(fmt, v->z);
+  printf("\n");
+}
+
+static inline void log_vec2(const glm::vec2 *v) {
+  const char *fmt = "%+9.3f";
+  printf(fmt, v->x);
+  printf(" ");
+  printf(fmt, v->y);
   printf("\n");
 }

@@ -20,6 +20,7 @@ int main() {
   glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);
   init_inputs(&global_state.inputs);
   memset(&global_state.scene_manager, 0, sizeof(SceneManager));
+  global_state.t = 0.0;
 
   // Tilemaps
   u32 num_tiles = tilemap.level_height * tilemap.level_width;

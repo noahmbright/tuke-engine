@@ -8,6 +8,11 @@
 
 enum VBOTypes { VBO_VERTEX, VBO_INSTANCE };
 
+// TODO decide how to manage ownership of a VAO.
+// A VAO is semi determined by the Mesh, which contains the data, which constrains how a shader can interpret its vertex
+// input.
+// A VAO is also determined by the shader, and multiple shaders can draw the same mesh.
+// The practical issue is that identifying vertex layouts is harder than identifying a shader.
 struct OpenGLMesh {
   u32 vao;
 

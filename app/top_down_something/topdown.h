@@ -122,6 +122,7 @@ struct GlobalState {
   int window_width, window_height;
   SceneManager scene_manager;
   Inputs inputs;
+  f64 t;
 };
 
 inline void move_camera_in_tilemap(OverworldSceneData *scene_data, GlobalState *global_state, f32 dt) {
