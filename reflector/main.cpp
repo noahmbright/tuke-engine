@@ -16,14 +16,18 @@ int main(int argc, char **argv) {
     }
   }
 
-  // main flow:
-  // 1) walk dirs 2) collect shaders 3) parse shaders and populate symbol tables 4) codegen
-  // 1) walk dirs
+  // Main flow:
+  // 1) Walk dirs
+  // 2) Collect shaders
+  // 3) Parse shaders and populate symbol tables
+  // 4) Codegen
+
+  // 1) Walk dirs
   SubdirectoryList subdirectory_list;
   memset(&subdirectory_list, 0, sizeof(subdirectory_list));
   walk_dirs("shaders", &subdirectory_list);
 
-  // 2) collect shaders
+  // 2) Collect shaders
   ShaderToCompileList shader_to_compile_list = collect_shaders_to_compile(&subdirectory_list);
   if (shader_to_compile_list.num_shaders == 0) {
     printf("Got no shaders to compile, not recompiling.\n");
@@ -35,12 +39,11 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  // 3) parse shaders
+  // 3) Parse shaders
   ParsedShadersIR parsed_shaders_ir = parse_all_shaders_and_populate_global_tables(&shader_to_compile_list);
 
-  // 4) codegen
-  FILE *output_file = fopen(REFLECTOR_OUTPUT_FILE_PATH, "w");
-  codegen(output_file, &parsed_shaders_ir);
+  // 4) Codegen
+  codegen(REFLECTOR_OUTPUT_FILE_PATH, &parsed_shaders_ir);
 
   // 5) cleanup
   free_shader_to_compile_list(&shader_to_compile_list);

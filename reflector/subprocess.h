@@ -7,4 +7,4 @@ struct SpirVBytesArray {
   u32 length;
 };
 
-SpirVBytesArray compile_vulkan_source_to_glsl(GLSLSource glsl_source, ShaderStage stage);
+SpirVBytesArray compile_vulkan_source_to_spirv(GLSLSource glsl_source, ShaderStage stage);

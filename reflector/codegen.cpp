@@ -623,14 +623,42 @@ void codegen_buffer_labels(FILE *destination, const ParsedShadersIR *parsed_shad
   fprintf(destination, "};\n\n");
 }
 
-// the real deal
-void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
+// The real deal!
+void codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_ir) {
 
-  // init
+  // Init
   GLSLSource glsl_sources[MAX_NUM_SHADERS][NUM_GRAPHICS_BACKENDS];
   memset(glsl_sources, 0, sizeof(glsl_sources));
+
   SpirVBytesArray spirv_bytes_arrays[MAX_NUM_SHADERS];
   memset(spirv_bytes_arrays, 0, sizeof(spirv_bytes_arrays));
+
+  // First pass over shaders to check spirv compilation success and perform slice replacements
+  bool should_codegen = true;
+  for (u32 shaders_index = 0; shaders_index < parsed_shaders_ir->num_parsed_shaders; shaders_index++) {
+    const ParsedShader *current_parsed_shader = &parsed_shaders_ir->parsed_shaders[shaders_index];
+
+    // Replace string slices
+    for (u32 backend_index = 0; backend_index < NUM_GRAPHICS_BACKENDS; backend_index++) {
+      glsl_sources[shaders_index][backend_index] =
+          replace_string_slices(current_parsed_shader, (GraphicsBackend)backend_index);
+    }
+
+    // Compile GLSL to spirv
+    spirv_bytes_arrays[shaders_index] = compile_vulkan_source_to_spirv(
+        glsl_sources[shaders_index][GRAPHICS_BACKEND_VULKAN], current_parsed_shader->stage);
+    if (spirv_bytes_arrays[shaders_index].bytes == NULL) {
+      printf("Compilation for %s failed.\n", current_parsed_shader->name);
+      should_codegen = false;
+    }
+  }
+
+  if (!should_codegen) {
+    fprintf(stderr, "Shader compilation failed. Not opening %s for writing. Stopping.\n", output_filepath);
+    return;
+  }
+
+  FILE *destination = fopen(output_filepath, "w");
 
   codegen_compiled_shader_header(destination);
 
@@ -638,21 +666,8 @@ void codegen(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
   fprintf(destination, "enum ShaderHandle {\n");
 
   for (u32 shaders_index = 0; shaders_index < parsed_shaders_ir->num_parsed_shaders; shaders_index++) {
-    const ParsedShader *current_parsed_shader = &parsed_shaders_ir->parsed_shaders[shaders_index];
-    // compile all backends
-    for (u32 backend_index = 0; backend_index < NUM_GRAPHICS_BACKENDS; backend_index++) {
-      glsl_sources[shaders_index][backend_index] =
-          replace_string_slices(current_parsed_shader, (GraphicsBackend)backend_index);
-    }
-
-    spirv_bytes_arrays[shaders_index] = compile_vulkan_source_to_glsl(
-        glsl_sources[shaders_index][GRAPHICS_BACKEND_VULKAN], current_parsed_shader->stage);
-    if (spirv_bytes_arrays[shaders_index].bytes == NULL) {
-      printf("Compilation for %s failed.\n", current_parsed_shader->name);
-    }
-
     fputs("  SHADER_HANDLE_", destination);
-    print_name_in_caps(destination, current_parsed_shader->name);
+    print_name_in_caps(destination, parsed_shaders_ir->parsed_shaders[shaders_index].name);
     fputs(",\n", destination);
   }
   fprintf(destination, "\n  NUM_SHADER_HANDLES\n};\n\n");

@@ -138,7 +138,7 @@ static int read_file_to_heap(const char *path, u8 **out_buf, size_t *out_len) {
   return 0;
 }
 
-SpirVBytesArray compile_vulkan_source_to_glsl(GLSLSource glsl_source, ShaderStage stage) {
+SpirVBytesArray compile_vulkan_source_to_spirv(GLSLSource glsl_source, ShaderStage stage) {
   SpirVBytesArray bytes_array;
   bytes_array.length = 0;
   bytes_array.bytes = NULL;
