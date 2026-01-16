@@ -15,7 +15,13 @@ def main():
         invocations = ["./build/reflector"]
         if args.force_shaders:
             invocations.append("--force-shaders")
-        subprocess.run(invocations, check=True)
+
+        try:
+            subprocess.run(invocations, check=True)
+        except subprocess.CalledProcessError as e:
+            print("Reflector failed. Stopping")
+            exit(1)
+
 
     if not args.no_build:
         subprocess.run(["make", "-C", "build"], check=True)

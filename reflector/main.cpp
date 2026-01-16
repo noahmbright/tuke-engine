@@ -43,7 +43,11 @@ int main(int argc, char **argv) {
   ParsedShadersIR parsed_shaders_ir = parse_all_shaders_and_populate_global_tables(&shader_to_compile_list);
 
   // 4) Codegen
-  codegen(REFLECTOR_OUTPUT_FILE_PATH, &parsed_shaders_ir);
+  bool codegen_successful = codegen(REFLECTOR_OUTPUT_FILE_PATH, &parsed_shaders_ir);
+
+  if (!codegen_successful) {
+    return 1;
+  }
 
   // 5) cleanup
   free_shader_to_compile_list(&shader_to_compile_list);

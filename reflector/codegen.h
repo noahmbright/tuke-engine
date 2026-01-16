@@ -37,4 +37,6 @@ inline void print_c_string_with_newlines(FILE *destination, const char *s) {
 }
 
 GLSLSource replace_string_slices(const ParsedShader *sliced_shader, GraphicsBackend backend);
-void codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_ir);
+
+// Return value is whether codegen was successful or not.
+bool codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_ir);

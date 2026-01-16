@@ -624,7 +624,7 @@ void codegen_buffer_labels(FILE *destination, const ParsedShadersIR *parsed_shad
 }
 
 // The real deal!
-void codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_ir) {
+bool codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_ir) {
 
   // Init
   GLSLSource glsl_sources[MAX_NUM_SHADERS][NUM_GRAPHICS_BACKENDS];
@@ -655,7 +655,7 @@ void codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_
 
   if (!should_codegen) {
     fprintf(stderr, "Shader compilation failed. Not opening %s for writing. Stopping.\n", output_filepath);
-    return;
+    return false;
   }
 
   FILE *destination = fopen(output_filepath, "w");
@@ -708,4 +708,5 @@ void codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_
   codegen_buffer_labels(destination, parsed_shaders_ir);
 
   codegen_footer(destination, parsed_shaders_ir);
+  return true;
 }
