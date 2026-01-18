@@ -12,10 +12,10 @@ static inline void populate_tile_vertex(f32 x, f32 y, f32 z, f32 u, f32 v, u32 t
   out_tile_vertex->texture_id = texture_id;
 }
 
-// populating a pointer to an existing array instead of returning the pointer
-// anticipating callers will manage the memory, allowing for usage in an arena
+// Populating a pointer to an existing array instead of returning the pointer
+// Anticipating callers will manage the memory, allowing for usage in an arena
 //
-// each tile in the map gets 6 vertices, BL, TL, TR - TR, BR, BL
+// Each tile in the map gets 6 vertices, BL, TL, TR - TR, BR, BL
 void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vertices) {
   // centering the tilemap at 0.0
   const f32 dw = TILE_SIDE_LENGTH_METERS;
@@ -57,7 +57,7 @@ void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vert
 
 // tilemap top left is the position of the tilemap's topleft corner in some coordinate system, e.g. the entire world
 // pos is the position of the colliding object in that same coordinate system
-// idea is to allow for multiple tilemaps to be drawn together in the same world
+// Idea is to allow for multiple tilemaps to be drawn together in the same world
 int tilemap_check_collision(const Tilemap *tilemap, glm::vec3 pos, glm::vec3 size) {
 
   glm::vec3 delta_r = pos - tilemap->top_left;
@@ -90,7 +90,7 @@ int tilemap_check_collision(const Tilemap *tilemap, glm::vec3 pos, glm::vec3 siz
     for (u32 nx = nx0; nx < nx1; nx++) {
       // TODO will probably want to change this condition from == 1 to something like is_collidable()
       u8 tile = tilemap_get_at(tilemap, nx, ny);
-      if (tile == 1 || tile == 2) {
+      if (tile == 1 || tile == 2 || tile == 3) {
         return tile;
       }
     }

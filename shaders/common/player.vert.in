@@ -3,6 +3,8 @@
 {{ LOCATION 0 BINDING 0 RATE_VERTEX OFFSET TIGHTLY_PACKED }} in vec3 a_pos;
 {{ LOCATION 1 BINDING 0 RATE_VERTEX OFFSET TIGHTLY_PACKED }} in vec2 a_uv;
 
+{{ LOCATION 0 }} out vec2 uv;
+
 {{ SET_BINDING 0 0 BUFFER_LABEL CAMERA_VP }} uniform VPUniform {
     mat4 vp;
 } u_vp;
@@ -11,8 +13,9 @@
     mat4 model;
 } u_model;
 
+
 void main(){
-    gl_Position = u_model.model * vec4(a_pos, 1.0);
+    uv = a_uv;
     gl_Position = u_vp.vp * u_model.model * vec4(a_pos, 1.0);
 }
 

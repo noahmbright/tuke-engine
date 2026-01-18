@@ -3,7 +3,9 @@
 #include "tuke_engine.h"
 
 struct STBHandle {
-  int width, height, n_channels;
+  int width;
+  int height;
+  int n_channels;
   unsigned char *data;
 };
 
@@ -48,3 +50,5 @@ inline bool matrix_has_nan(const glm::mat4 &mat) {
   return glm::any(glm::isnan(mat[0])) || glm::any(glm::isnan(mat[1])) || glm::any(glm::isnan(mat[2])) ||
          glm::any(glm::isnan(mat[3]));
 }
+
+inline f32 sign_f32(f32 x) { return x >= 0.0f ? 1.0f : -1.0f; }

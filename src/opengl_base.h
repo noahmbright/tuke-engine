@@ -51,33 +51,6 @@ inline u32 create_vao() {
   return vao;
 }
 
-inline OpenGLMesh create_opengl_mesh(const void *arr, u32 num_bytes, u32 num_vertices, u32 draw_mode) {
-  OpenGLMesh opengl_mesh;
-
-  opengl_mesh.vbo = allocate_vbo_with_data(arr, num_bytes, draw_mode);
-  opengl_mesh.vao = create_vao();
-  opengl_mesh.num_vertices = num_vertices;
-
-  return opengl_mesh;
-}
-
-// OpenGLMaterial
-struct OpenGLMaterial {
-  u32 program;
-  u32 texture;
-  u32 uniform;
-  GLenum primitive;
-};
-
-inline OpenGLMaterial create_opengl_material(u32 program) {
-  return {
-      .program = program,
-      .texture = 0,
-      .uniform = 0,
-      .primitive = GL_TRIANGLES,
-  };
-}
-
 inline u32 create_opengl_ubo(u32 size, u32 draw_mode) {
   u32 ubo;
   glGenBuffers(1, &ubo);
@@ -90,37 +63,14 @@ inline u32 create_opengl_ubo(u32 size, u32 draw_mode) {
   return ubo;
 }
 
-inline void opengl_material_add_uniform(OpenGLMaterial *opengl_material, u32 ubo, u32 binding_point,
-                                        const char *block_name) {
-  u32 block_index = glGetUniformBlockIndex(opengl_material->program, block_name);
-  if (block_index == GL_INVALID_INDEX) {
-    fprintf(stderr, "Uniform block '%s' not found in program %u\n", block_name, opengl_material->program);
-    return;
-  }
+//////////////////// Textures ////////////////////
 
-  opengl_material->uniform = ubo;
-
-  glUniformBlockBinding(opengl_material->program, block_index, binding_point);
-  glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, opengl_material->uniform);
-}
-
-inline void draw_opengl_mesh(const OpenGLMesh *opengl_mesh, OpenGLMaterial material) {
-  glBindTexture(GL_TEXTURE_2D, material.texture);
-  glBindBuffer(GL_UNIFORM_BUFFER, material.uniform);
-  glUseProgram(material.program);
-  glBindVertexArray(opengl_mesh->vao);
-  glDrawArrays(GL_TRIANGLES, 0, opengl_mesh->num_vertices);
-}
-
-inline void draw_opengl_mesh_instanced(const OpenGLMesh *opengl_mesh, OpenGLMaterial material, u32 num_instances) {
-  glBindTexture(GL_TEXTURE_2D, material.texture);
-  glBindBuffer(GL_UNIFORM_BUFFER, material.uniform);
-  glUseProgram(material.program);
-  glBindVertexArray(opengl_mesh->vao);
-  glDrawArraysInstanced(material.primitive, 0, opengl_mesh->num_vertices, num_instances);
-}
-
-// textures
+struct OpenGLTexture {
+  u32 texture; // the u32 handle the driver returns to us
+  u32 height;
+  u32 width;
+  GLenum format;
+};
 
 struct OpenGLTextureConfig {
   u32 height;
@@ -150,7 +100,12 @@ inline OpenGLTextureConfig create_default_opengl_texture_config(u32 height, u32 
   };
 }
 
-inline u32 create_opengl_texture2d(const OpenGLTextureConfig *config) {
+inline OpenGLTexture create_opengl_texture2d(const OpenGLTextureConfig *config) {
+  OpenGLTexture res;
+  res.height = config->height;
+  res.width = config->width;
+  res.format = config->format;
+
   u32 texture;
   glGenTextures(1, &texture);
   glBindTexture(GL_TEXTURE_2D, texture);
@@ -162,12 +117,19 @@ inline u32 create_opengl_texture2d(const OpenGLTextureConfig *config) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, config->wrap_t);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, config->min_filter);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, config->mag_filter);
+  res.texture = texture;
 
   if (config->generate_mipmaps) {
     glGenerateMipmap(GL_TEXTURE_2D);
   }
 
-  return texture;
+  return res;
+}
+
+inline void buffer_data_to_opengl_texture2d(const OpenGLTexture *texture, const u8 *data) {
+  glBindTexture(GL_TEXTURE_2D, texture->texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, texture->format, texture->width, texture->height, 0, texture->format, GL_UNSIGNED_BYTE,
+               data);
 }
 
 // opengl limits
@@ -215,11 +177,69 @@ inline u32 create_opengl_framebuffer() {
 }
 
 // possibly may want to pass GL_COLOR_ATTACHMENTN as an argument
-inline void opengl_attach_texture2d_to_framebuffer(u32 fbo, u32 texture) {
+inline void opengl_attach_texture2d_to_framebuffer(u32 fbo, const OpenGLTexture *texture) {
   glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture->texture, 0);
 
   if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
     printf("ERROR::FRAMEBUFFER:: Framebuffer is not complete!\n");
   }
+}
+
+inline OpenGLMesh create_opengl_mesh(const void *arr, u32 num_bytes, u32 num_vertices, u32 draw_mode) {
+  OpenGLMesh opengl_mesh;
+
+  opengl_mesh.vbo = allocate_vbo_with_data(arr, num_bytes, draw_mode);
+  opengl_mesh.vao = create_vao();
+  opengl_mesh.num_vertices = num_vertices;
+
+  return opengl_mesh;
+}
+
+// OpenGLMaterial
+struct OpenGLMaterial {
+  u32 program;
+  OpenGLTexture texture;
+  u32 uniform;
+  GLenum primitive;
+};
+
+inline OpenGLMaterial create_opengl_material(u32 program) {
+  OpenGLMaterial material;
+  material.program = program;
+  material.uniform = 0;
+  material.primitive = GL_TRIANGLES;
+  memset(&material.texture, 0, sizeof(OpenGLTexture));
+
+  return material;
+}
+
+inline void opengl_material_add_uniform(OpenGLMaterial *opengl_material, u32 ubo, u32 binding_point,
+                                        const char *block_name) {
+  u32 block_index = glGetUniformBlockIndex(opengl_material->program, block_name);
+  if (block_index == GL_INVALID_INDEX) {
+    fprintf(stderr, "Uniform block '%s' not found in program %u\n", block_name, opengl_material->program);
+    return;
+  }
+
+  opengl_material->uniform = ubo;
+
+  glUniformBlockBinding(opengl_material->program, block_index, binding_point);
+  glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, opengl_material->uniform);
+}
+
+inline void draw_opengl_mesh(const OpenGLMesh *opengl_mesh, OpenGLMaterial material) {
+  glBindTexture(GL_TEXTURE_2D, material.texture.texture);
+  glBindBuffer(GL_UNIFORM_BUFFER, material.uniform);
+  glUseProgram(material.program);
+  glBindVertexArray(opengl_mesh->vao);
+  glDrawArrays(GL_TRIANGLES, 0, opengl_mesh->num_vertices);
+}
+
+inline void draw_opengl_mesh_instanced(const OpenGLMesh *opengl_mesh, OpenGLMaterial material, u32 num_instances) {
+  glBindTexture(GL_TEXTURE_2D, material.texture.texture);
+  glBindBuffer(GL_UNIFORM_BUFFER, material.uniform);
+  glUseProgram(material.program);
+  glBindVertexArray(opengl_mesh->vao);
+  glDrawArraysInstanced(material.primitive, 0, opengl_mesh->num_vertices, num_instances);
 }

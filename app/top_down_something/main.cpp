@@ -5,7 +5,9 @@
 #include "scene_manager.h"
 #include "tilemap.h"
 #include "tuke_engine.h"
+#include "utils.h"
 #include "window.h"
+#include <OpenGL/OpenGL.h>
 #include <stdio.h>
 
 #include "bullet_hell.h"
@@ -71,12 +73,20 @@ int main() {
                               "PlayerModel");
   opengl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
+  STBHandle arrow_png = load_texture("textures/right_arrow.jpg");
+  // STBHandle arrow_png = load_texture("textures/up_arrow.jpg");
+  OpenGLTextureConfig arrow_texture_config = create_default_opengl_texture_config(arrow_png.height, arrow_png.width);
+  arrow_texture_config.format = (arrow_png.n_channels == 4) ? GL_RGBA : GL_RGB;
+  OpenGLTexture arrow_texture = create_opengl_texture2d(&arrow_texture_config);
+  buffer_data_to_opengl_texture2d(&arrow_texture, arrow_png.data);
+  player_material.texture = arrow_texture;
+
   // Framebuffer
   u32 fbo = create_opengl_framebuffer();
   OpenGLTextureConfig texture_config =
       create_default_opengl_texture_config(global_state.window_height, global_state.window_width);
-  u32 fbo_texture = create_opengl_texture2d(&texture_config);
-  opengl_attach_texture2d_to_framebuffer(fbo, fbo_texture);
+  OpenGLTexture fbo_texture = create_opengl_texture2d(&texture_config);
+  opengl_attach_texture2d_to_framebuffer(fbo, &fbo_texture);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   // Meshes
@@ -87,29 +97,37 @@ int main() {
   fullscreen_quad_material.texture = fbo_texture;
 
   // Scenes
-  OverworldSceneData scene0_data{.player_pos = camera.position,
-                                 .camera = camera,
-                                 .tilemap = &tilemap,
-                                 .vp_ubo = vp_ubo,
-                                 .player_model_ubo = player_model_ubo,
-                                 .player_mesh = player_mesh,
-                                 .player_material = player_material,
-                                 .tilemap_mesh = tilemap_mesh,
-                                 .tilemap_material = tilemap_material,
-                                 .other_scene = SCENE1,
-                                 .just_transitioned = false};
+  OverworldSceneData scene0_data{
+      .player_pos = camera.position,
+      .camera = camera,
+      .tilemap = &tilemap,
+      .vp_ubo = vp_ubo,
+      .player_model_ubo = player_model_ubo,
+      .player_mesh = player_mesh,
+      .player_material = player_material,
+      .tilemap_mesh = tilemap_mesh,
+      .tilemap_material = tilemap_material,
+      .other_scene = SCENE1,
+      .just_transitioned = false,
+      .player_rotation_simulation = 0.0f,
+      .player_rotation_render = 0.0f,
+  };
 
-  OverworldSceneData scene1_data{.player_pos = camera.position,
-                                 .camera = camera,
-                                 .tilemap = &tilemap1,
-                                 .vp_ubo = vp_ubo,
-                                 .player_model_ubo = player_model_ubo,
-                                 .player_mesh = player_mesh,
-                                 .player_material = player_material,
-                                 .tilemap_mesh = tilemap1_mesh,
-                                 .tilemap_material = tilemap_material,
-                                 .other_scene = SCENE0,
-                                 .just_transitioned = false};
+  OverworldSceneData scene1_data{
+      .player_pos = camera.position,
+      .camera = camera,
+      .tilemap = &tilemap1,
+      .vp_ubo = vp_ubo,
+      .player_model_ubo = player_model_ubo,
+      .player_mesh = player_mesh,
+      .player_material = player_material,
+      .tilemap_mesh = tilemap1_mesh,
+      .tilemap_material = tilemap_material,
+      .other_scene = SCENE0,
+      .just_transitioned = false,
+      .player_rotation_simulation = 0.0f,
+      .player_rotation_render = 0.0f,
+  };
 
   Scene scene0 = new_scene(scene0_update, scene0_draw, &scene0_data);
   Scene scene1 = new_scene(scene0_update, scene0_draw, &scene1_data);
@@ -122,7 +140,7 @@ int main() {
   global_state.scene_manager.scene_registry[SCENE1] = &scene1;
   global_state.scene_manager.scene_registry[SCENE_BULLET_HELL] = &scene_bullet_hell;
 
-  set_base_scene(&global_state.scene_manager, &scene_bullet_hell);
+  set_base_scene(&global_state.scene_manager, &scene0);
 
   // Main loop
   f64 t0 = glfwGetTime();

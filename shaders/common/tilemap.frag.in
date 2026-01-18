@@ -14,5 +14,8 @@ void main(){
     if (texture_id == 2.0){
         frag_color = vec4(0.0, 0.3, 0.4, 1.0);
     }
+    if (texture_id == 3.0){
+        frag_color = vec4(3.0, 0.3, 0.4, 1.0);
+    }
 }
 
