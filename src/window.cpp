@@ -98,7 +98,7 @@ static void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) 
   // printf("scrollin, %f, %f\n", scroll_deltas.dx, scroll_deltas.dy);
 }
 
-GLFWwindow *new_window(bool is_vulkan, const char *title, const int width, const int height) {
+GLFWwindow *create_window(bool is_vulkan, const char *title, const int width, const int height) {
 
   glfwSetErrorCallback(error_callback);
   if (!glfwInit()) {

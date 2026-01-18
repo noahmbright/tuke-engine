@@ -39,7 +39,7 @@ inline u8 tilemap_data[width_in_tiles * height_in_tiles] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1,
 };
 
-inline Tilemap tilemap = new_tilemap(width_in_tiles, height_in_tiles, &tilemap_data[0]);
+inline Tilemap tilemap = create_tilemap(width_in_tiles, height_in_tiles, &tilemap_data[0]);
 
 
 // map 1
@@ -57,7 +57,7 @@ inline u8 tilemap1_data[width_in_tiles1 * height_in_tiles1] = {
     1, 1, 1, 1,   1, 1, 1, 1,   1, 1, 1, 1,   1, 1, 1, 1,
 };
 
-inline Tilemap tilemap1 = new_tilemap(width_in_tiles1, height_in_tiles1, &tilemap1_data[0]);
+inline Tilemap tilemap1 = create_tilemap(width_in_tiles1, height_in_tiles1, &tilemap1_data[0]);
 
 const f32 player_vertices[] = {
   // x,y,z              u, v
@@ -72,7 +72,7 @@ const f32 player_vertices[] = {
 // clang-format on
 
 inline void buffer_vp_matrix_to_gl_ubo(const Camera *camera, u32 ubo, u32 window_width, u32 window_height) {
-  CameraMatrices camera_matrices = new_camera_matrices(camera, window_width, window_height);
+  CameraMatrices camera_matrices = create_camera_matrices(camera, window_width, window_height);
   glm::mat4 vp = camera_matrices.projection * camera_matrices.view;
 
 #ifndef NDEBUG
@@ -103,25 +103,28 @@ inline glm::vec3 inputs_to_movement_vector(const Inputs *inputs) {
 enum SceneID { SCENE0, SCENE1, SCENE_BULLET_HELL, NUM_SCENES, SCENE_NONE };
 
 struct OverworldSceneData {
+  // Actual state specific to the overworld
   glm::vec3 player_pos;
+
+  // CCW angle from right, in radians
+  f32 player_rotation_simulation;
+  f32 player_rotation_render;
+
   Camera camera;
   Tilemap *tilemap;
 
+  SceneID other_scene;
+  bool just_transitioned;
+
+  // OpenGL Stuff
   u32 vp_ubo;
 
   u32 player_model_ubo;
   OpenGLMesh player_mesh;
   OpenGLMaterial player_material;
 
-  // CCW angle from right, in radians
-  f32 player_rotation_simulation;
-  f32 player_rotation_render;
-
   OpenGLMesh tilemap_mesh;
   OpenGLMaterial tilemap_material;
-
-  SceneID other_scene;
-  bool just_transitioned;
 
   OpenGLFramebuffer fbo;
   OpenGLMesh fullscreen_quad_mesh;
@@ -197,6 +200,8 @@ inline void scene0_update(void *scene_data, void *global_state, f32 dt) {
 
   // FIXME - rotations towards the left seem to be faster. Need to rederive some math for this.
   // Pissed off rn, taking a break and moving onto more meaningful things.
+  // Can't cross the +/- PI barrier correctly. Can't go from pointing top left to bottom left,
+  // or bottom left to top left. Can only go around the full 360 degrees the other way.
   f32 angle_diff = overworld_sd->player_rotation_simulation - overworld_sd->player_rotation_render;
   f32 angle_update_sign = fabs(angle_diff) > PI ? -1.0f : 1.0f;
   f32 next_angle_raw = overworld_sd->player_rotation_render + ROTATION_SPEED * angle_update_sign * angle_diff;
@@ -223,6 +228,6 @@ inline void scene0_draw(const void *scene_data) {
   draw_opengl_mesh(&overworld_data->player_mesh, overworld_data->player_material);
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glBindTexture(GL_TEXTURE_2D, overworld_data->fbo.texture);
+  glBindTexture(GL_TEXTURE_2D, overworld_data->fbo.texture.texture);
   draw_opengl_mesh(&overworld_data->fullscreen_quad_mesh, overworld_data->fullscreen_quad_material);
 }

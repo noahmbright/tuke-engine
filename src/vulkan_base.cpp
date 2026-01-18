@@ -1094,7 +1094,7 @@ PipelineConfig create_default_graphics_pipeline_config(VkRenderPass render_pass,
 
 VulkanContext create_vulkan_context(const char *title) {
   VulkanContext context;
-  context.window = new_window(true /* is_vulkan*/, title);
+  context.window = create_window(true /* is_vulkan*/, title);
   glfwGetFramebufferSize(context.window, &context.window_framebuffer_width, &context.window_framebuffer_height);
 
   context.instance = create_instance(title);
@@ -2249,7 +2249,7 @@ void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call) {
   }
 }
 
-BufferUploadQueue new_buffer_upload_queue() {
+BufferUploadQueue create_buffer_upload_queue() {
   BufferUploadQueue queue;
 
   queue.vertex_buffer_offset = 0;
@@ -2330,7 +2330,7 @@ void destroy_buffer_manager(BufferManager *buffer_manager) {
   destroy_vulkan_buffer(ctx, buffer_manager->staging_arena.buffer);
 }
 
-UniformBufferManager new_uniform_buffer_manager() {
+UniformBufferManager create_uniform_buffer_manager() {
   UniformBufferManager uniform_buffer_manager;
   uniform_buffer_manager.current_offset = 0;
   return uniform_buffer_manager;

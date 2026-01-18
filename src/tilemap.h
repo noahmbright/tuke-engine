@@ -31,7 +31,7 @@ inline void log_tile_vertex(const TileVertex *tile_vertex) {
 }
 
 // by default, assume the center of the tilemap is at (0,0) in its local coordinate system
-inline Tilemap new_tilemap(const u32 width, const u32 height, u8 *map) {
+inline Tilemap create_tilemap(const u32 width, const u32 height, u8 *map) {
   glm::vec3 top_left;
   top_left.x = -0.5f * TILE_SIDE_LENGTH_METERS * width;
   top_left.y = 0.5f * TILE_SIDE_LENGTH_METERS * height;

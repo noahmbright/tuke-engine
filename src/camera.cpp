@@ -28,8 +28,8 @@ void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
   camera->right = glm::cross(camera->direction, camera->up);
 }
 
-Camera new_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direction, const glm::vec3 &up,
-                  const glm::vec3 &right) {
+Camera create_camera(CameraType type, const glm::vec3 &pos, const glm::vec3 &direction, const glm::vec3 &up,
+                     const glm::vec3 &right) {
   Camera camera;
   camera.type = type;
   camera.position = pos;

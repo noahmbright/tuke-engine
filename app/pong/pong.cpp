@@ -18,7 +18,7 @@ void init_buffers(State *state) {
   VulkanContext *ctx = &state->context;
 
   // big vertex/index buffers
-  BufferUploadQueue buffer_upload_queue = new_buffer_upload_queue();
+  BufferUploadQueue buffer_upload_queue = create_buffer_upload_queue();
 
   const BufferHandle *unit_quad_vertices_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, paddle_vertices);
   const BufferHandle *quad_inices_slice = UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
@@ -28,7 +28,7 @@ void init_buffers(State *state) {
   // uniform buffer
   // TODO can I come up with a scheme for coordinating UBOs and the location of
   // what data in what portion of the renderer maps to what data in the shaders?
-  UniformBufferManager ub_manager = new_uniform_buffer_manager();
+  UniformBufferManager ub_manager = create_uniform_buffer_manager();
   state->uniform_writes.camera_vp = push_uniform(&ub_manager, sizeof(VPUniform));
   state->uniform_writes.arena_model = push_uniform(&ub_manager, sizeof(glm::mat4));
   state->uniform_writes.instance_data = push_uniform(&ub_manager, sizeof(InstanceDataUBO));
@@ -204,7 +204,7 @@ State setup_state(const char *title) {
   init_transforms(&state);
 
   glm::vec3 camera_pos{0.0f, 0.0f, 30.0f};
-  state.camera = new_camera(CAMERA_TYPE_3D, camera_pos);
+  state.camera = create_camera(CAMERA_TYPE_3D, camera_pos);
   state.camera.y_needs_inverted = true;
 
   // TODO how to get model onto GPU? uniform? something else? push constant?
@@ -212,8 +212,8 @@ State setup_state(const char *title) {
 
   // TODO make camera matrices only on camera movement
   // TODO buffer only on resize
-  const CameraMatrices camera_matrices = new_camera_matrices(&state.camera, state.context.window_framebuffer_width,
-                                                             state.context.window_framebuffer_height);
+  const CameraMatrices camera_matrices = create_camera_matrices(&state.camera, state.context.window_framebuffer_width,
+                                                                state.context.window_framebuffer_height);
   glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
 
   // uniform buffer structure: camera vp, background model, paddle model
@@ -501,7 +501,7 @@ void update_screen_shake(State *state, f32 dt) {
   state->screen_shake.time_elapsed += dt;
 
   if (state->screen_shake.time_elapsed > state->screen_shake.cutoff_duration) {
-    camera_matrices = new_camera_matrices(&state->camera, width, height);
+    camera_matrices = create_camera_matrices(&state->camera, width, height);
     state->screen_shake.time_elapsed = 0.0f;
     state->screen_shake.active = false;
   } else {

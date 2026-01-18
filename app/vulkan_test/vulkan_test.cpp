@@ -66,7 +66,7 @@ int main() {
   ColorDepthFramebuffer offscreen_framebuffer =
       create_color_depth_framebuffer(&context, context.swapchain_extent, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D32_SFLOAT);
 
-  BufferUploadQueue buffer_upload_queue = new_buffer_upload_queue();
+  BufferUploadQueue buffer_upload_queue = create_buffer_upload_queue();
   const BufferHandle *triangle_vertices_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, triangle_vertices);
   const BufferHandle *square_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, square_vertices);
   const BufferHandle *unit_square_position_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, unit_square_positions);
@@ -78,7 +78,7 @@ int main() {
   VulkanBuffer *vertex_buffer = &buffer_manager.vertex_buffer;
   VulkanBuffer *index_buffer = &buffer_manager.index_buffer;
 
-  UniformBufferManager ub_manager = new_uniform_buffer_manager();
+  UniformBufferManager ub_manager = create_uniform_buffer_manager();
   UniformWrite mvp_handle = push_uniform(&ub_manager, sizeof(MVPUniform));
   UniformWrite cube_model_handle = push_uniform(&ub_manager, sizeof(CubeModel));
   UniformWrite x_handle = push_uniform(&ub_manager, sizeof(UniformBufferObject));
@@ -231,7 +231,7 @@ int main() {
   const f32 root3 = 0.57735026919;
   const glm::vec3 cube_rotation_axis = {root3, root3, root3};
 
-  Camera camera = new_camera(CAMERA_TYPE_3D);
+  Camera camera = create_camera(CAMERA_TYPE_3D);
   camera.position = {0.0f, 0.0f, 5.0f};
   glm::mat4 camera_vp;
   Inputs inputs;
@@ -259,7 +259,7 @@ int main() {
 
     glm::vec4 light_position(2 * sint, sint, 0.5f, 0.0f);
 
-    CameraMatrices camera_matrices = new_camera_matrices(&camera, width, height);
+    CameraMatrices camera_matrices = create_camera_matrices(&camera, width, height);
     camera_vp = camera_matrices.projection * camera_matrices.view;
 
     if (!begin_frame(&context)) {

@@ -8,7 +8,7 @@
 #include "window.h"
 
 int main() {
-  GLFWwindow *window = new_window(false /* is vulkan */);
+  GLFWwindow *window = create_window(false /* is vulkan */);
 
   glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 

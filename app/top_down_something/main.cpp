@@ -17,7 +17,7 @@ int main() {
   // Global State
   const u32 WINDOW_WIDTH = 1600;
   const u32 WINDOW_HEIGHT = 1200;
-  GLFWwindow *window = new_window(false /* is vulkan */, "topdown", WINDOW_WIDTH, WINDOW_HEIGHT);
+  GLFWwindow *window = create_window(false /* is vulkan */, "topdown", WINDOW_WIDTH, WINDOW_HEIGHT);
   GlobalState global_state;
   glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);
   init_inputs(&global_state.inputs);
@@ -37,7 +37,7 @@ int main() {
   TileVertex *tilemap1_vertices = (TileVertex *)malloc(tilemap_vertices_sizes_bytes1);
   tilemap_generate_vertices(&tilemap1, tilemap1_vertices);
 
-  Camera camera = new_camera(CAMERA_TYPE_2D);
+  Camera camera = create_camera(CAMERA_TYPE_2D);
   camera.position.z = 15.0f;
 
   // Programs
@@ -75,18 +75,17 @@ int main() {
 
   STBHandle arrow_png = load_texture("textures/right_arrow.jpg");
   // STBHandle arrow_png = load_texture("textures/up_arrow.jpg");
-  OpenGLTextureConfig arrow_texture_config = create_default_opengl_texture_config(arrow_png.height, arrow_png.width);
-  arrow_texture_config.format = (arrow_png.n_channels == 4) ? GL_RGBA : GL_RGB;
-  OpenGLTexture arrow_texture = create_opengl_texture2d(&arrow_texture_config);
+  GLenum arrow_texture_format = (arrow_png.n_channels == 4) ? GL_RGBA : GL_RGB;
+  OpenGLTexture arrow_texture =
+      create_opengl_texture2d(arrow_png.height, arrow_png.width, arrow_texture_format, GL_UNSIGNED_BYTE);
   buffer_data_to_opengl_texture2d(&arrow_texture, arrow_png.data);
   player_material.texture = arrow_texture;
 
   // Framebuffer
   OpenGLFramebuffer fbo = create_opengl_framebuffer();
-  OpenGLTextureConfig texture_config =
-      create_default_opengl_texture_config(global_state.window_height, global_state.window_width);
-  OpenGLTexture fbo_texture = create_opengl_texture2d(&texture_config);
-  opengl_attach_texture2d_to_framebuffer(&fbo, &fbo_texture);
+  OpenGLTexture fbo_texture =
+      create_opengl_texture2d(global_state.window_height, global_state.window_width, GL_RGBA, GL_UNSIGNED_BYTE);
+  opengl_framebuffer_attach_texture2d(&fbo, &fbo_texture);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   // Meshes
@@ -134,11 +133,11 @@ int main() {
       .fullscreen_quad_material = fullscreen_quad_material,
   };
 
-  Scene scene0 = new_scene(scene0_update, scene0_draw, &scene0_data);
-  Scene scene1 = new_scene(scene0_update, scene0_draw, &scene1_data);
+  Scene scene0 = create_scene(scene0_update, scene0_draw, &scene0_data);
+  Scene scene1 = create_scene(scene0_update, scene0_draw, &scene1_data);
 
-  BulletHellSceneData bullet_hell_scene_data = new_bullet_hell_scene(vp_ubo);
-  Scene scene_bullet_hell = new_scene(bullet_hell_update, bullet_hell_draw, &bullet_hell_scene_data);
+  BulletHellSceneData bullet_hell_scene_data = create_bullet_hell_scene(vp_ubo);
+  Scene scene_bullet_hell = create_scene(bullet_hell_update, bullet_hell_draw, &bullet_hell_scene_data);
 
   // Register scenes
   global_state.scene_manager.scene_registry[SCENE0] = &scene0;

@@ -37,9 +37,9 @@ struct CameraMatrices {
   glm::mat4 view, projection;
 };
 
-Camera new_camera(CameraType type, const glm::vec3 &pos = {0.0, 0.0, 1.0},
-                  const glm::vec3 &direction = {0.0, 0.0, -1.0}, const glm::vec3 &up = {0.0, 1.0, 0.0},
-                  const glm::vec3 &right = {1.0, 0.0, 0.0});
+Camera create_camera(CameraType type, const glm::vec3 &pos = {0.0, 0.0, 1.0},
+                     const glm::vec3 &direction = {0.0, 0.0, -1.0}, const glm::vec3 &up = {0.0, 1.0, 0.0},
+                     const glm::vec3 &right = {1.0, 0.0, 0.0});
 
 inline void camera_move_2d(Camera *camera, const glm::vec3 &movement_direction) {
   camera->position += movement_direction;
@@ -74,7 +74,7 @@ inline glm::mat4 camera_perspective_projection(const Camera *camera, u32 window_
   return proj;
 }
 
-inline CameraMatrices new_camera_matrices(const Camera *camera, u32 window_width, u32 window_height) {
+inline CameraMatrices create_camera_matrices(const Camera *camera, u32 window_width, u32 window_height) {
   CameraMatrices camera_matrices;
   camera_matrices.view = camera_look_at(camera);
   camera_matrices.projection = camera_perspective_projection(camera, window_width, window_height);

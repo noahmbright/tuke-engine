@@ -16,8 +16,8 @@
 #include "window.h"
 
 int main() {
-  GLFWwindow *window = new_window(false /*is vulkan*/);
-  // Camera camera = new_camera(CameraType::Camera2D);
+  GLFWwindow *window = create_window(false /*is vulkan*/);
+  // Camera camera = create_camera(CameraType::Camera2D);
 
   unsigned player_texture = load_texture_opengl("textures/generic_girl.jpg");
   // unsigned player_program = link_shader_program("shaders/player_vertex.glsl", "shaders/player_fragment.glsl");
@@ -39,8 +39,8 @@ int main() {
   };
   // clang-format on
 
-  // Tilemap tilemap = new_tilemap(level_width, level_height, level_map);
-  //  TilemapOpenGLRenderData tilemap_render_data = new_tilemap_opengl_render_data(tilemap_program, &tilemap);
+  // Tilemap tilemap = create_tilemap(level_width, level_height, level_map);
+  //  TilemapOpenGLRenderData tilemap_render_data = create_tilemap_opengl_render_data(tilemap_program, &tilemap);
 
   Player player = new_player({0.0, 0.0, 1.0}, {1.0, 1.0, 1.0});
   // PlayerOpenGLRenderData player_render_data = new_player_opengl_render_data(player_program, player_texture);
@@ -61,7 +61,7 @@ int main() {
     glViewport(0, 0, width, height);
 
     // const CameraMatrices camera_matrices =
-    // new_camera_matrices(&camera, width, height);
+    // create_camera_matrices(&camera, width, height);
     // buffer_camera_matrices_to_gl_uniform_buffer(&camera_matrices);
 
     const glm::mat4 player_model = model_from_player(&player);

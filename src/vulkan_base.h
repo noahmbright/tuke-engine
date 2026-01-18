@@ -448,7 +448,7 @@ void destroy_uniform_buffer(const VulkanContext *context, UniformBuffer *uniform
 
 void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, UniformWrite uniform_write);
 
-UniformBufferManager new_uniform_buffer_manager();
+UniformBufferManager create_uniform_buffer_manager();
 
 UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager, u32 size);
 
@@ -491,7 +491,7 @@ void destroy_shader_cache(VulkanShaderCache *cache);
 
 void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call);
 
-BufferUploadQueue new_buffer_upload_queue();
+BufferUploadQueue create_buffer_upload_queue();
 const BufferHandle *upload_data(BufferUploadQueue *queue, BufferType buffer_type, void *data, u64 size);
 BufferManager flush_buffers(VulkanContext *context, BufferUploadQueue *queue);
 void destroy_buffer_manager(BufferManager *buffer_manager);

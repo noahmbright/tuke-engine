@@ -18,7 +18,7 @@ struct Scene {
   void *data;
 };
 
-inline Scene new_scene(UpdateFunction update, RenderFunction render, void *data) {
+inline Scene create_scene(UpdateFunction update, RenderFunction render, void *data) {
   return Scene{.update = update, .render = render, .data = data};
 }
 

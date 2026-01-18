@@ -47,7 +47,7 @@ struct ScrollDeltas {
   f64 dx, dy;
 };
 
-GLFWwindow *new_window(bool is_vulkan, const char *title = "Tuke", const int width = 800, const int height = 600);
+GLFWwindow *create_window(bool is_vulkan, const char *title = "Tuke", const int width = 800, const int height = 600);
 void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window);
 void init_inputs(Inputs *inputs);
 

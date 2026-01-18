@@ -193,12 +193,12 @@ inline void bullet_hell_draw(const void *scene_data) {
 // inline void spawn_bullets(BulletHellSceneData *scene, u32 num_bullets, BulletPattern pattern) { }
 
 // --------------------- BIG INIT FUNCTION ---------------------
-inline BulletHellSceneData new_bullet_hell_scene(u32 vp_ubo) {
+inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
 
   BulletManager *bullet_manager = (BulletManager *)malloc(sizeof(BulletManager));
   memset(bullet_manager, 0, sizeof(BulletManager));
 
-  Camera bullet_hell_camera = new_camera(CAMERA_TYPE_2D);
+  Camera bullet_hell_camera = create_camera(CAMERA_TYPE_2D);
   bullet_hell_camera.position.z = 15.0f;
 
   // Player

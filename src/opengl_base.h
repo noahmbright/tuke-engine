@@ -5,6 +5,7 @@
 #include <OpenGL/OpenGL.h>
 
 #define MAX_NUM_VBOS (4)
+#define MAX_NUM_POST_PROCESSING_EFFECTS (4)
 
 enum VBOTypes { VBO_VERTEX, VBO_INSTANCE };
 
@@ -65,61 +66,55 @@ inline u32 create_opengl_ubo(u32 size, u32 draw_mode) {
 
 //////////////////// Textures ////////////////////
 
+// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml
 struct OpenGLTexture {
   u32 texture; // the u32 handle the driver returns to us
   u32 height;
   u32 width;
+
+  // Internal format is how the data gets stored on the GPU. This could involve a
+  // conversion between the CPU format and GPU format, which comes with a performance impact.
+  // Keeping formats compatible is best for performance. Some WebGL implementations
+  // don't even support all conversions.
+  GLenum internal_format;
+
+  // Format specifes the layout of the data on the CPU.
   GLenum format;
+
+  // Type specifies the way the fields in the texture are laid out.
+  // A standard choice is GL_UNSIGNED_BYTE.
+  // If format == GL_RGBA, then using GL_UNSIGNED_BYTE would mean
+  // that R, G, B, and A are each an unsigned byte in the GPU's memory.
+  GLenum type;
 };
 
-struct OpenGLTextureConfig {
-  u32 height;
-  u32 width;
-  GLenum internal_format; // e.g. GL_RGBA8
-  GLenum format;          // e.g. GL_RGBA
-  GLenum type;            // e.g. GL_UNSIGNED_BYTE
-  GLenum min_filter;      // GL_LINEAR, GL_NEAREST, etc
-  GLenum mag_filter;
-  GLenum wrap_s;
-  GLenum wrap_t;
-  bool generate_mipmaps;
-};
-
-inline OpenGLTextureConfig create_default_opengl_texture_config(u32 height, u32 width) {
-  return {
-      .height = height,
-      .width = width,
-      .internal_format = GL_RGBA8,
-      .format = GL_RGBA,
-      .type = GL_UNSIGNED_BYTE,
-      .min_filter = GL_LINEAR,
-      .mag_filter = GL_NEAREST,
-      .wrap_s = GL_CLAMP_TO_EDGE,
-      .wrap_t = GL_CLAMP_TO_EDGE,
-      .generate_mipmaps = false,
-  };
-}
-
-inline OpenGLTexture create_opengl_texture2d(const OpenGLTextureConfig *config) {
+// This constructor doesn't allow for configuring wrapping and min/mag settings. If needed,
+// bind and set outside the caller, or write a new constructor.
+// Currently, there is no need to provide specialized format and internal_format. Use the
+// same format parameter for both.
+inline OpenGLTexture create_opengl_texture2d(u32 height, u32 width, GLenum format, GLenum type) {
   OpenGLTexture res;
-  res.height = config->height;
-  res.width = config->width;
-  res.format = config->format;
+  res.height = height;
+  res.width = width;
+  res.format = format;
+  res.internal_format = format;
+  res.type = type;
 
   u32 texture;
   glGenTextures(1, &texture);
   glBindTexture(GL_TEXTURE_2D, texture);
 
-  glTexImage2D(GL_TEXTURE_2D, 0, config->internal_format, config->width, config->height, 0, config->format,
-               GL_UNSIGNED_BYTE, NULL);
+  glTexImage2D(GL_TEXTURE_2D, 0, res.internal_format, width, height, 0, format, type, NULL);
 
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, config->wrap_s);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, config->wrap_t);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, config->min_filter);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, config->mag_filter);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   res.texture = texture;
 
-  if (config->generate_mipmaps) {
+  // FIXME: I hate that I am doing this if true thing
+  // FIXME: Actually understand mipmaps, and when I use them
+  if (true) {
     glGenerateMipmap(GL_TEXTURE_2D);
   }
 
@@ -173,17 +168,19 @@ inline OpenGLLimits get_opengl_limits() {
 // Need to build the ping pong abstraction. Need to see how FBs are actually used.
 struct OpenGLFramebuffer {
   u32 fbo;
-  u32 texture;
+  OpenGLTexture texture;
 };
 
+// The framebuffers created here are empty, incomplete.
+// It is necessary to attach textures in a separate call.
 inline OpenGLFramebuffer create_opengl_framebuffer() {
   OpenGLFramebuffer framebuffer;
   glGenFramebuffers(1, &framebuffer.fbo);
   return framebuffer;
 }
 
-// possibly may want to pass GL_COLOR_ATTACHMENTN as an argument
-inline void opengl_attach_texture2d_to_framebuffer(OpenGLFramebuffer *framebuffer, const OpenGLTexture *texture) {
+// possibly may want to pass GL_COLOR_ATTACHMENT as an argument
+inline void opengl_framebuffer_attach_texture2d(OpenGLFramebuffer *framebuffer, const OpenGLTexture *texture) {
   glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->fbo);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture->texture, 0);
 
@@ -191,7 +188,56 @@ inline void opengl_attach_texture2d_to_framebuffer(OpenGLFramebuffer *framebuffe
     printf("ERROR::FRAMEBUFFER:: Framebuffer is not complete!\n");
   }
 
-  framebuffer->texture = texture->texture;
+  framebuffer->texture = *texture;
+}
+
+inline void opengl_framebuffer_resize(OpenGLFramebuffer *framebuffer, u32 height, u32 width) {
+  // Resize texture
+  // Assuming no change of format
+  OpenGLTexture *texture = &framebuffer->texture;
+  glBindTexture(GL_TEXTURE_2D, texture->texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, texture->format, width, height, 0, texture->format, GL_UNSIGNED_BYTE, NULL);
+}
+
+//////////////// Post processing ping pong ////////////////
+
+struct OpenGLPostProcessing {
+  OpenGLFramebuffer ping;
+  OpenGLFramebuffer pong;
+  bool is_ping;
+
+  u32 height;
+  u32 width;
+
+  u32 num_effects;
+  u32 effects[MAX_NUM_POST_PROCESSING_EFFECTS];
+};
+
+inline OpenGLPostProcessing create_opengl_post_processing() {
+  OpenGLPostProcessing post_processing;
+
+  post_processing.is_ping = true;
+  post_processing.ping = create_opengl_framebuffer();
+  post_processing.pong = create_opengl_framebuffer();
+  post_processing.num_effects = 0;
+  post_processing.height = 0;
+  post_processing.width = 0;
+
+  memset(&post_processing.effects, 0, sizeof(post_processing.effects));
+
+  return post_processing;
+}
+
+inline void resize_opengl_post_processing(OpenGLPostProcessing *post_processing, u32 height, u32 width) {
+  if (post_processing->width == width && post_processing->height == height) {
+    return;
+  }
+
+  post_processing->width = width;
+  post_processing->height = height;
+
+  // opengl_framebuffer_resize(&post_processing->ping, height, width);
+  //  opengl_framebuffer_resize(&post_processing->pong, height, width);
 }
 
 //////////////// Meshes and Materials ////////////////
