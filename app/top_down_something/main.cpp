@@ -82,17 +82,16 @@ int main() {
   player_material.texture = arrow_texture;
 
   // Framebuffer
-  u32 fbo = create_opengl_framebuffer();
+  OpenGLFramebuffer fbo = create_opengl_framebuffer();
   OpenGLTextureConfig texture_config =
       create_default_opengl_texture_config(global_state.window_height, global_state.window_width);
   OpenGLTexture fbo_texture = create_opengl_texture2d(&texture_config);
-  opengl_attach_texture2d_to_framebuffer(fbo, &fbo_texture);
+  opengl_attach_texture2d_to_framebuffer(&fbo, &fbo_texture);
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   // Meshes
   OpenGLMesh fullscreen_quad_mesh =
       create_opengl_mesh_with_vertex_layout(NULL, 0, 3, VERTEX_LAYOUT_NULL, GL_STATIC_DRAW);
-  (void)fullscreen_quad_mesh;
   OpenGLMaterial fullscreen_quad_material = create_opengl_material(fullscreen_quad_program);
   fullscreen_quad_material.texture = fbo_texture;
 
@@ -111,6 +110,9 @@ int main() {
       .just_transitioned = false,
       .player_rotation_simulation = 0.0f,
       .player_rotation_render = 0.0f,
+      .fbo = fbo,
+      .fullscreen_quad_mesh = fullscreen_quad_mesh,
+      .fullscreen_quad_material = fullscreen_quad_material,
   };
 
   OverworldSceneData scene1_data{
@@ -127,6 +129,9 @@ int main() {
       .just_transitioned = false,
       .player_rotation_simulation = 0.0f,
       .player_rotation_render = 0.0f,
+      .fbo = fbo,
+      .fullscreen_quad_mesh = fullscreen_quad_mesh,
+      .fullscreen_quad_material = fullscreen_quad_material,
   };
 
   Scene scene0 = new_scene(scene0_update, scene0_draw, &scene0_data);
@@ -152,6 +157,8 @@ int main() {
     update_key_inputs_glfw(&global_state.inputs, window);
 
     glClear(GL_COLOR_BUFFER_BIT);
+
+    // TODO lazy resize
     glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);
     glViewport(0, 0, global_state.window_width, global_state.window_height);
 
@@ -166,7 +173,7 @@ int main() {
 
   // Cleanup
   free(bullet_hell_scene_data.bullet_manager);
-  glDeleteFramebuffers(1, &fbo);
+  glDeleteFramebuffers(1, &fbo.fbo);
   glfwDestroyWindow(window);
   glfwTerminate();
   return 0;

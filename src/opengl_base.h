@@ -167,24 +167,34 @@ inline OpenGLLimits get_opengl_limits() {
   return limits;
 }
 
-// framebuffers
+//////////////// Framebuffers ////////////////
 
-inline u32 create_opengl_framebuffer() {
+// TODO WTF am I doing?
+// Need to build the ping pong abstraction. Need to see how FBs are actually used.
+struct OpenGLFramebuffer {
   u32 fbo;
-  glGenFramebuffers(1, &fbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-  return fbo;
+  u32 texture;
+};
+
+inline OpenGLFramebuffer create_opengl_framebuffer() {
+  OpenGLFramebuffer framebuffer;
+  glGenFramebuffers(1, &framebuffer.fbo);
+  return framebuffer;
 }
 
 // possibly may want to pass GL_COLOR_ATTACHMENTN as an argument
-inline void opengl_attach_texture2d_to_framebuffer(u32 fbo, const OpenGLTexture *texture) {
-  glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+inline void opengl_attach_texture2d_to_framebuffer(OpenGLFramebuffer *framebuffer, const OpenGLTexture *texture) {
+  glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->fbo);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture->texture, 0);
 
   if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
     printf("ERROR::FRAMEBUFFER:: Framebuffer is not complete!\n");
   }
+
+  framebuffer->texture = texture->texture;
 }
+
+//////////////// Meshes and Materials ////////////////
 
 inline OpenGLMesh create_opengl_mesh(const void *arr, u32 num_bytes, u32 num_vertices, u32 draw_mode) {
   OpenGLMesh opengl_mesh;

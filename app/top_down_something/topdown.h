@@ -122,6 +122,10 @@ struct OverworldSceneData {
 
   SceneID other_scene;
   bool just_transitioned;
+
+  OpenGLFramebuffer fbo;
+  OpenGLMesh fullscreen_quad_mesh;
+  OpenGLMaterial fullscreen_quad_material;
 };
 
 struct GlobalState {
@@ -212,7 +216,13 @@ inline void scene0_update(void *scene_data, void *global_state, f32 dt) {
 
 inline void scene0_draw(const void *scene_data) {
   OverworldSceneData *overworld_data = (OverworldSceneData *)scene_data;
+
+  glBindFramebuffer(GL_FRAMEBUFFER, overworld_data->fbo.fbo);
   glClear(GL_COLOR_BUFFER_BIT);
   draw_opengl_mesh(&overworld_data->tilemap_mesh, overworld_data->tilemap_material);
   draw_opengl_mesh(&overworld_data->player_mesh, overworld_data->player_material);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindTexture(GL_TEXTURE_2D, overworld_data->fbo.texture);
+  draw_opengl_mesh(&overworld_data->fullscreen_quad_mesh, overworld_data->fullscreen_quad_material);
 }
