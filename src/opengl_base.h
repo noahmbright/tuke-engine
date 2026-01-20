@@ -66,6 +66,11 @@ inline u32 create_opengl_ubo(u32 size, u32 draw_mode) {
 
 //////////////////// Textures ////////////////////
 
+// Currently, we are only supporting 2D textures.
+// When we need to support 1D and 3D textures, cubemaps, and texture arrays, we will
+// abstract them.
+
+// TODO consider how to manage samplers as together/separate from textures
 // https://registry.khronos.org/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml
 struct OpenGLTexture {
   u32 texture; // the u32 handle the driver returns to us
@@ -121,57 +126,35 @@ inline OpenGLTexture create_opengl_texture2d(u32 height, u32 width, GLenum forma
   return res;
 }
 
-inline void buffer_data_to_opengl_texture2d(const OpenGLTexture *texture, const u8 *data) {
+inline void opengl_texture_buffer_data(const OpenGLTexture *texture, const u8 *data) {
   glBindTexture(GL_TEXTURE_2D, texture->texture);
   glTexImage2D(GL_TEXTURE_2D, 0, texture->format, texture->width, texture->height, 0, texture->format, GL_UNSIGNED_BYTE,
                data);
 }
 
-// opengl limits
-
-struct OpenGLLimits {
-  i32 max_uniform_buffer_bindings;
-  i32 max_uniform_block_size;
-  i32 max_vertex_uniform_blocks;
-  i32 max_fragment_uniform_blocks;
-  i32 max_combined_uniform_blocks;
-  i32 max_combined_vertex_uniform_components;
-  i32 max_vertex_attribs;
-  i32 max_texture_units;
-  i32 max_texture_size;
-};
-
-inline OpenGLLimits get_opengl_limits() {
-  OpenGLLimits limits;
-  glGetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, &limits.max_uniform_buffer_bindings);
-  glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &limits.max_uniform_block_size);
-  glGetIntegerv(GL_MAX_VERTEX_UNIFORM_BLOCKS, &limits.max_vertex_uniform_blocks);
-  glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &limits.max_fragment_uniform_blocks);
-  glGetIntegerv(GL_MAX_COMBINED_UNIFORM_BLOCKS, &limits.max_combined_uniform_blocks);
-  glGetIntegerv(GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS, &limits.max_combined_vertex_uniform_components);
-
-  glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &limits.max_vertex_attribs);
-  glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &limits.max_texture_units);
-  glGetIntegerv(GL_MAX_TEXTURE_SIZE, &limits.max_texture_size);
-
-  GLenum err = glGetError();
-  if (err != GL_NO_ERROR) {
-    fprintf(stderr, "get_opengl_limits: glGetIntegerv failed with error 0x%x\n", err);
-  }
-
-  return limits;
+inline void opengl_texture_resize(OpenGLTexture *texture, u32 height, u32 width) {
+  glBindTexture(GL_TEXTURE_2D, texture->texture);
+  glTexImage2D(GL_TEXTURE_2D, 0, texture->format, width, height, 0, texture->format, GL_UNSIGNED_BYTE, NULL);
 }
 
-//////////////// Framebuffers ////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////// Framebuffers ////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
 
-// TODO WTF am I doing?
-// Need to build the ping pong abstraction. Need to see how FBs are actually used.
+// Still developing my mental model around framebuffers and textures.
+// It seems like the right mental model is to not have any dedicated "framebuffer" wrappers.
+// A framebuffer is just OpenGL glue for structuring attachments.
+// It seems like the better model is to have structs that have a dedicated functionality,
+// and they all keep their own framebuffer if necessary, and specialize its use.
+
+// TODO think about how to manage high dynamic range rendering - might be necessary to
+// allow for more formats in texture creation.
 struct OpenGLFramebuffer {
   u32 fbo;
   OpenGLTexture texture;
 };
 
-// The framebuffers created here are empty, incomplete.
+// The framebuffers created here are empty and incomplete.
 // It is necessary to attach textures in a separate call.
 inline OpenGLFramebuffer create_opengl_framebuffer() {
   OpenGLFramebuffer framebuffer;
@@ -179,7 +162,7 @@ inline OpenGLFramebuffer create_opengl_framebuffer() {
   return framebuffer;
 }
 
-// possibly may want to pass GL_COLOR_ATTACHMENT as an argument
+// Possibly may want to pass GL_COLOR_ATTACHMENT as an argument
 inline void opengl_framebuffer_attach_texture2d(OpenGLFramebuffer *framebuffer, const OpenGLTexture *texture) {
   glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->fbo);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture->texture, 0);
@@ -191,53 +174,103 @@ inline void opengl_framebuffer_attach_texture2d(OpenGLFramebuffer *framebuffer, 
   framebuffer->texture = *texture;
 }
 
+// TODO need to do some crazy stuff with framebuffers and textures to understand the right
+// ownership model.
 inline void opengl_framebuffer_resize(OpenGLFramebuffer *framebuffer, u32 height, u32 width) {
   // Resize texture
   // Assuming no change of format
-  OpenGLTexture *texture = &framebuffer->texture;
-  glBindTexture(GL_TEXTURE_2D, texture->texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, texture->format, width, height, 0, texture->format, GL_UNSIGNED_BYTE, NULL);
+  opengl_texture_resize(&framebuffer->texture, height, width);
+}
+
+// Render Target
+// A struct containing a texture to render to and an FBO to manage the texture in the OpenGLDriver
+struct OpenGLRenderTarget {
+  u32 fbo;
+  OpenGLTexture texture;
+};
+
+inline OpenGLRenderTarget create_opengl_render_target(u32 height, u32 width, GLenum format, GLenum type) {
+  OpenGLRenderTarget render_target;
+
+  glGenFramebuffers(1, &render_target.fbo);
+  render_target.texture = create_opengl_texture2d(height, width, format, type);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, render_target.fbo);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render_target.texture.texture, 0);
+
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    printf("ERROR::FRAMEBUFFER:: Framebuffer is not complete!\n");
+  }
+
+  return render_target;
 }
 
 //////////////// Post processing ping pong ////////////////
 
-struct OpenGLPostProcessing {
-  OpenGLFramebuffer ping;
-  OpenGLFramebuffer pong;
-  bool is_ping;
-
+//  Struct for holding two texture attachment only framebuffers
+struct OpenGLDoubleBuffer {
+  OpenGLRenderTarget targets[2];
   u32 height;
   u32 width;
+};
+
+inline OpenGLDoubleBuffer create_opengl_double_buffer(u32 height, u32 width, GLenum format, GLenum type) {
+  OpenGLDoubleBuffer double_buffer;
+
+  double_buffer.targets[0] = create_opengl_render_target(height, width, format, type);
+  double_buffer.targets[1] = create_opengl_render_target(height, width, format, type);
+
+  double_buffer.height = 0;
+  double_buffer.width = 0;
+
+  return double_buffer;
+}
+
+inline void opengl_double_buffer_resize(OpenGLDoubleBuffer *double_buffer, u32 height, u32 width) {
+  if (double_buffer->width == width && double_buffer->height == height) {
+    return;
+  }
+
+  double_buffer->width = width;
+  double_buffer->height = height;
+
+  opengl_texture_resize(&double_buffer->targets[0].texture, height, width);
+  opengl_texture_resize(&double_buffer->targets[1].texture, height, width);
+}
+
+// TODO come up with a scheme for describing post processing effects
+// They will be material like. Write fluid sim and see what is necessary.
+// First, do some simple post processing with kernel effects and stuff.
+struct OpenGLPostProcessing {
+  OpenGLDoubleBuffer double_buffer;
 
   u32 num_effects;
   u32 effects[MAX_NUM_POST_PROCESSING_EFFECTS];
 };
 
-inline OpenGLPostProcessing create_opengl_post_processing() {
-  OpenGLPostProcessing post_processing;
+// Starting with the render in texture, perform post processing
+inline const OpenGLTexture *opengl_post_process(OpenGLPostProcessing *post_processing, const OpenGLTexture *texture) {
 
-  post_processing.is_ping = true;
-  post_processing.ping = create_opengl_framebuffer();
-  post_processing.pong = create_opengl_framebuffer();
-  post_processing.num_effects = 0;
-  post_processing.height = 0;
-  post_processing.width = 0;
-
-  memset(&post_processing.effects, 0, sizeof(post_processing.effects));
-
-  return post_processing;
-}
-
-inline void resize_opengl_post_processing(OpenGLPostProcessing *post_processing, u32 height, u32 width) {
-  if (post_processing->width == width && post_processing->height == height) {
-    return;
+  if (post_processing->num_effects == 0) {
+    return texture;
   }
 
-  post_processing->width = width;
-  post_processing->height = height;
+  u32 src_index = 0; // should always be 0 or 1
 
-  // opengl_framebuffer_resize(&post_processing->ping, height, width);
-  //  opengl_framebuffer_resize(&post_processing->pong, height, width);
+  for (u32 i = 0; i < post_processing->num_effects; i++) {
+    u32 dst_index = src_index ^ 1;
+
+    const OpenGLRenderTarget *src = &post_processing->double_buffer.targets[src_index];
+    const OpenGLRenderTarget *dst = &post_processing->double_buffer.targets[dst_index];
+
+    glBindTexture(GL_TEXTURE_2D, src->texture.texture);
+    glBindFramebuffer(GL_FRAMEBUFFER, dst->fbo);
+    // TODO actually draw stuff
+
+    src_index ^= 1;
+  }
+
+  return &post_processing->double_buffer.targets[src_index].texture;
 }
 
 //////////////// Meshes and Materials ////////////////
@@ -298,4 +331,39 @@ inline void draw_opengl_mesh_instanced(const OpenGLMesh *opengl_mesh, OpenGLMate
   glUseProgram(material.program);
   glBindVertexArray(opengl_mesh->vao);
   glDrawArraysInstanced(material.primitive, 0, opengl_mesh->num_vertices, num_instances);
+}
+
+//////////////////// Open GL Limits ////////////////////
+
+struct OpenGLLimits {
+  i32 max_uniform_buffer_bindings;
+  i32 max_uniform_block_size;
+  i32 max_vertex_uniform_blocks;
+  i32 max_fragment_uniform_blocks;
+  i32 max_combined_uniform_blocks;
+  i32 max_combined_vertex_uniform_components;
+  i32 max_vertex_attribs;
+  i32 max_texture_units;
+  i32 max_texture_size;
+};
+
+inline OpenGLLimits opengl_limits_get() {
+  OpenGLLimits limits;
+  glGetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, &limits.max_uniform_buffer_bindings);
+  glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &limits.max_uniform_block_size);
+  glGetIntegerv(GL_MAX_VERTEX_UNIFORM_BLOCKS, &limits.max_vertex_uniform_blocks);
+  glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &limits.max_fragment_uniform_blocks);
+  glGetIntegerv(GL_MAX_COMBINED_UNIFORM_BLOCKS, &limits.max_combined_uniform_blocks);
+  glGetIntegerv(GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS, &limits.max_combined_vertex_uniform_components);
+
+  glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &limits.max_vertex_attribs);
+  glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &limits.max_texture_units);
+  glGetIntegerv(GL_MAX_TEXTURE_SIZE, &limits.max_texture_size);
+
+  GLenum err = glGetError();
+  if (err != GL_NO_ERROR) {
+    fprintf(stderr, "get_opengl_limits: glGetIntegerv failed with error 0x%x\n", err);
+  }
+
+  return limits;
 }

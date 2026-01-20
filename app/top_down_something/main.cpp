@@ -78,21 +78,17 @@ int main() {
   GLenum arrow_texture_format = (arrow_png.n_channels == 4) ? GL_RGBA : GL_RGB;
   OpenGLTexture arrow_texture =
       create_opengl_texture2d(arrow_png.height, arrow_png.width, arrow_texture_format, GL_UNSIGNED_BYTE);
-  buffer_data_to_opengl_texture2d(&arrow_texture, arrow_png.data);
+  opengl_texture_buffer_data(&arrow_texture, arrow_png.data);
   player_material.texture = arrow_texture;
 
   // Framebuffer
-  OpenGLFramebuffer fbo = create_opengl_framebuffer();
-  OpenGLTexture fbo_texture =
-      create_opengl_texture2d(global_state.window_height, global_state.window_width, GL_RGBA, GL_UNSIGNED_BYTE);
-  opengl_framebuffer_attach_texture2d(&fbo, &fbo_texture);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  OpenGLRenderTarget overworld_render_target =
+      create_opengl_render_target(global_state.window_height, global_state.window_width, GL_RGBA, GL_UNSIGNED_BYTE);
 
-  // Meshes
   OpenGLMesh fullscreen_quad_mesh =
       create_opengl_mesh_with_vertex_layout(NULL, 0, 3, VERTEX_LAYOUT_NULL, GL_STATIC_DRAW);
   OpenGLMaterial fullscreen_quad_material = create_opengl_material(fullscreen_quad_program);
-  fullscreen_quad_material.texture = fbo_texture;
+  fullscreen_quad_material.texture = overworld_render_target.texture;
 
   // Scenes
   OverworldSceneData scene0_data{
@@ -109,7 +105,7 @@ int main() {
       .just_transitioned = false,
       .player_rotation_simulation = 0.0f,
       .player_rotation_render = 0.0f,
-      .fbo = fbo,
+      .render_target = overworld_render_target,
       .fullscreen_quad_mesh = fullscreen_quad_mesh,
       .fullscreen_quad_material = fullscreen_quad_material,
   };
@@ -128,7 +124,7 @@ int main() {
       .just_transitioned = false,
       .player_rotation_simulation = 0.0f,
       .player_rotation_render = 0.0f,
-      .fbo = fbo,
+      .render_target = overworld_render_target,
       .fullscreen_quad_mesh = fullscreen_quad_mesh,
       .fullscreen_quad_material = fullscreen_quad_material,
   };
@@ -172,7 +168,7 @@ int main() {
 
   // Cleanup
   free(bullet_hell_scene_data.bullet_manager);
-  glDeleteFramebuffers(1, &fbo.fbo);
+  glDeleteFramebuffers(1, &overworld_render_target.fbo);
   glfwDestroyWindow(window);
   glfwTerminate();
   return 0;

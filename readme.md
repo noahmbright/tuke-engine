@@ -1,5 +1,15 @@
+Last updated 1/19/25.
 
-# Vulkan engine
+Status: most of this readme is old and needs updated.
+
+# Priorities for focusing myself 
+
+* Finish double buffering.
+* Understand mipmaps and if/when I'd want to use them.
+* Understand and allow for HDR rendering - think about data storage used for offscreen rendering
+
+
+# Vulkan renderer
 
 Completed:
 * Black screen
