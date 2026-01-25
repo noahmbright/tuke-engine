@@ -56,12 +56,13 @@ static inline glm::vec3 reflect_vec3(glm::vec3 v, glm::vec3 w) {
   return v - 2.0f * perpendicular_projection;
 }
 
-// functions
+// Functions
 glm::vec3 random_unit_vec3(RNG *rng);
 
-// size in AABB collisions are full sizes, so half sizes have to be used
-// in implementations
+// Size in AABB collisions are full sizes. Positions are the center of the AABBs.
+// From center to edges requires the use of half sizes in implementations.
 bool aabb_collision(glm::vec3 pos1, glm::vec3 size1, glm::vec3 pos2, glm::vec3 size2);
+bool aabb_collision_vec2(glm::vec2 pos1, glm::vec2 size1, glm::vec2 pos2, glm::vec2 size2);
 SweptAABBCollisionCheck swept_aabb_collision(f32 dt, glm::vec3 pos1, glm::vec3 size1, glm::vec3 v1, glm::vec3 pos2,
                                              glm::vec3 size2, glm::vec3 v2);
 

@@ -129,6 +129,8 @@ struct OverworldSceneData {
   OpenGLRenderTarget render_target;
   OpenGLMesh fullscreen_quad_mesh;
   OpenGLMaterial fullscreen_quad_material;
+
+  u32 overworld_overlay_program;
 };
 
 struct GlobalState {
@@ -228,8 +230,9 @@ inline void scene0_draw(const void *scene_data) {
   draw_opengl_mesh(&overworld_data->tilemap_mesh, overworld_data->tilemap_material);
   draw_opengl_mesh(&overworld_data->player_mesh, overworld_data->player_material);
 
-  // Post processing
-  // WILL PUT OVERLAYS HERE AAAAHHHHHHHHHHHHHHH
+  // Draw overlay into overworld framebuffer
+  glUseProgram(overworld_data->overworld_overlay_program);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
 
   // Present world to screen
   // Does this rely on hidden assumptions that the screen and these FBOs have the same dimensions?

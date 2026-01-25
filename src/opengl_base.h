@@ -138,6 +138,15 @@ inline void opengl_texture_resize(OpenGLTexture *texture, u32 height, u32 width)
 }
 
 //////////////////////////////////////////////////////////////////////////////
+//////////////////////////////// Passes //////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+
+// Passes is a placeholder name.
+// These are supposed to be things that aren't quite materials. These should always
+// be simple, read from texture, draw quad to other texture. It may be necessary
+// to bind uniforms as well.
+
+//////////////////////////////////////////////////////////////////////////////
 //////////////////////////////// Framebuffers ////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 
@@ -301,6 +310,17 @@ inline OpenGLMaterial create_opengl_material(u32 program) {
   memset(&material.texture, 0, sizeof(OpenGLTexture));
 
   return material;
+}
+
+inline void opengl_bind_ubo_to_block(u32 program, u32 ubo, u32 binding_point, const char *block_name) {
+  u32 block_index = glGetUniformBlockIndex(program, block_name);
+  if (block_index == GL_INVALID_INDEX) {
+    fprintf(stderr, "Uniform block '%s' not found in program %u\n", block_name, program);
+    return;
+  }
+
+  glUniformBlockBinding(program, block_index, binding_point);
+  glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, ubo);
 }
 
 inline void opengl_material_add_uniform(OpenGLMaterial *opengl_material, u32 ubo, u32 binding_point,

@@ -50,6 +50,9 @@ int main() {
   u32 fullscreen_quad_program = shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT,
                                                                  SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG);
 
+  u32 overworld_overlay_program = shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_OVERWORLD_OVERLAY_VERT,
+                                                                   SHADER_HANDLE_TOPDOWN_OVERWORLD_OVERLAY_FRAG);
+
   // Tilemaps
   OpenGLMesh tilemap_mesh =
       create_opengl_mesh_with_vertex_layout((f32 *)tilemap_vertices, tilemap_vertices_sizes_bytes, num_vertices,
@@ -108,6 +111,7 @@ int main() {
       .render_target = overworld_render_target,
       .fullscreen_quad_mesh = fullscreen_quad_mesh,
       .fullscreen_quad_material = fullscreen_quad_material,
+      .overworld_overlay_program = overworld_overlay_program,
   };
 
   OverworldSceneData scene1_data{
@@ -127,6 +131,7 @@ int main() {
       .render_target = overworld_render_target,
       .fullscreen_quad_mesh = fullscreen_quad_mesh,
       .fullscreen_quad_material = fullscreen_quad_material,
+      .overworld_overlay_program = overworld_overlay_program,
   };
 
   Scene scene0 = create_scene(scene0_update, scene0_draw, &scene0_data);
@@ -140,7 +145,7 @@ int main() {
   global_state.scene_manager.scene_registry[SCENE1] = &scene1;
   global_state.scene_manager.scene_registry[SCENE_BULLET_HELL] = &scene_bullet_hell;
 
-  set_base_scene(&global_state.scene_manager, &scene0);
+  set_base_scene(&global_state.scene_manager, &scene_bullet_hell);
 
   // Main loop
   f64 t0 = glfwGetTime();

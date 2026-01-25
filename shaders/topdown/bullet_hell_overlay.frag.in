@@ -1,0 +1,35 @@
+#version {{ VERSION }}
+
+{{ LOCATION 0 }} in vec2 uv;
+
+{{ LOCATION 0 }} out vec4 frag_color;
+
+{{ SET_BINDING 0 0 BUFFER_LABEL BULLET_HELL_DATA }} uniform BulletHellData {
+    uint max_health;
+    uint health;
+} u_data;
+
+void main(){
+
+    float rect_min_x = 0.025;
+    float rect_min_y = 0.050;
+    float rect_max_x = 0.200;
+    float rect_max_y = 0.100;
+    float delta_x = rect_max_x - rect_min_x;
+
+    bool in_rect =  uv.x < rect_max_x
+                 && uv.x > rect_min_x
+                 && uv.y < rect_max_y
+                 && uv.y > rect_min_y;
+
+    if (in_rect){
+        float health_frac = float(u_data.health)/float(u_data.max_health);
+        float current_x_frac = (uv.x - rect_min_x) / delta_x;
+        vec4 health_bar_color = vec4(0.7, 0.5, 0.4, 1.0);
+        float saturation = (current_x_frac > health_frac) ? 0.5 : 1.0;
+        frag_color =  saturation * health_bar_color;
+    } else {
+        discard;
+    }
+}
+

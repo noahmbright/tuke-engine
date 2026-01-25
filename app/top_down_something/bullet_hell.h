@@ -4,6 +4,7 @@
 #include "generated_shader_utils.h"
 #include "glm/common.hpp"
 #include "opengl_base.h"
+#include "physics.h"
 #include "topdown.h"
 #include "tuke_engine.h"
 #include <OpenGL/OpenGL.h>
@@ -55,6 +56,11 @@ struct BulletManager {
   u32 num_live_bullets;
 };
 
+// An okay set of guides on FSMs for game AI, lots of OOP dogma, bad code, but introduces transition tables
+// http://www.ai-junkie.com/architecture/state_driven/tut_state1.html
+// Game programming patterns on state. Also OOP, but on_entry, on_exit notions useful.
+// Heirarchical state machines, pushdown automata, state stacks, behavior trees, and planning systems also exist.
+// https://gameprogrammingpatterns.com/state.html
 struct Enemy {
   glm::vec2 position;
 };
@@ -70,10 +76,18 @@ struct EnemyManager {
   u32 num_live_enemies;
 };
 
+// player_pos is the position within the bullet hell arena
+// The arena's center is (0.0, 0.0)
+struct Player {
+  glm::vec3 pos;
+  glm::vec3 size;
+  u32 current_health;
+  u32 max_health;
+};
+
 struct BulletHellSceneData {
-  // player_pos is the position within the bullet hell arena
-  // The arena's center is (0.0, 0.0)
-  glm::vec3 player_pos;
+  Player player;
+
   BulletManager *bullet_manager;
   EnemyManager enemy_manager;
 
@@ -92,6 +106,9 @@ struct BulletHellSceneData {
 
   OpenGLMesh enemy_mesh;
   OpenGLMaterial enemy_material;
+
+  u32 overlay_program;
+  u32 overlay_uniform;
 };
 
 inline void bullet_hell_move_player(BulletHellSceneData *scene_data, GlobalState *global_state, f32 dt) {
@@ -102,7 +119,7 @@ inline void bullet_hell_move_player(BulletHellSceneData *scene_data, GlobalState
   const f32 speed = 5.0f;
   glm::vec3 input_movement_vector = speed * dt * inputs_to_movement_vector(&global_state->inputs);
 
-  glm::vec3 *player_pos = &scene_data->player_pos;
+  glm::vec3 *player_pos = &scene_data->player.pos;
 
   f32 next_x = player_pos->x + input_movement_vector.x;
   f32 clamped_next_x = clamp_f32(next_x, -X_BOUNDARY, X_BOUNDARY);
@@ -137,6 +154,8 @@ inline void update_bullets(BulletManager *bullet_manager) {
     Bullet *bullet = &bullet_manager->bullets[i];
     bullet->position += bullet->velocity;
 
+    // Signed distance to the arena. If negative, bullet still alive
+    // TODO this breaks down if I decide to add bullets that go outside the arena and come back in
     f32 box_bullet_signed_distance =
         rectangle_sdf(BULLET_HELL_ARENA_HALF_WIDTH, BULLET_HELL_ARENA_HALF_HEIGHT, bullet->position);
 
@@ -148,46 +167,78 @@ inline void update_bullets(BulletManager *bullet_manager) {
   bullet_manager->num_live_bullets = live_bullet_index;
 }
 
+// TODO NEXT: collision detection between player and enemies. Update health to a uniform
+// TODO do I want all openGL to be in the draw function, do I want explicit updates on the GPU right after CPU updates?
 inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   GlobalState *gs = (GlobalState *)global_state;
   BulletHellSceneData *data = (BulletHellSceneData *)scene_data;
   BulletManager *bullet_manager = data->bullet_manager;
   EnemyManager *enemy_manager = &data->enemy_manager;
+  Player *player = &data->player;
 
   bullet_hell_move_player(data, gs, dt);
 
   // If I add slow motion or anything like that, will need to consider how to track time updates
   gs->t += dt;
 
-  glm::mat4 player_model = glm::translate(glm::mat4(1.0f), data->player_pos);
-  player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
+  glm::mat4 player_model = glm::translate(glm::mat4(1.0f), data->player.pos);
+  player_model = glm::scale(player_model, data->player.size);
   glBindBuffer(GL_UNIFORM_BUFFER, data->player_model_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
 
   update_bullets(bullet_manager);
-  glBindBuffer(GL_ARRAY_BUFFER, data->bullet_mesh.vbos[VBO_INSTANCE]);
+  glBindBuffer(GL_ARRAY_BUFFER, data->bullet_mesh.vbos[0]);
   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(BulletRenderData) * bullet_manager->num_live_bullets,
                   &bullet_manager->render_data);
 
   // enemy update bringup
-  f32 x_amp = BULLET_HELL_ARENA_HALF_WIDTH * 0.8f;
-  data->enemy_manager.enemies[0].position.x = x_amp * sinf(gs->t);
-  data->enemy_manager.render_data[0].pos.x = x_amp * sinf(gs->t);
+  f32 x_amplitude = BULLET_HELL_ARENA_HALF_WIDTH * 0.8f;
+  data->enemy_manager.enemies[0].position.x = x_amplitude * sinf(gs->t);
+  data->enemy_manager.render_data[0].pos.x = x_amplitude * sinf(gs->t);
   glBindBuffer(GL_ARRAY_BUFFER, data->enemy_mesh.vbos[VBO_INSTANCE]);
   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(EnemyRenderData) * enemy_manager->num_live_enemies,
                   &enemy_manager->render_data);
 
   // TODO: Need window resize callback. Want to only update and rebuffer when there's new data.
   buffer_vp_matrix_to_gl_ubo(&data->camera, data->vp_ubo, gs->window_width, gs->window_height);
+
+  // Collision detection
+  glm::vec2 player_xy(player->pos.x, player->pos.y);
+  glm::vec2 player_size_xy(player->size.x, player->size.y);
+  for (u32 i = 0; i < data->bullet_manager->num_live_bullets; i++) {
+    Bullet *bullet = &bullet_manager->bullets[i];
+    if (aabb_collision_vec2(player_xy, player_size_xy, bullet->position, bullet->size)) {
+      printf("Bullet %u hit the player.\n", i);
+      player->current_health -= (player->current_health > 0);
+    }
+  }
 }
 
 inline void bullet_hell_draw(const void *scene_data) {
   BulletHellSceneData *data = (BulletHellSceneData *)scene_data;
+
+  // Draw directly to screen, no post processing yet
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glClear(GL_COLOR_BUFFER_BIT);
+
+  // The arena, player, enemies, bullets
   draw_opengl_mesh(&data->arena_mesh, data->arena_material);
   draw_opengl_mesh_instanced(&data->bullet_mesh, data->bullet_material, data->bullet_manager->num_live_bullets);
   draw_opengl_mesh_instanced(&data->enemy_mesh, data->enemy_material, data->enemy_manager.num_live_enemies);
   draw_opengl_mesh(&data->player_mesh, data->player_material);
+
+  // Overlay: health (Weapon wheel?)
+  BulletHellData bullet_hell_render_data{
+      .health = data->player.current_health,
+      .max_health = data->player.max_health,
+  };
+
+  printf("current health %u\n", bullet_hell_render_data.health);
+
+  glUseProgram(data->overlay_program);
+  glBindBuffer(GL_UNIFORM_BUFFER, data->overlay_uniform);
+  glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(BulletHellData), &bullet_hell_render_data);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
 // inline void spawn_bullets(BulletHellSceneData *scene, u32 num_bullets, BulletPattern pattern) { }
@@ -202,8 +253,8 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
   bullet_hell_camera.position.z = 15.0f;
 
   // Player
-  u32 player_program =
-      shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_PLAYER_VERT, SHADER_HANDLE_COMMON_PLAYER_FRAG);
+  u32 player_program = shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_BULLET_HELL_PLAYER_VERT,
+                                                        SHADER_HANDLE_TOPDOWN_BULLET_HELL_PLAYER_FRAG);
 
   u32 player_model_ubo = create_opengl_ubo(sizeof(PlayerModel), GL_DYNAMIC_DRAW);
   OpenGLMaterial player_material = create_opengl_material(player_program);
@@ -231,7 +282,7 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_BULLET_VERT, SHADER_HANDLE_TOPDOWN_BULLET_FRAG);
 
   OpenGLMesh bullet_mesh;
-  bullet_mesh.vbos[VBO_INSTANCE] = allocate_vbo(sizeof(bullet_manager->render_data), GL_DYNAMIC_DRAW);
+  bullet_mesh.vbos[0] = allocate_vbo(sizeof(bullet_manager->render_data), GL_DYNAMIC_DRAW);
   bullet_mesh.num_vbos = 1;
   bullet_mesh.num_vertices = 4;
   init_opengl_mesh_vao(&bullet_mesh, SHADER_HANDLE_TOPDOWN_BULLET_VERT);
@@ -254,10 +305,23 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
   enemy_material.primitive = GL_TRIANGLE_STRIP;
   opengl_material_add_uniform(&enemy_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
+  // Overlay
+  u32 overlay_program = shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_BULLET_HELL_OVERLAY_VERT,
+                                                         SHADER_HANDLE_TOPDOWN_BULLET_HELL_OVERLAY_FRAG);
+  u32 overlay_ubo = create_opengl_ubo(sizeof(BulletHellData), GL_DYNAMIC_DRAW);
+  opengl_bind_ubo_to_block(overlay_program, overlay_ubo, UNIFORM_BUFFER_LABEL_BULLET_HELL_DATA, "BulletHellData");
+
+  Player player{
+      .current_health = 100,
+      .max_health = 100,
+      .pos = glm::vec3(0.0f, 0.0f, 0.0f),
+      .size = glm::vec3(PLAYER_SIDE_LENGTH_METERS),
+  };
+
   // Make Scene
   BulletHellSceneData bullet_hell{
       .camera = bullet_hell_camera,
-      .player_pos = glm::vec3(0.0f, 0.0f, 0.0f),
+      .player = player,
       .vp_ubo = vp_ubo,
       .player_model_ubo = player_model_ubo,
       .player_mesh = bullet_player_mesh,
@@ -269,6 +333,8 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       .bullet_material = bullet_material,
       .enemy_mesh = enemy_mesh,
       .enemy_material = enemy_material,
+      .overlay_program = overlay_program,
+      .overlay_uniform = overlay_ubo,
   };
 
   memset(&bullet_hell.enemy_manager, 0, sizeof(EnemyManager));
