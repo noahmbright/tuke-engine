@@ -8,6 +8,7 @@
 #include "topdown.h"
 #include "tuke_engine.h"
 #include <OpenGL/OpenGL.h>
+#include <cstdio>
 
 #define MAX_NUM_BULLETS (512)
 #define MAX_NUM_ENEMIES (8)
@@ -37,12 +38,14 @@ enum BulletPattern {
 
 // What shapes of bullets will I support?
 // For now, start with quads
+// Will I end up having specializations for each bullet based on update rules?
+// And then have arrays per bullet with update rule in the bullet manager?
 struct Bullet {
-  BulletPattern pattern;
   glm::vec2 position;
   glm::vec2 velocity;
   glm::vec2 size;
-  f32 t0; // Spawn time
+  f64 t0; // Spawn time
+  BulletPattern pattern;
 };
 
 struct BulletRenderData {
@@ -56,11 +59,22 @@ struct BulletManager {
   u32 num_live_bullets;
 };
 
+// How will I choose the right pool and right index in that pool to allocate the new bullet?
+// How will I efficiently copy the data into the array from the caller?
+//      Can return a pointer to the next bullet and populate in the caller.
+// How can I ensure that I never overrun this buffer? Can I avoid adding a branch every call?
+// How do I have an API for every type of bullet? Do I always need to copy from the caller?
+inline void spawn_bullet(BulletManager *bullet_manager, Bullet bullet) {
+  bullet_manager->bullets[bullet_manager->num_live_bullets++] = bullet;
+}
+
 // An okay set of guides on FSMs for game AI, lots of OOP dogma, bad code, but introduces transition tables
 // http://www.ai-junkie.com/architecture/state_driven/tut_state1.html
+//
 // Game programming patterns on state. Also OOP, but on_entry, on_exit notions useful.
 // Heirarchical state machines, pushdown automata, state stacks, behavior trees, and planning systems also exist.
 // https://gameprogrammingpatterns.com/state.html
+
 struct Enemy {
   glm::vec2 position;
 };
@@ -90,6 +104,7 @@ struct BulletHellSceneData {
 
   BulletManager *bullet_manager;
   EnemyManager enemy_manager;
+  f64 bullet_spawn_time;
 
   Camera camera;
   u32 vp_ubo;
@@ -131,7 +146,7 @@ inline void bullet_hell_move_player(BulletHellSceneData *scene_data, GlobalState
   player_pos->y = clamped_next_y;
 }
 
-// Supposing a rectangle of half side lengths width and height is positioned at the origin
+// Supposing a rectangle of half side lengths is positioned at the origin
 inline f32 rectangle_sdf(f32 half_width, f32 half_height, glm::vec2 pos) {
 
   glm::vec2 abs_pos = glm::abs(pos);
@@ -145,30 +160,43 @@ inline f32 rectangle_sdf(f32 half_width, f32 half_height, glm::vec2 pos) {
   return dist_outside + dist_inside;
 }
 
+// This function will never spawn new bullets. It only moves and kills bullets that were alive
+// at the beginning of this frame.
+// Can consider double buffering the bullets.
 inline void update_bullets(BulletManager *bullet_manager) {
 
   u32 live_bullet_index = 0;
+  u32 end = bullet_manager->num_live_bullets;
 
-  for (u32 i = 0; i < MAX_NUM_BULLETS; i++) {
+  for (u32 i = 0; i < end;) {
 
-    Bullet *bullet = &bullet_manager->bullets[i];
-    bullet->position += bullet->velocity;
+    // Current bullet. Update, and check if it survives this frame.
+    Bullet bullet = bullet_manager->bullets[i];
+    bullet.position += bullet.velocity;
 
-    // Signed distance to the arena. If negative, bullet still alive
-    // TODO this breaks down if I decide to add bullets that go outside the arena and come back in
-    f32 box_bullet_signed_distance =
-        rectangle_sdf(BULLET_HELL_ARENA_HALF_WIDTH, BULLET_HELL_ARENA_HALF_HEIGHT, bullet->position);
+    // Signed distance to the arena. If negative, the bullet is still alive
+    // TODO this would break down if I decide to add bullets that go outside the arena and come back in
+    f32 signed_distance = rectangle_sdf(BULLET_HELL_ARENA_HALF_WIDTH, BULLET_HELL_ARENA_HALF_HEIGHT, bullet.position);
 
-    if (box_bullet_signed_distance < 0.0f) {
-      bullet_manager->render_data[live_bullet_index++].pos = bullet->position;
+    // Add to render data if in box, i.e. signed_distance < 0
+    if (signed_distance < 0.0f) {
+      bullet_manager->render_data[live_bullet_index].pos = bullet.position;
+      bullet_manager->render_data[live_bullet_index].size = 0.3; // FIXME
+      bullet_manager->bullets[i] = bullet;
+      live_bullet_index++;
+      i++;
+    } else {
+      // Kill. Don't copy back into bullet data. Move the bullet at the end of the live range into this spot.
+      // Skip updating i so we update the bullet copied into i in the next iteration.
+      bullet_manager->bullets[i] = bullet_manager->bullets[--end];
     }
   }
 
   bullet_manager->num_live_bullets = live_bullet_index;
 }
 
-// TODO NEXT: collision detection between player and enemies. Update health to a uniform
-// TODO do I want all openGL to be in the draw function, do I want explicit updates on the GPU right after CPU updates?
+// TODO do I want all OpenGL to be in the draw function, do I want explicit updates on the GPU right after CPU updates?
+//  Is the OpenGL API the GPU API or the drawing API?
 inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   GlobalState *gs = (GlobalState *)global_state;
   BulletHellSceneData *data = (BulletHellSceneData *)scene_data;
@@ -186,18 +214,37 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   glBindBuffer(GL_UNIFORM_BUFFER, data->player_model_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
 
+  // enemy update bringup
+  f32 x_amplitude = BULLET_HELL_ARENA_HALF_WIDTH * 0.8f;
+  f32 theta = 2.0 * gs->t;
+  enemy_manager->enemies[0].position.x = x_amplitude * sinf(theta);
+  enemy_manager->render_data[0].pos.x = x_amplitude * sinf(theta);
+  glBindBuffer(GL_ARRAY_BUFFER, data->enemy_mesh.vbos[0]);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(EnemyRenderData) * enemy_manager->num_live_enemies,
+                  &enemy_manager->render_data);
+
+  // Spawn bullets from enemy[0] - need some general bullet spawning data wrapper
+
+  f32 spawn_interval = 0.1;
+  data->bullet_spawn_time += dt;
+  if (data->bullet_spawn_time > spawn_interval) {
+    Enemy *enemy0 = &enemy_manager->enemies[0];
+    Bullet new_bullet{
+        .pattern = BULLET_PATTERN_LINEAR,
+        .position = enemy0->position,
+        .size = glm::vec3(0.3f),
+        .t0 = gs->t,
+        .velocity = glm::vec3(0.0f, -0.1f, 0.0f),
+    };
+    spawn_bullet(bullet_manager, new_bullet);
+    data->bullet_spawn_time -= spawn_interval;
+  }
+
+  // Move bullets
   update_bullets(bullet_manager);
   glBindBuffer(GL_ARRAY_BUFFER, data->bullet_mesh.vbos[0]);
   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(BulletRenderData) * bullet_manager->num_live_bullets,
                   &bullet_manager->render_data);
-
-  // enemy update bringup
-  f32 x_amplitude = BULLET_HELL_ARENA_HALF_WIDTH * 0.8f;
-  data->enemy_manager.enemies[0].position.x = x_amplitude * sinf(gs->t);
-  data->enemy_manager.render_data[0].pos.x = x_amplitude * sinf(gs->t);
-  glBindBuffer(GL_ARRAY_BUFFER, data->enemy_mesh.vbos[VBO_INSTANCE]);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(EnemyRenderData) * enemy_manager->num_live_enemies,
-                  &enemy_manager->render_data);
 
   // TODO: Need window resize callback. Want to only update and rebuffer when there's new data.
   buffer_vp_matrix_to_gl_ubo(&data->camera, data->vp_ubo, gs->window_width, gs->window_height);
@@ -208,7 +255,6 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   for (u32 i = 0; i < data->bullet_manager->num_live_bullets; i++) {
     Bullet *bullet = &bullet_manager->bullets[i];
     if (aabb_collision_vec2(player_xy, player_size_xy, bullet->position, bullet->size)) {
-      printf("Bullet %u hit the player.\n", i);
       player->current_health -= (player->current_health > 0);
     }
   }
@@ -233,15 +279,11 @@ inline void bullet_hell_draw(const void *scene_data) {
       .max_health = data->player.max_health,
   };
 
-  printf("current health %u\n", bullet_hell_render_data.health);
-
   glUseProgram(data->overlay_program);
   glBindBuffer(GL_UNIFORM_BUFFER, data->overlay_uniform);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(BulletHellData), &bullet_hell_render_data);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 }
-
-// inline void spawn_bullets(BulletHellSceneData *scene, u32 num_bullets, BulletPattern pattern) { }
 
 // --------------------- BIG INIT FUNCTION ---------------------
 inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
@@ -296,7 +338,7 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_ENEMY_VERT, SHADER_HANDLE_TOPDOWN_ENEMY_FRAG);
 
   OpenGLMesh enemy_mesh;
-  enemy_mesh.vbos[VBO_INSTANCE] = allocate_vbo(member_size(EnemyManager, render_data), GL_DYNAMIC_DRAW);
+  enemy_mesh.vbos[0] = allocate_vbo(member_size(EnemyManager, render_data), GL_DYNAMIC_DRAW);
   enemy_mesh.num_vbos = 1;
   enemy_mesh.num_vertices = 4;
   init_opengl_mesh_vao(&enemy_mesh, SHADER_HANDLE_TOPDOWN_ENEMY_VERT);
@@ -335,36 +377,15 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       .enemy_material = enemy_material,
       .overlay_program = overlay_program,
       .overlay_uniform = overlay_ubo,
+      .bullet_spawn_time = 0.0,
   };
 
+  // Put an enemy that moves sinusoidally in x 80% up the arena
   memset(&bullet_hell.enemy_manager, 0, sizeof(EnemyManager));
   bullet_hell.enemy_manager.num_live_enemies = 1;
   f32 enemy_height = BULLET_HELL_ARENA_HALF_HEIGHT * 0.8f;
   bullet_hell.enemy_manager.enemies[0].position.y = enemy_height;
   bullet_hell.enemy_manager.render_data[0].pos.y = enemy_height;
-
-  // RENDERER BRINGUP
-  // render a line of bullets in the middle of the arena
-  const u32 NUM_BULLETS = 20;
-  f32 dx = BULLET_HELL_ARENA_WIDTH / (f32)NUM_BULLETS;
-  for (u32 i = 0; i < NUM_BULLETS; i++) {
-
-    f32 size = 0.3f;
-    f32 x = -BULLET_HELL_ARENA_HALF_WIDTH + (i + 0.5f) * dx;
-
-    bullet_hell.bullet_manager->bullets[i].pattern = BULLET_PATTERN_LINEAR;
-    bullet_hell.bullet_manager->bullets[i].position.x = x;
-    bullet_hell.bullet_manager->bullets[i].position.y = BULLET_HELL_ARENA_HALF_HEIGHT;
-
-    bullet_hell.bullet_manager->bullets[i].size = glm::vec3(size);
-    bullet_hell.bullet_manager->bullets[i].velocity = glm::vec3(0.0f, -0.1f, 0.0f);
-    bullet_hell.bullet_manager->bullets[i].t0 = x; // lol
-
-    bullet_hell.bullet_manager->render_data[i].pos.x = x;
-    bullet_hell.bullet_manager->render_data[i].size = size;
-  }
-
-  bullet_hell.bullet_manager->num_live_bullets = NUM_BULLETS;
 
   return bullet_hell;
 }
