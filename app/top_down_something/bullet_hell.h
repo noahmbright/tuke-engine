@@ -1,5 +1,13 @@
 #pragma once
 
+// TODO
+// Particles
+// Invincibility frames
+// Dashes
+// Parries
+// Shield
+// Cooldown timer on overlay - ready icon?
+
 #include "c_reflector_bringup.h"
 #include "generated_shader_utils.h"
 #include "glm/common.hpp"
@@ -12,6 +20,14 @@
 
 #define MAX_NUM_BULLETS (512)
 #define MAX_NUM_ENEMIES (8)
+
+enum Uniforms {
+  UNIFORM_PLAYER_MODEL,
+  UNIFORM_PLAYER_FRAG,
+  UNIFORM_OVERLAY,
+
+  NUM_UNIFORMS,
+};
 
 const f32 BULLET_HELL_ARENA_WIDTH = 10.0f;
 const f32 BULLET_HELL_ARENA_HEIGHT = 8.0f;
@@ -97,6 +113,7 @@ struct Player {
   glm::vec3 size;
   u32 current_health;
   u32 max_health;
+  f32 invincibility_time;
 };
 
 struct BulletHellSceneData {
@@ -109,7 +126,6 @@ struct BulletHellSceneData {
   Camera camera;
   u32 vp_ubo;
 
-  u32 player_model_ubo;
   OpenGLMesh player_mesh;
   OpenGLMaterial player_material;
 
@@ -123,7 +139,8 @@ struct BulletHellSceneData {
   OpenGLMaterial enemy_material;
 
   u32 overlay_program;
-  u32 overlay_uniform;
+
+  u32 uniforms[NUM_UNIFORMS];
 };
 
 inline void bullet_hell_move_player(BulletHellSceneData *scene_data, GlobalState *global_state, f32 dt) {
@@ -206,12 +223,19 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
 
   bullet_hell_move_player(data, gs, dt);
 
+  // Decrement and clamp invincibility_time
+  player->invincibility_time -= dt;
+  player->invincibility_time = (player->invincibility_time < 0.0) ? 0.0 : player->invincibility_time;
+  BulletHellPlayerFrag player_frag_data{.invincibility_time = player->invincibility_time};
+  glBindBuffer(GL_UNIFORM_BUFFER, data->uniforms[UNIFORM_PLAYER_FRAG]);
+  glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(BulletHellPlayerFrag), &player_frag_data);
+
   // If I add slow motion or anything like that, will need to consider how to track time updates
   gs->t += dt;
 
   glm::mat4 player_model = glm::translate(glm::mat4(1.0f), data->player.pos);
   player_model = glm::scale(player_model, data->player.size);
-  glBindBuffer(GL_UNIFORM_BUFFER, data->player_model_ubo);
+  glBindBuffer(GL_UNIFORM_BUFFER, data->uniforms[UNIFORM_PLAYER_MODEL]);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
 
   // enemy update bringup
@@ -250,12 +274,17 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   buffer_vp_matrix_to_gl_ubo(&data->camera, data->vp_ubo, gs->window_width, gs->window_height);
 
   // Collision detection
-  glm::vec2 player_xy(player->pos.x, player->pos.y);
-  glm::vec2 player_size_xy(player->size.x, player->size.y);
-  for (u32 i = 0; i < data->bullet_manager->num_live_bullets; i++) {
-    Bullet *bullet = &bullet_manager->bullets[i];
-    if (aabb_collision_vec2(player_xy, player_size_xy, bullet->position, bullet->size)) {
-      player->current_health -= (player->current_health > 0);
+  if (player->invincibility_time <= 0.0) {
+    glm::vec2 player_xy(player->pos.x, player->pos.y);
+    glm::vec2 player_size_xy(player->size.x, player->size.y);
+
+    for (u32 i = 0; i < data->bullet_manager->num_live_bullets; i++) {
+      Bullet *bullet = &bullet_manager->bullets[i];
+
+      if (aabb_collision_vec2(player_xy, player_size_xy, bullet->position, bullet->size)) {
+        player->current_health -= (player->current_health > 0);
+        player->invincibility_time = 1.0;
+      }
     }
   }
 }
@@ -280,7 +309,7 @@ inline void bullet_hell_draw(const void *scene_data) {
   };
 
   glUseProgram(data->overlay_program);
-  glBindBuffer(GL_UNIFORM_BUFFER, data->overlay_uniform);
+  glBindBuffer(GL_UNIFORM_BUFFER, data->uniforms[UNIFORM_OVERLAY]);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(BulletHellData), &bullet_hell_render_data);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 }
@@ -299,6 +328,8 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
                                                         SHADER_HANDLE_TOPDOWN_BULLET_HELL_PLAYER_FRAG);
 
   u32 player_model_ubo = create_opengl_ubo(sizeof(PlayerModel), GL_DYNAMIC_DRAW);
+  u32 player_frag_ubo = create_opengl_ubo(sizeof(BulletHellPlayerFrag), GL_DYNAMIC_DRAW);
+
   OpenGLMaterial player_material = create_opengl_material(player_program);
   opengl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_BULLET_HELL_PLAYER_MODEL,
                               "PlayerModel");
@@ -307,6 +338,8 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
   OpenGLMesh bullet_player_mesh = create_opengl_mesh_with_vertex_layout(
       player_vertices, sizeof(player_vertices), 6, VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
   OpenGLMaterial bullet_player_material = create_opengl_material(player_program);
+  opengl_material_add_uniform(&player_material, player_frag_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_BULLET_HELL_PLAYER_FRAG,
+                              "BulletHellPlayerFrag");
   opengl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_PLAYER_MODEL, "PlayerModel");
   opengl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
@@ -358,6 +391,7 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       .max_health = 100,
       .pos = glm::vec3(0.0f, 0.0f, 0.0f),
       .size = glm::vec3(PLAYER_SIDE_LENGTH_METERS),
+      .invincibility_time = 0.0f,
   };
 
   // Make Scene
@@ -365,7 +399,6 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       .camera = bullet_hell_camera,
       .player = player,
       .vp_ubo = vp_ubo,
-      .player_model_ubo = player_model_ubo,
       .player_mesh = bullet_player_mesh,
       .player_material = bullet_player_material,
       .arena_mesh = arena_mesh,
@@ -376,9 +409,12 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       .enemy_mesh = enemy_mesh,
       .enemy_material = enemy_material,
       .overlay_program = overlay_program,
-      .overlay_uniform = overlay_ubo,
       .bullet_spawn_time = 0.0,
   };
+
+  bullet_hell.uniforms[UNIFORM_PLAYER_MODEL] = player_model_ubo;
+  bullet_hell.uniforms[UNIFORM_PLAYER_FRAG] = player_frag_ubo;
+  bullet_hell.uniforms[UNIFORM_OVERLAY] = overlay_ubo;
 
   // Put an enemy that moves sinusoidally in x 80% up the arena
   memset(&bullet_hell.enemy_manager, 0, sizeof(EnemyManager));

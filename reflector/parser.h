@@ -15,7 +15,7 @@
 #define MAX_NUM_DESCRIPTOR_SET_LAYOUTS 16
 #define MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER 8
 #define MAX_NUM_GLSL_STRUCTS 64
-#define MAX_NUM_BINDING_SLOTS 8
+#define MAX_NUM_BINDING_SLOTS 128
 
 static const char *RED = "\033[31m";
 static const char *RESET = "\033[0m";

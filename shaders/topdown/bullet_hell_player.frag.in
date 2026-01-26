@@ -4,7 +4,12 @@
 
 {{ LOCATION 0 }} out vec4 frag_color;
 
+{{ SET_BINDING 0 1 BUFFER_LABEL TOPDOWN_BULLET_HELL_PLAYER_FRAG }} uniform BulletHellPlayerFrag {
+    float invincibility_time;
+} u_data;
+
 void main(){
-    frag_color = vec4(0.1, 0.1, 0.1, 1.0);
+    float factor = u_data.invincibility_time > 0.0 ? 2.8 * sin(u_data.invincibility_time) : 1.0;
+    frag_color = vec4(factor * vec3(0.1, 0.1, 0.1), 1.0);
 }
 
