@@ -23,6 +23,7 @@ int main() {
   init_inputs(&global_state.inputs);
   memset(&global_state.scene_manager, 0, sizeof(SceneManager));
   global_state.t = 0.0;
+  global_state.game_state = GAME_STATE_RUNNING;
 
   // Tilemaps
   u32 num_tiles = tilemap.level_height * tilemap.level_width;

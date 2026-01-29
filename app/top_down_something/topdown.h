@@ -88,12 +88,6 @@ inline void buffer_vp_matrix_to_gl_ubo(const Camera *camera, u32 ubo, u32 window
 inline glm::vec3 inputs_to_movement_vector(const Inputs *inputs) {
   glm::vec3 movement_vector = inputs_to_direction(inputs);
 
-  f32 xy_plane_speed = 1.0f;
-  if (key_held(inputs, INPUT_LEFT_SHIFT)) {
-    xy_plane_speed += xy_plane_speed; // 2x speed
-  }
-  movement_vector *= xy_plane_speed;
-
   f32 zoom_speed = 10.0f;
   movement_vector.z = zoom_speed * inputs->scroll_dy;
 
@@ -133,11 +127,18 @@ struct OverworldSceneData {
   u32 overworld_overlay_program;
 };
 
+enum GameState {
+  GAME_STATE_PAUSED,
+  GAME_STATE_RUNNING,
+};
+
 struct GlobalState {
-  int window_width, window_height;
+  int window_width;
+  int window_height;
   SceneManager scene_manager;
   Inputs inputs;
   f64 t;
+  GameState game_state;
 };
 
 inline void move_camera_in_tilemap(glm::vec3 movement_vector, OverworldSceneData *scene_data,
