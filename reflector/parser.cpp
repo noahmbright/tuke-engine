@@ -1457,6 +1457,7 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
       if (descriptor_set_layouts[set].bindings[binding].is_valid) {
         fprintf(stderr, "Found repeat binding %u for set %u in shader %.*s.\n", binding, set,
                 shader_to_compile.name_length, shader_to_compile.name);
+        return false;
       } else {
         descriptor_set_layouts[set].bindings[binding] = set_binding_directive_parse.descriptor_binding;
         descriptor_set_layouts[set].num_bindings++;
@@ -1562,9 +1563,14 @@ ParsedShadersIR parse_all_shaders_and_populate_global_tables(const ShaderToCompi
   ParsedShadersIR parsed_shaders_ir;
   memset(&parsed_shaders_ir, 0, sizeof(parsed_shaders_ir));
 
+  bool all_parsing_successful = true;
   for (u32 i = 0; i < shader_to_compile_list->num_shaders; i++) {
-    parse_shader(shader_to_compile_list->shaders[i], &parsed_shaders_ir);
+    bool parsing_successful = parse_shader(shader_to_compile_list->shaders[i], &parsed_shaders_ir);
+    if (!parsing_successful) {
+      all_parsing_successful = false;
+    }
   }
 
+  parsed_shaders_ir.parsing_successful = all_parsing_successful;
   return parsed_shaders_ir;
 }

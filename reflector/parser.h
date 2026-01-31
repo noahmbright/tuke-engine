@@ -311,6 +311,8 @@ struct ParsedShader {
 // at the end of the main function. ParsedShadersIR contains slices into it, so as long as ShaderToCompileList is
 // freed after codegen, ParsedShadersIR will remain valid
 struct ParsedShadersIR {
+  bool parsing_successful;
+
   ParsedShader parsed_shaders[MAX_NUM_SHADERS];
   u32 num_parsed_shaders;
 

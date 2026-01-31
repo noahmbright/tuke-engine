@@ -71,12 +71,11 @@ const f32 player_vertices[] = {
 };
 // clang-format on
 
-inline void buffer_vp_matrix_to_gl_ubo(const Camera *camera, u32 ubo, u32 window_width, u32 window_height) {
-  CameraMatrices camera_matrices = create_camera_matrices(camera, window_width, window_height);
-  glm::mat4 vp = camera_matrices.projection * camera_matrices.view;
+inline void buffer_vp_matrix_to_gl_ubo(const CameraMatrices *camera_matrices, u32 ubo) {
+  glm::mat4 vp = camera_matrices->projection * camera_matrices->view;
 
 #ifndef NDEBUG
-  if (matrix_has_nan(camera_matrices.view)) {
+  if (matrix_has_nan(camera_matrices->view)) {
     exit(1);
   }
 #endif
@@ -219,7 +218,8 @@ inline void scene0_update(void *scene_data, void *global_state, f32 dt) {
   glBindBuffer(GL_UNIFORM_BUFFER, overworld_sd->player_model_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
 
-  buffer_vp_matrix_to_gl_ubo(&overworld_sd->camera, overworld_sd->vp_ubo, gs->window_width, gs->window_height);
+  CameraMatrices camera_matrices = create_camera_matrices(&overworld_sd->camera, gs->window_width, gs->window_height);
+  buffer_vp_matrix_to_gl_ubo(&camera_matrices, overworld_sd->vp_ubo);
 }
 
 inline void scene0_draw(const void *scene_data) {

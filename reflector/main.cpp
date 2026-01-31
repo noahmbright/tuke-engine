@@ -8,6 +8,7 @@
 #include <string.h>
 
 int main(int argc, char **argv) {
+
   const char *force_shaders_string = "--force-shaders";
   bool force_shaders = false;
   if (argc > 1) {
@@ -41,11 +42,16 @@ int main(int argc, char **argv) {
 
   // 3) Parse shaders
   ParsedShadersIR parsed_shaders_ir = parse_all_shaders_and_populate_global_tables(&shader_to_compile_list);
+  if (!parsed_shaders_ir.parsing_successful) {
+    printf("Parsing error in shaders, reflector exiting.\n");
+    return 1;
+  }
 
   // 4) Codegen
   bool codegen_successful = codegen(REFLECTOR_OUTPUT_FILE_PATH, &parsed_shaders_ir);
 
   if (!codegen_successful) {
+    printf("Codegen error in shaders, reflector exiting.\n");
     return 1;
   }
 

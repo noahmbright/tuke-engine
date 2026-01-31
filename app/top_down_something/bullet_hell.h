@@ -10,6 +10,7 @@
 // Weapon wheel
 // EVENTUALLY need some serialization scheme for things like weapon unlocks
 
+#include "billboard_manager.h"
 #include "c_reflector_bringup.h"
 #include "generated_shader_utils.h"
 #include "glm/common.hpp"
@@ -133,7 +134,7 @@ struct PlayerSpeedBoost {
 };
 
 struct PlayerSlowMotion {
-  f32 dilation_factor;
+  f32 time_dilation_factor;
 };
 
 // player_pos is the position within the bullet hell arena
@@ -160,6 +161,8 @@ struct BulletHellSceneData {
   BulletManager *bullet_manager;
   EnemyManager enemy_manager;
   f64 bullet_spawn_time;
+
+  BillboardManager billboard_manager;
 
   Camera camera;
   u32 vp_ubo;
@@ -340,7 +343,7 @@ inline f32 rectangle_sdf(f32 half_width, f32 half_height, glm::vec2 pos) {
 // This function will never spawn new bullets. It only moves and kills bullets that were alive
 // at the beginning of this frame.
 // Can consider double buffering the bullets.
-inline void update_bullets(BulletManager *bullet_manager) {
+inline void update_bullets(BulletManager *bullet_manager, f32 dt) {
 
   u32 live_bullet_index = 0;
   u32 end = bullet_manager->num_live_bullets;
@@ -349,7 +352,7 @@ inline void update_bullets(BulletManager *bullet_manager) {
 
     // Current bullet. Update, and check if it survives this frame.
     Bullet bullet = bullet_manager->bullets[i];
-    bullet.position += bullet.velocity;
+    bullet.position += dt * bullet.velocity;
 
     // Signed distance to the arena. If negative, the bullet is still alive
     // TODO this would break down if I decide to add bullets that go outside the arena and come back in
@@ -374,6 +377,7 @@ inline void update_bullets(BulletManager *bullet_manager) {
 
 // TODO do I want all OpenGL to be in the draw function, do I want explicit updates on the GPU right after CPU updates?
 //  Is the OpenGL API the GPU API or the drawing API?
+//  Leaning more toward all in the drawing.
 inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   GlobalState *gs = (GlobalState *)global_state;
   const Inputs *inputs = &gs->inputs;
@@ -399,10 +403,26 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   if (player->state == PLAYER_STATE_AIMING_DASH) {
     dt = dt * player->dash.time_dilation_factor;
   } else if (player->state == PLAYER_STATE_SLOW_MOTION) {
-    dt = dt * player->slow_motion.dilation_factor;
+    dt = dt * player->slow_motion.time_dilation_factor;
+  } else if (player->state == PLAYER_STATE_AIMING_DASH) {
+    dt = dt * player->dash.time_dilation_factor;
   }
 
   bullet_hell_update_player(&data->player, player_intent, dt);
+
+  // TODO: Need window resize callback. Want to only update and rebuffer when there's new data.
+  CameraMatrices camera_matrices = create_camera_matrices(&data->camera, gs->window_width, gs->window_height);
+  buffer_vp_matrix_to_gl_ubo(&camera_matrices, data->vp_ubo);
+
+  // Update billboards with this frame's view matrix
+  clear_billboard_manager(&data->billboard_manager);
+
+  Billboard billboard{
+      .center_pos = glm::vec3(sinf(gs->t), cosf(gs->t), EPSILON),
+      .size = glm::vec2(PLAYER_SIDE_LENGTH_METERS),
+      .rotation = 0.0f,
+  };
+  push_billboard(&data->billboard_manager, billboard);
 
   // Decrement and clamp invincibility_time
   player->invincibility_time -= dt;
@@ -439,20 +459,17 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
         .position = enemy0->position,
         .size = glm::vec3(0.3f),
         .t0 = gs->t,
-        .velocity = glm::vec3(0.0f, -0.1f, 0.0f),
+        .velocity = glm::vec3(0.0f, -8.0f, 0.0f),
     };
     spawn_bullet(bullet_manager, new_bullet);
     data->bullet_spawn_time -= spawn_interval;
   }
 
   // Move bullets
-  update_bullets(bullet_manager);
+  update_bullets(bullet_manager, dt);
   glBindBuffer(GL_ARRAY_BUFFER, data->bullet_mesh.vbos[0]);
   glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(BulletRenderData) * bullet_manager->num_live_bullets,
                   &bullet_manager->render_data);
-
-  // TODO: Need window resize callback. Want to only update and rebuffer when there's new data.
-  buffer_vp_matrix_to_gl_ubo(&data->camera, data->vp_ubo, gs->window_width, gs->window_height);
 
   // Collision detection
   if (player->invincibility_time <= 0.0) {
@@ -493,6 +510,9 @@ inline void bullet_hell_draw(const void *scene_data) {
   glBindBuffer(GL_UNIFORM_BUFFER, data->uniforms[UNIFORM_OVERLAY]);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(BulletHellData), &bullet_hell_render_data);
   glDrawArrays(GL_TRIANGLES, 0, 3);
+
+  glm::mat4 view = camera_look_at(&data->camera);
+  render_billboards_opengl(&data->billboard_manager, view);
 }
 
 ////////////////////////////////// BIG INIT FUNCTION //////////////////////////////////
@@ -561,12 +581,13 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
   enemy_material.primitive = GL_TRIANGLE_STRIP;
   opengl_material_add_uniform(&enemy_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
-  // Overlay
+  // Screen Overlay
   u32 overlay_program = shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_BULLET_HELL_OVERLAY_VERT,
                                                          SHADER_HANDLE_TOPDOWN_BULLET_HELL_OVERLAY_FRAG);
   u32 overlay_ubo = create_opengl_ubo(sizeof(BulletHellData), GL_DYNAMIC_DRAW);
   opengl_bind_ubo_to_block(overlay_program, overlay_ubo, UNIFORM_BUFFER_LABEL_BULLET_HELL_DATA, "BulletHellData");
 
+  // Make Player
   Player player{
       .current_health = 100,
       .max_health = 100,
@@ -574,12 +595,12 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       .size = glm::vec3(PLAYER_SIDE_LENGTH_METERS),
       .invincibility_time = 0.0f,
       .state = PLAYER_STATE_NORMAL,
-      .ability = PLAYER_ABILITY_SLOW_MOTION,
+      .ability = PLAYER_ABILITY_DASH,
       .unlocked_abilities_mask = 0,
       .dash =
           {
               .cooldown_left = 0.0f,
-              .time_dilation_factor = 0.5f,
+              .time_dilation_factor = 0.0f,
           },
       .speed_boost =
           {
@@ -587,7 +608,7 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
           },
       .slow_motion =
           {
-              .dilation_factor = 0.5f,
+              .time_dilation_factor = 0.5f,
           },
   };
 
@@ -607,6 +628,8 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       .enemy_material = enemy_material,
       .overlay_program = overlay_program,
       .bullet_spawn_time = 0.0,
+      // FIXME need a real scale for billboards
+      .billboard_manager = create_billboard_manager(5, vp_ubo),
   };
 
   bullet_hell.uniforms[UNIFORM_PLAYER_MODEL] = player_model_ubo;

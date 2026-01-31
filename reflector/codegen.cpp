@@ -522,7 +522,8 @@ static void codegen_struct_defintions(FILE *destination, const GLSLStruct *glsl_
     }
 
     // codegen
-    fprintf(destination, "typedef struct alignas(%u) {\n", max_alignment);
+    // All structs must be aligned to 16 bytes, I think.
+    fprintf(destination, "typedef struct alignas(16) {\n");
     for (u32 j = 0; j < glsl_struct->member_list.num_members; j++) {
       const GLSLStructMember *member = &glsl_struct->member_list.members[j];
       fprintf(destination, "  alignas(%u) %s %.*s", glsl_type_to_alignment[member->type],
