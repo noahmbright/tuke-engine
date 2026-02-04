@@ -30,6 +30,16 @@
 // The shaders for a billboard need center position, height/width, and a
 // rotation per instance. Each instance will share the camera that they
 // are viewed through, so camera right and up are passed as uniforms.
+//
+//
+// TODO: Do these links belong here or in the particles file? If that ever exists
+// Articles about blending and order:
+// https://stackoverflow.com/a/62538277
+//  Explanation that GPUs respect draw order.
+//
+// https://wikis.khronos.org/opengl/Primitive_Assembly#Primitive_order
+//  Within a draw or a multidraw's sub-draw, if the drawing command is an Instanced Rendering command,
+//  then all primitives in one instance are ordered before the primitives with larger gl_InstanceID values.
 
 // OpenGL Rendering technique/shader
 // TODO make a union when Vulkan supported
@@ -101,7 +111,6 @@ inline void destroy_billboard_manager(BillboardManager *billboard_manager) {
 
 // This assumes that the caller has already configured the VP matrix.
 inline void render_billboards_opengl(const BillboardManager *billboard_manager, glm::mat4 view) {
-  printf("num bills %u\n", billboard_manager->size);
   glUseProgram(billboard_manager->shader.program);
   glBindVertexArray(billboard_manager->shader.vao);
 
@@ -110,8 +119,6 @@ inline void render_billboards_opengl(const BillboardManager *billboard_manager, 
   CameraUpRight camera_up_right;
   camera_up_right.right = glm::vec3(view[0][0], view[1][0], view[2][0]);
   camera_up_right.up = glm::vec3(view[0][1], view[1][1], view[2][1]);
-  log_vec3(&camera_up_right.right);
-  log_vec3(&camera_up_right.up);
   glBindBuffer(GL_UNIFORM_BUFFER, billboard_manager->shader.camera_up_right_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(CameraUpRight), &camera_up_right);
 

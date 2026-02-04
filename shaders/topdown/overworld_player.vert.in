@@ -12,7 +12,6 @@
 } u_model;
 
 void main(){
-    gl_Position = u_model.model * vec4(a_pos, 1.0);
     gl_Position = u_vp.vp * u_model.model * vec4(a_pos, 1.0);
 }
 

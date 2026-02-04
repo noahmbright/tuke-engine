@@ -55,9 +55,16 @@ void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vert
   }
 }
 
-// tilemap top left is the position of the tilemap's topleft corner in some coordinate system, e.g. the entire world
+// Check if an AABB aligned with xy in screen space collides with a cell marked non-zero in
+// the tilemap.
+// If the AABB overlaps with a cell marked non-zero, return the value of the cell.
+//  TODO don't like this return value. Could be better to decide what cells are colliable in the
+//  caller.
+// tilemap top left is the position of the tilemap's topleft corner in some coordinate system,
+//  e.g. the entire world
 // pos is the position of the colliding object in that same coordinate system
 // Idea is to allow for multiple tilemaps to be drawn together in the same world
+// Currently, pos and size are passed as vec3, but z coords are not used.
 int tilemap_check_collision(const Tilemap *tilemap, glm::vec3 pos, glm::vec3 size) {
 
   glm::vec3 delta_r = pos - tilemap->top_left;

@@ -1,7 +1,10 @@
 #pragma once
 
+#define GLM_ENABLE_EXPERIMENTAL
+
 #include "camera.h"
 #include "generated_shader_utils.h"
+#include "glm/ext.hpp"
 #include "glm/ext/quaternion_transform.hpp"
 #include "glm/geometric.hpp"
 #include "opengl_base.h"
@@ -10,7 +13,14 @@
 #include "tuke_engine.h"
 #include "utils.h"
 
+// TODO
+// Transition in and out of scene changes
+
 #define PLAYER_SIDE_LENGTH_METERS (0.6f)
+#define PLAYER_INTERACTION_DISTANCE (1.0f)
+#define PLAYER_INTERACTION_FOV (1.04f) // Radians, around 60 degrees
+
+const f32 PLAYER_INTERACTION_HALF_FOV = PLAYER_INTERACTION_FOV / 2.0f;
 
 const u32 width_in_tiles = 9;
 const u32 height_in_tiles = 20;
@@ -124,6 +134,9 @@ struct OverworldSceneData {
   OpenGLMaterial fullscreen_quad_material;
 
   u32 overworld_overlay_program;
+
+  u32 vision_cone_program;
+  u32 vision_cone_ubo;
 };
 
 enum GameState {
@@ -151,6 +164,7 @@ inline void move_camera_in_tilemap(glm::vec3 movement_vector, OverworldSceneData
   glm::vec3 last_camera_pos = camera->position;
   glm::vec3 final_movement_vector(0.0f);
 
+  // FIXME collision should be between player and world, not camera and world.
   // Right now, tile == 0 means move. Otherwise, reset motion
   glm::vec3 x_moved_position = last_camera_pos + glm::vec3(movement_vector.x, 0.0f, 0.0f);
   u8 x_tile = tilemap_check_collision(tilemap, x_moved_position, tile_size);
@@ -167,6 +181,7 @@ inline void move_camera_in_tilemap(glm::vec3 movement_vector, OverworldSceneData
 
   // TODO Define magic numbers in the tilemap
   // 2 is transition scene block
+  // FIXME the camera movement should not worry about scene transitions
   bool should_transition = (x_tile == 2 || y_tile == 2 || key_pressed(&global_state->inputs, INPUT_KEY_T));
   if (!scene_data->just_transitioned && should_transition) {
     scene_data->just_transitioned = true;
@@ -178,60 +193,89 @@ inline void move_camera_in_tilemap(glm::vec3 movement_vector, OverworldSceneData
 
 // TODO separate player position and camera position
 // TODO will I consider the players position within a tilemap? within the whole world?
-inline void scene0_update(void *scene_data, void *global_state, f32 dt) {
+inline void scene0_update(void *scene_data_void_ptr, void *global_state_void_ptr, f32 dt) {
 
-  GlobalState *gs = (GlobalState *)global_state;
-  OverworldSceneData *overworld_sd = (OverworldSceneData *)scene_data;
+  GlobalState *global_state = (GlobalState *)global_state_void_ptr;
+  OverworldSceneData *scene_data = (OverworldSceneData *)scene_data_void_ptr;
+  Camera *camera = &scene_data->camera;
 
   const f32 SPEED = 5.0f;
   const f32 ROTATION_SPEED = 0.05f;
 
-  glm::vec3 input_movement_vector = inputs_to_movement_vector(&gs->inputs);
+  glm::vec3 input_movement_vector = inputs_to_movement_vector(&global_state->inputs);
   glm::vec3 movement_vector = SPEED * dt * input_movement_vector;
-  move_camera_in_tilemap(movement_vector, overworld_sd, gs);
+  move_camera_in_tilemap(movement_vector, scene_data, global_state);
 
-  glm::vec3 camera_xy(overworld_sd->camera.position.x, overworld_sd->camera.position.y, 0.0f);
+  glm::vec3 camera_xy(camera->position.x, camera->position.y, 0.0f);
 
   glm::vec3 input_movement_vector_xy = glm::vec3(input_movement_vector.x, input_movement_vector.y, 0.0f);
   // atan2 returns arctan(y/x) in [-pi, +pi]
   f32 input_angle_radians = atan2(input_movement_vector_xy.y, input_movement_vector_xy.x);
 
   if (glm::length(input_movement_vector_xy) > EPSILON) {
-    overworld_sd->player_rotation_simulation = input_angle_radians;
+    scene_data->player_rotation_simulation = input_angle_radians;
   }
+
+  // Set view cone for interacting with world.
+  // The view cone is a single triangle. Find the bounding box for the triangle, and then
+  // intersect that with the tilemap. If an interactable object is in the BB, then check its
+  // barycentric coords to confirm collision with the triangle.
+  f32 theta_b = scene_data->player_rotation_simulation + PLAYER_INTERACTION_HALF_FOV;
+  f32 theta_c = scene_data->player_rotation_simulation - PLAYER_INTERACTION_HALF_FOV;
+  glm::vec3 cone_b = PLAYER_INTERACTION_DISTANCE * glm::vec3(cosf(theta_b), sinf(theta_b), 0.0f);
+  glm::vec3 cone_c = PLAYER_INTERACTION_DISTANCE * glm::vec3(cosf(theta_c), sinf(theta_c), 0.0f);
+  VisionCone vision_cone{
+      .a = camera_xy,
+      .b = camera_xy + cone_b,
+      .c = camera_xy + cone_c,
+  };
+
+  glBindBuffer(GL_UNIFORM_BUFFER, scene_data->vision_cone_ubo);
+  glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(VisionCone), &vision_cone);
 
   // FIXME - rotations towards the left seem to be faster. Need to rederive some math for this.
   // Pissed off rn, taking a break and moving onto more meaningful things.
   // Can't cross the +/- PI barrier correctly. Can't go from pointing top left to bottom left,
   // or bottom left to top left. Can only go around the full 360 degrees the other way.
-  f32 angle_diff = overworld_sd->player_rotation_simulation - overworld_sd->player_rotation_render;
+  f32 angle_diff = scene_data->player_rotation_simulation - scene_data->player_rotation_render;
   f32 angle_update_sign = fabs(angle_diff) > PI ? -1.0f : 1.0f;
-  f32 next_angle_raw = overworld_sd->player_rotation_render + ROTATION_SPEED * angle_update_sign * angle_diff;
+  f32 next_angle_raw = scene_data->player_rotation_render + ROTATION_SPEED * angle_update_sign * angle_diff;
   f32 next_angle = clamp_f32(next_angle_raw, -PI, PI);
-  overworld_sd->player_rotation_render = next_angle;
+  scene_data->player_rotation_render = next_angle;
 
+  // FIXME this player model is generated using camera xy. Player xy is coupled to camera - they shouldn't be.
   glm::mat4 player_model = glm::mat4(1.0f);
   player_model = glm::translate(player_model, camera_xy);
   player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
-  player_model = glm::rotate(player_model, overworld_sd->player_rotation_render, glm::vec3(0.0f, 0.0f, 1.0f));
+  player_model = glm::rotate(player_model, scene_data->player_rotation_render, glm::vec3(0.0f, 0.0f, 1.0f));
 
-  glBindBuffer(GL_UNIFORM_BUFFER, overworld_sd->player_model_ubo);
+  glBindBuffer(GL_UNIFORM_BUFFER, scene_data->player_model_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
 
-  CameraMatrices camera_matrices = create_camera_matrices(&overworld_sd->camera, gs->window_width, gs->window_height);
-  buffer_vp_matrix_to_gl_ubo(&camera_matrices, overworld_sd->vp_ubo);
+  CameraMatrices camera_matrices =
+      create_camera_matrices(&scene_data->camera, global_state->window_width, global_state->window_height);
+  buffer_vp_matrix_to_gl_ubo(&camera_matrices, scene_data->vp_ubo);
 }
 
 inline void scene0_draw(const void *scene_data) {
   OverworldSceneData *overworld_data = (OverworldSceneData *)scene_data;
 
-  // Draw world into overworld data's FBO
+  // Draw world and player into overworld data's FBO
   glBindFramebuffer(GL_FRAMEBUFFER, overworld_data->render_target.fbo);
   glClear(GL_COLOR_BUFFER_BIT);
   draw_opengl_mesh(&overworld_data->tilemap_mesh, overworld_data->tilemap_material);
   draw_opengl_mesh(&overworld_data->player_mesh, overworld_data->player_material);
 
+  // Draw player vision cone
+  // Is this more for debug?
+  // NB: blendFunc is required for blending. Just Enabling doesn't get transparency.
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glUseProgram(overworld_data->vision_cone_program);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+
   // Draw overlay into overworld framebuffer
+  glDisable(GL_BLEND);
   glUseProgram(overworld_data->overworld_overlay_program);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 

@@ -600,7 +600,7 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       .dash =
           {
               .cooldown_left = 0.0f,
-              .time_dilation_factor = 0.0f,
+              .time_dilation_factor = 0.6f,
           },
       .speed_boost =
           {
@@ -628,7 +628,7 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
       .enemy_material = enemy_material,
       .overlay_program = overlay_program,
       .bullet_spawn_time = 0.0,
-      // FIXME need a real scale for billboards
+      // FIXME need a real scale for number of billboards
       .billboard_manager = create_billboard_manager(5, vp_ubo),
   };
 

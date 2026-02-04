@@ -94,6 +94,15 @@ int main() {
   OpenGLMaterial fullscreen_quad_material = create_opengl_material(fullscreen_quad_program);
   fullscreen_quad_material.texture = overworld_render_target.texture;
 
+  // FIXME FOOTGUN if you don't bind the vp_ubo to each program, even if the binding point is already
+  // configured, you will get 0 in the shader program. NEED TO SCAFFOLD AROUND THIS.
+  u32 vision_cone_program = shader_handles_to_opengl_program(SHADER_HANDLE_TOPDOWN_OVERWORLD_VISION_CONE_VERT,
+                                                             SHADER_HANDLE_TOPDOWN_OVERWORLD_VISION_CONE_FRAG);
+  u32 vision_cone_ubo = create_opengl_ubo(sizeof(VisionCone), GL_DYNAMIC_DRAW);
+  opengl_bind_ubo_to_block(vision_cone_program, vision_cone_ubo, UNIFORM_BUFFER_LABEL_OVERWORLD_VISION_CONE,
+                           "VisionCone");
+  opengl_bind_ubo_to_block(vision_cone_program, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
+
   // Scenes
   OverworldSceneData scene0_data{
       .player_pos = camera.position,
@@ -113,6 +122,8 @@ int main() {
       .fullscreen_quad_mesh = fullscreen_quad_mesh,
       .fullscreen_quad_material = fullscreen_quad_material,
       .overworld_overlay_program = overworld_overlay_program,
+      .vision_cone_program = vision_cone_program,
+      .vision_cone_ubo = vision_cone_ubo,
   };
 
   OverworldSceneData scene1_data{
@@ -133,6 +144,8 @@ int main() {
       .fullscreen_quad_mesh = fullscreen_quad_mesh,
       .fullscreen_quad_material = fullscreen_quad_material,
       .overworld_overlay_program = overworld_overlay_program,
+      .vision_cone_program = vision_cone_program,
+      .vision_cone_ubo = vision_cone_ubo,
   };
 
   Scene scene0 = create_scene(scene0_update, scene0_draw, &scene0_data);
@@ -146,7 +159,7 @@ int main() {
   global_state.scene_manager.scene_registry[SCENE1] = &scene1;
   global_state.scene_manager.scene_registry[SCENE_BULLET_HELL] = &scene_bullet_hell;
 
-  set_base_scene(&global_state.scene_manager, &scene_bullet_hell);
+  set_base_scene(&global_state.scene_manager, &scene0);
 
   // Main loop
   f64 t0 = glfwGetTime();
@@ -156,8 +169,6 @@ int main() {
     f64 dt = t - t0;
     t0 = t;
     update_key_inputs_glfw(&global_state.inputs, window);
-
-    glClear(GL_COLOR_BUFFER_BIT);
 
     // TODO lazy resize
     glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);

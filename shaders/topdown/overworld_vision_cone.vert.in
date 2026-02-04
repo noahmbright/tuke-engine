@@ -1,0 +1,17 @@
+#version {{ VERSION }}
+
+{{ SET_BINDING 0 0 BUFFER_LABEL CAMERA_VP }} uniform VPUniform {
+    mat4 vp;
+} u_vp;
+
+{{ SET_BINDING 1 0 BUFFER_LABEL OVERWORLD_VISION_CONE }} uniform VisionCone {
+    vec3 a;
+    vec3 b;
+    vec3 c;
+} u_cone;
+
+void main(){
+    vec3 verts[3] = vec3[](u_cone.a, u_cone.b, u_cone.c);
+    gl_Position = u_vp.vp * vec4(verts[{{ VERTEX_INDEX }}], 1.0);
+}
+
