@@ -274,8 +274,8 @@ inline PlayerIntent handle_inputs_player(const Inputs *inputs) {
   // Shift held to activate ability
   // q to cancel ability
   glm::vec3 input_movement_vector = inputs_to_movement_vector(inputs);
-  bool shift_held = key_held(inputs, INPUT_LEFT_SHIFT) || key_held(inputs, INPUT_RIGHT_SHIFT);
-  bool shift_released = key_released(inputs, INPUT_LEFT_SHIFT) || key_released(inputs, INPUT_RIGHT_SHIFT);
+  bool shift_held = key_held(inputs, INPUT_KEY_LEFT_SHIFT) || key_held(inputs, INPUT_KEY_RIGHT_SHIFT);
+  bool shift_released = key_released(inputs, INPUT_KEY_LEFT_SHIFT) || key_released(inputs, INPUT_KEY_RIGHT_SHIFT);
   bool q_held = key_held(inputs, INPUT_KEY_Q);
 
   // Update state given the intent for this frame. Transition to normal state if q held,

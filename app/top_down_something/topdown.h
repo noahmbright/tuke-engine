@@ -1,5 +1,6 @@
 #pragma once
 
+#include "window.h"
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include "camera.h"
@@ -229,6 +230,25 @@ inline void scene0_update(void *scene_data_void_ptr, void *global_state_void_ptr
       .b = camera_xy + cone_b,
       .c = camera_xy + cone_c,
   };
+
+  f32 cone_x_min = fmin(vision_cone.a.x, fmin(vision_cone.b.x, vision_cone.c.x));
+  f32 cone_x_max = fmax(vision_cone.a.x, fmax(vision_cone.b.x, vision_cone.c.x));
+  f32 cone_y_min = fmin(vision_cone.a.y, fmin(vision_cone.b.y, vision_cone.c.y));
+  f32 cone_y_max = fmax(vision_cone.a.y, fmax(vision_cone.b.y, vision_cone.c.y));
+  f32 cone_bb_center_x = 0.5f * (cone_x_max + cone_x_min);
+  f32 cone_bb_center_y = 0.5f * (cone_y_max + cone_y_min);
+  glm::vec3 cone_bb_center = glm::vec3(cone_bb_center_x, cone_bb_center_y, 0.0f);
+  glm::vec3 cone_bb_size = glm::vec3(cone_x_max - cone_x_min, cone_y_max - cone_y_min, 0.0f);
+
+  int cone_collision = tilemap_check_collision(scene_data->tilemap, cone_bb_center, cone_bb_size);
+  bool is_interacting = (cone_collision == 3);
+
+  // FIXME shitty state machine
+  if (is_interacting) {
+    if (key_pressed(&global_state->inputs, INPUT_KEY_ENTER)) {
+      printf("Interacted\n");
+    }
+  }
 
   glBindBuffer(GL_UNIFORM_BUFFER, scene_data->vision_cone_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(VisionCone), &vision_cone);
