@@ -30,32 +30,42 @@ void update_mouse_input_glfw(Inputs *inputs, GLFWwindow *window) {
   inputs->right_mouse_clicked = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
 }
 
+static const i32 key_to_glfw_key[] = {
+
+    [INPUT_KEY_SPACEBAR] = GLFW_KEY_SPACE,
+    [INPUT_KEY_W] = GLFW_KEY_W,
+    [INPUT_KEY_A] = GLFW_KEY_A,
+    [INPUT_KEY_S] = GLFW_KEY_S,
+    [INPUT_KEY_D] = GLFW_KEY_D,
+    [INPUT_KEY_H] = GLFW_KEY_H,
+    [INPUT_KEY_T] = GLFW_KEY_T,
+
+    [INPUT_KEY_LEFT_ARROW] = GLFW_KEY_LEFT,
+    [INPUT_KEY_RIGHT_ARROW] = GLFW_KEY_RIGHT,
+    [INPUT_KEY_UP_ARROW] = GLFW_KEY_UP,
+    [INPUT_KEY_DOWN_ARROW] = GLFW_KEY_DOWN,
+
+    [INPUT_KEY_LEFT_SHIFT] = GLFW_KEY_LEFT_SHIFT,
+    [INPUT_KEY_RIGHT_SHIFT] = GLFW_KEY_RIGHT_SHIFT,
+    [INPUT_KEY_ENTER] = GLFW_KEY_ENTER,
+
+    [INPUT_KEY_Q] = GLFW_KEY_Q,
+    [INPUT_KEY_ESCAPE] = GLFW_KEY_ESCAPE,
+
+    [INPUT_KEY_F1] = GLFW_KEY_F1,
+    [INPUT_KEY_F2] = GLFW_KEY_F2,
+    [INPUT_KEY_F3] = GLFW_KEY_F3,
+    [INPUT_KEY_F4] = GLFW_KEY_F4,
+    [INPUT_KEY_F5] = GLFW_KEY_F5,
+    [INPUT_KEY_F6] = GLFW_KEY_F6,
+    [INPUT_KEY_F7] = GLFW_KEY_F7,
+    [INPUT_KEY_F8] = GLFW_KEY_F8,
+    [INPUT_KEY_F9] = GLFW_KEY_F9,
+};
+
 // update the inputs AND swap the pointers to the current frames inputs
 void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
   glfwPollEvents();
-
-  const i32 key_to_glfw_key[] = {
-
-      [INPUT_KEY_SPACEBAR] = GLFW_KEY_SPACE,
-      [INPUT_KEY_W] = GLFW_KEY_W,
-      [INPUT_KEY_A] = GLFW_KEY_A,
-      [INPUT_KEY_S] = GLFW_KEY_S,
-      [INPUT_KEY_D] = GLFW_KEY_D,
-      [INPUT_KEY_H] = GLFW_KEY_H,
-      [INPUT_KEY_T] = GLFW_KEY_T,
-
-      [INPUT_KEY_LEFT_ARROW] = GLFW_KEY_LEFT,
-      [INPUT_KEY_RIGHT_ARROW] = GLFW_KEY_RIGHT,
-      [INPUT_KEY_UP_ARROW] = GLFW_KEY_UP,
-      [INPUT_KEY_DOWN_ARROW] = GLFW_KEY_DOWN,
-
-      [INPUT_KEY_LEFT_SHIFT] = GLFW_KEY_LEFT_SHIFT,
-      [INPUT_KEY_RIGHT_SHIFT] = GLFW_KEY_RIGHT_SHIFT,
-      [INPUT_KEY_ENTER] = GLFW_KEY_ENTER,
-
-      [INPUT_KEY_Q] = GLFW_KEY_Q,
-      [INPUT_KEY_ESCAPE] = GLFW_KEY_ESCAPE,
-  };
 
   bool *temp = inputs->key_inputs;
   inputs->key_inputs = inputs->prev_key_inputs;

@@ -50,7 +50,7 @@ inline u8 tilemap_data[width_in_tiles * height_in_tiles] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1,
 };
 
-inline Tilemap tilemap = create_tilemap(width_in_tiles, height_in_tiles, &tilemap_data[0]);
+inline Tilemap tilemap0 = create_tilemap(width_in_tiles, height_in_tiles, &tilemap_data[0]);
 
 
 // map 1
@@ -98,17 +98,21 @@ inline void buffer_vp_matrix_to_gl_ubo(const CameraMatrices *camera_matrices, u3
 inline glm::vec3 inputs_to_movement_vector(const Inputs *inputs) {
   glm::vec3 movement_vector = inputs_to_direction(inputs);
 
-  f32 zoom_speed = 10.0f;
+  f32 zoom_speed = 2.0f;
   movement_vector.z = zoom_speed * inputs->scroll_dy;
 
   return movement_vector;
 }
 
+struct OverworldPlayer {
+  glm::vec3 position;
+};
+
 enum SceneID { SCENE0, SCENE1, SCENE_BULLET_HELL, NUM_SCENES, SCENE_NONE };
 
 struct OverworldSceneData {
   // Actual state specific to the overworld
-  glm::vec3 player_pos;
+  OverworldPlayer player;
 
   // CCW angle from right, in radians
   f32 player_rotation_simulation;
@@ -146,39 +150,53 @@ enum GameState {
 };
 
 struct GlobalState {
-  int window_width;
-  int window_height;
   SceneManager scene_manager;
   Inputs inputs;
   f64 t;
+  int window_width;
+  int window_height;
   GameState game_state;
 };
 
-inline void move_camera_in_tilemap(glm::vec3 movement_vector, OverworldSceneData *scene_data,
-                                   GlobalState *global_state) {
+// TODO process input in a separate function and process player intent here.
+// TODO will I consider the players position within a tilemap? within the whole world?
+inline void scene0_update(void *scene_data_void_ptr, void *global_state_void_ptr, f32 dt) {
+
+  GlobalState *global_state = (GlobalState *)global_state_void_ptr;
+  OverworldSceneData *scene_data = (OverworldSceneData *)scene_data_void_ptr;
+
+  const f32 SPEED = 5.0f;
+  const f32 ROTATION_SPEED = 0.05f;
+
+  // Move player.
+  // This is a lot of code, could be nice to extract into functions, but hard to separate out
+  // collision detection, player movement, and input cleanly - will continue to think.
+  glm::vec3 input_movement_vector = inputs_to_movement_vector(&global_state->inputs);
+  glm::vec3 movement_vector = SPEED * dt * input_movement_vector;
 
   const glm::vec3 tile_size(PLAYER_SIDE_LENGTH_METERS);
-
-  Camera *camera = &scene_data->camera;
-  Tilemap *tilemap = scene_data->tilemap;
-
-  glm::vec3 last_camera_pos = camera->position;
+  OverworldPlayer *player = &scene_data->player;
+  glm::vec3 last_player_pos = player->position;
   glm::vec3 final_movement_vector(0.0f);
 
-  // FIXME collision should be between player and world, not camera and world.
   // Right now, tile == 0 means move. Otherwise, reset motion
-  glm::vec3 x_moved_position = last_camera_pos + glm::vec3(movement_vector.x, 0.0f, 0.0f);
-  u8 x_tile = tilemap_check_collision(tilemap, x_moved_position, tile_size);
+  glm::vec3 x_moved_position = last_player_pos + glm::vec3(movement_vector.x, 0.0f, 0.0f);
+  u8 x_tile = tilemap_check_collision(scene_data->tilemap, x_moved_position, tile_size);
   final_movement_vector.x = (x_tile == 0) * movement_vector.x;
 
-  glm::vec3 y_moved_position = last_camera_pos + glm::vec3(0.0f, movement_vector.y, 0.0f);
-  u8 y_tile = tilemap_check_collision(tilemap, y_moved_position, tile_size);
+  glm::vec3 y_moved_position = last_player_pos + glm::vec3(0.0f, movement_vector.y, 0.0f);
+  u8 y_tile = tilemap_check_collision(scene_data->tilemap, y_moved_position, tile_size);
   final_movement_vector.y = (y_tile == 0) * movement_vector.y;
 
-  f32 z_moved_position = camera->position.z + movement_vector.z;
-  camera->position.z = clamp_f32(z_moved_position, 1.0f, CAMERA_PERSPECTIVE_PROJECTION_FAR_Z - EPSILON);
+  player->position += final_movement_vector;
 
-  move_camera(camera, final_movement_vector);
+  // Move camera.
+  // TODO NEXT camera and player movement are decoupled. Add debug camera moving in 3D next.
+  Camera *camera = &scene_data->camera;
+  camera->position.x = player->position.x;
+  camera->position.y = player->position.y;
+  f32 next_camera_z = camera->position.z + input_movement_vector.z;
+  camera->position.z = clamp_f32(next_camera_z, 1.0f, CAMERA_PERSPECTIVE_PROJECTION_FAR_Z - EPSILON);
 
   // TODO Define magic numbers in the tilemap
   // 2 is transition scene block
@@ -190,30 +208,15 @@ inline void move_camera_in_tilemap(glm::vec3 movement_vector, OverworldSceneData
     global_state->scene_manager.pending_scene_action = SCENE_ACTION_SET;
   }
   scene_data->just_transitioned = should_transition;
-}
 
-// TODO separate player position and camera position
-// TODO will I consider the players position within a tilemap? within the whole world?
-inline void scene0_update(void *scene_data_void_ptr, void *global_state_void_ptr, f32 dt) {
+  glm::vec3 player_xy(player->position.x, player->position.y, 0.0f);
 
-  GlobalState *global_state = (GlobalState *)global_state_void_ptr;
-  OverworldSceneData *scene_data = (OverworldSceneData *)scene_data_void_ptr;
-  Camera *camera = &scene_data->camera;
+  f32 input_x = input_movement_vector.x;
+  f32 input_y = input_movement_vector.y;
+  f32 input_angle_radians = atan2(input_y, input_x); // arctan(y/x) in [-pi, +pi]
 
-  const f32 SPEED = 5.0f;
-  const f32 ROTATION_SPEED = 0.05f;
-
-  glm::vec3 input_movement_vector = inputs_to_movement_vector(&global_state->inputs);
-  glm::vec3 movement_vector = SPEED * dt * input_movement_vector;
-  move_camera_in_tilemap(movement_vector, scene_data, global_state);
-
-  glm::vec3 camera_xy(camera->position.x, camera->position.y, 0.0f);
-
-  glm::vec3 input_movement_vector_xy = glm::vec3(input_movement_vector.x, input_movement_vector.y, 0.0f);
-  // atan2 returns arctan(y/x) in [-pi, +pi]
-  f32 input_angle_radians = atan2(input_movement_vector_xy.y, input_movement_vector_xy.x);
-
-  if (glm::length(input_movement_vector_xy) > EPSILON) {
+  f32 input_xy_norm2 = input_x * input_x + input_y * input_y;
+  if (input_xy_norm2 > EPSILON) {
     scene_data->player_rotation_simulation = input_angle_radians;
   }
 
@@ -226,9 +229,9 @@ inline void scene0_update(void *scene_data_void_ptr, void *global_state_void_ptr
   glm::vec3 cone_b = PLAYER_INTERACTION_DISTANCE * glm::vec3(cosf(theta_b), sinf(theta_b), 0.0f);
   glm::vec3 cone_c = PLAYER_INTERACTION_DISTANCE * glm::vec3(cosf(theta_c), sinf(theta_c), 0.0f);
   VisionCone vision_cone{
-      .a = camera_xy,
-      .b = camera_xy + cone_b,
-      .c = camera_xy + cone_c,
+      .a = player_xy,
+      .b = player_xy + cone_b,
+      .c = player_xy + cone_c,
   };
 
   f32 cone_x_min = fmin(vision_cone.a.x, fmin(vision_cone.b.x, vision_cone.c.x));
@@ -263,46 +266,45 @@ inline void scene0_update(void *scene_data_void_ptr, void *global_state_void_ptr
   f32 next_angle = clamp_f32(next_angle_raw, -PI, PI);
   scene_data->player_rotation_render = next_angle;
 
-  // FIXME this player model is generated using camera xy. Player xy is coupled to camera - they shouldn't be.
+  CameraMatrices camera_matrices =
+      create_camera_matrices(&scene_data->camera, global_state->window_width, global_state->window_height);
+  buffer_vp_matrix_to_gl_ubo(&camera_matrices, scene_data->vp_ubo);
+}
+
+inline void scene0_draw(const void *scene_data_void_ptr) {
+  OverworldSceneData *scene_data = (OverworldSceneData *)scene_data_void_ptr;
+
   glm::mat4 player_model = glm::mat4(1.0f);
-  player_model = glm::translate(player_model, camera_xy);
+  player_model = glm::translate(player_model, scene_data->player.position);
   player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
   player_model = glm::rotate(player_model, scene_data->player_rotation_render, glm::vec3(0.0f, 0.0f, 1.0f));
 
   glBindBuffer(GL_UNIFORM_BUFFER, scene_data->player_model_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
 
-  CameraMatrices camera_matrices =
-      create_camera_matrices(&scene_data->camera, global_state->window_width, global_state->window_height);
-  buffer_vp_matrix_to_gl_ubo(&camera_matrices, scene_data->vp_ubo);
-}
-
-inline void scene0_draw(const void *scene_data) {
-  OverworldSceneData *overworld_data = (OverworldSceneData *)scene_data;
-
   // Draw world and player into overworld data's FBO
-  glBindFramebuffer(GL_FRAMEBUFFER, overworld_data->render_target.fbo);
+  glBindFramebuffer(GL_FRAMEBUFFER, scene_data->render_target.fbo);
   glClear(GL_COLOR_BUFFER_BIT);
-  draw_opengl_mesh(&overworld_data->tilemap_mesh, overworld_data->tilemap_material);
-  draw_opengl_mesh(&overworld_data->player_mesh, overworld_data->player_material);
+  draw_opengl_mesh(&scene_data->tilemap_mesh, scene_data->tilemap_material);
+  draw_opengl_mesh(&scene_data->player_mesh, scene_data->player_material);
 
   // Draw player vision cone
   // Is this more for debug?
   // NB: blendFunc is required for blending. Just Enabling doesn't get transparency.
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glUseProgram(overworld_data->vision_cone_program);
+  glUseProgram(scene_data->vision_cone_program);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 
   // Draw overlay into overworld framebuffer
   glDisable(GL_BLEND);
-  glUseProgram(overworld_data->overworld_overlay_program);
+  glUseProgram(scene_data->overworld_overlay_program);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 
   // Present world to screen
   // Does this rely on hidden assumptions that the screen and these FBOs have the same dimensions?
   // Where do I enforce this?
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glBindTexture(GL_TEXTURE_2D, overworld_data->render_target.texture.texture);
-  draw_opengl_mesh(&overworld_data->fullscreen_quad_mesh, overworld_data->fullscreen_quad_material);
+  glBindTexture(GL_TEXTURE_2D, scene_data->render_target.texture.texture);
+  draw_opengl_mesh(&scene_data->fullscreen_quad_mesh, scene_data->fullscreen_quad_material);
 }

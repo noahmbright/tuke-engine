@@ -26,13 +26,13 @@ int main() {
   global_state.game_state = GAME_STATE_RUNNING;
 
   // Tilemaps
-  u32 num_tiles = tilemap.level_height * tilemap.level_width;
+  u32 num_tiles = tilemap0.level_height * tilemap0.level_width;
   u32 num_vertices = num_tiles * 6;
   u32 tilemap_vertices_sizes_bytes = num_vertices * sizeof(TileVertex);
   TileVertex *tilemap_vertices = (TileVertex *)malloc(tilemap_vertices_sizes_bytes);
-  tilemap_generate_vertices(&tilemap, tilemap_vertices);
+  tilemap_generate_vertices(&tilemap0, tilemap_vertices);
 
-  u32 num_tiles1 = tilemap.level_height * tilemap.level_width;
+  u32 num_tiles1 = tilemap1.level_height * tilemap1.level_width;
   u32 num_vertices1 = num_tiles1 * 6;
   u32 tilemap_vertices_sizes_bytes1 = num_vertices1 * sizeof(TileVertex);
   TileVertex *tilemap1_vertices = (TileVertex *)malloc(tilemap_vertices_sizes_bytes1);
@@ -104,10 +104,13 @@ int main() {
   opengl_bind_ubo_to_block(vision_cone_program, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
   // Scenes
+  const glm::vec3 PLAYER_POSITION0(camera.position.x, camera.position.y, 0.0f);
   OverworldSceneData scene0_data{
-      .player_pos = camera.position,
+      .player{
+          .position = PLAYER_POSITION0,
+      },
       .camera = camera,
-      .tilemap = &tilemap,
+      .tilemap = &tilemap0,
       .vp_ubo = vp_ubo,
       .player_model_ubo = player_model_ubo,
       .player_mesh = player_mesh,
@@ -127,7 +130,9 @@ int main() {
   };
 
   OverworldSceneData scene1_data{
-      .player_pos = camera.position,
+      .player{
+          .position = PLAYER_POSITION0,
+      },
       .camera = camera,
       .tilemap = &tilemap1,
       .vp_ubo = vp_ubo,
