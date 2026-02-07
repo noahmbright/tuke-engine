@@ -72,7 +72,7 @@ inline bool key_released(const Inputs *inputs, Input key) {
 
 inline bool key_held(const Inputs *inputs, Input key) { return inputs->key_inputs[key]; }
 
-inline glm::vec3 inputs_to_direction(const Inputs *inputs) {
+inline glm::vec2 inputs_to_direction(const Inputs *inputs) {
   glm::vec3 direction(0.0f);
 
   if (key_held(inputs, INPUT_KEY_W) || key_held(inputs, INPUT_KEY_UP_ARROW)) {
@@ -91,7 +91,7 @@ inline glm::vec3 inputs_to_direction(const Inputs *inputs) {
   return direction;
 }
 
-inline glm::vec3 inputs_to_direction_wasd(const Inputs *inputs) {
+inline glm::vec2 inputs_to_direction_wasd(const Inputs *inputs) {
   glm::vec3 direction(0.0f);
 
   if (key_held(inputs, INPUT_KEY_W)) {
@@ -110,7 +110,7 @@ inline glm::vec3 inputs_to_direction_wasd(const Inputs *inputs) {
   return direction;
 }
 
-inline glm::vec3 inputs_to_direction_arrow_keys(const Inputs *inputs) {
+inline glm::vec2 inputs_to_direction_arrow_keys(const Inputs *inputs) {
   glm::vec3 direction(0.0f);
 
   if (key_held(inputs, INPUT_KEY_UP_ARROW)) {

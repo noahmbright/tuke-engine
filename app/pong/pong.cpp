@@ -318,7 +318,7 @@ void process_inputs_playing(State *state, f32 dt) {
   }
 
   bool horizontal_enabled = (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED);
-  glm::vec3 input_direction = inputs_to_direction(inputs);
+  glm::vec2 input_direction = inputs_to_direction(inputs);
   input_direction.x *= horizontal_enabled;
 
   if (key_pressed(inputs, INPUT_KEY_SPACEBAR) && state->pong_mode == PONG_MODE_BETWEEN_POINTS) {
@@ -353,7 +353,8 @@ void process_inputs_playing(State *state, f32 dt) {
 
   // TODO Pong: make the paddle scale over the course of the game
   if (input_direction.length() > EPSILON) {
-    state->positions[ENTITY_LEFT_PADDLE] += dt * state->left_paddle_speed * input_direction;
+    glm::vec3 movement = glm::vec3(input_direction.x, input_direction.y, 0.0f);
+    state->positions[ENTITY_LEFT_PADDLE] += dt * state->left_paddle_speed * movement;
     state->transforms[ENTITY_LEFT_PADDLE].dirty = true;
   }
 }

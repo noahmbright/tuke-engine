@@ -19,7 +19,7 @@ using f32 = float;
 using f64 = double;
 
 const f32 PI = 3.14159265358979323846264338327950288;
-const f32 PI_OVER_2 = 3.14159265358979323846264338327950288 / 2.0f;
+const f32 PI_OVER_2 = PI / 2.0f;
 const f32 EPSILON = 1e-9;
 const f32 INFINITY_F32 = 1.0f / 0.0f;
 const f64 INFINITY_F64 = 1.0 / 0.0;

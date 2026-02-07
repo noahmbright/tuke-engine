@@ -28,28 +28,6 @@ static const VkPipelineVertexInputStateCreateInfo empty_vertex_input_state = {
     .pVertexAttributeDescriptions = NULL,
 };
 
-glm::vec4 movement_direction_from_inputs(const Inputs *inputs) {
-  glm::vec4 res{0.0f, 0.0f, 0.0f, 1.0f};
-
-  if (inputs->key_inputs[INPUT_KEY_W]) {
-    res.y = 1.0f;
-  }
-
-  if (inputs->key_inputs[INPUT_KEY_A]) {
-    res.x = -1.0f;
-  }
-
-  if (inputs->key_inputs[INPUT_KEY_S]) {
-    res.y = -1.0f;
-  }
-
-  if (inputs->key_inputs[INPUT_KEY_D]) {
-    res.x = 1.0f;
-  }
-
-  return res;
-}
-
 int main() {
   VulkanContext context = create_vulkan_context("Tuke");
   VkDescriptorPool descriptor_pool =
@@ -307,7 +285,7 @@ int main() {
 
     context.current_frame++;
     context.current_frame_index = context.current_frame % MAX_FRAMES_IN_FLIGHT;
-    glm::vec4 movement_direction = movement_direction_from_inputs(&inputs);
+    glm::vec2 movement_direction = inputs_to_direction(&inputs);
     f32 speed = 10.0f;
     camera_move_3d(&camera, dt * speed * movement_direction);
 

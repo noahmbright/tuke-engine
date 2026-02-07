@@ -6,7 +6,6 @@
 #include "tilemap.h"
 #include "tuke_engine.h"
 #include "utils.h"
-#include "window.h"
 #include <OpenGL/OpenGL.h>
 #include <stdio.h>
 
@@ -15,11 +14,13 @@
 
 int main() {
   // Global State
+  GlobalState global_state;
+
   const u32 WINDOW_WIDTH = 1600;
   const u32 WINDOW_HEIGHT = 1200;
-  GLFWwindow *window = create_window(false /* is vulkan */, "topdown", WINDOW_WIDTH, WINDOW_HEIGHT);
-  GlobalState global_state;
-  glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);
+  global_state.window = create_window(false /* is vulkan */, "topdown", WINDOW_WIDTH, WINDOW_HEIGHT);
+  glfwGetFramebufferSize(global_state.window, &global_state.window_width, &global_state.window_height);
+
   init_inputs(&global_state.inputs);
   memset(&global_state.scene_manager, 0, sizeof(SceneManager));
   global_state.t = 0.0;
@@ -39,7 +40,7 @@ int main() {
   tilemap_generate_vertices(&tilemap1, tilemap1_vertices);
 
   Camera camera = create_camera(CAMERA_TYPE_2D);
-  camera.position.z = 15.0f;
+  camera.position.z = OVERWORLD_CAMERA_Z0;
 
   // Programs
   u32 tilemap_program =
@@ -127,6 +128,7 @@ int main() {
       .overworld_overlay_program = overworld_overlay_program,
       .vision_cone_program = vision_cone_program,
       .vision_cone_ubo = vision_cone_ubo,
+      .camera_mode = CAMERA_MODE_OVERWORLD,
   };
 
   OverworldSceneData scene1_data{
@@ -151,10 +153,11 @@ int main() {
       .overworld_overlay_program = overworld_overlay_program,
       .vision_cone_program = vision_cone_program,
       .vision_cone_ubo = vision_cone_ubo,
+      .camera_mode = CAMERA_MODE_OVERWORLD,
   };
 
-  Scene scene0 = create_scene(scene0_update, scene0_draw, &scene0_data);
-  Scene scene1 = create_scene(scene0_update, scene0_draw, &scene1_data);
+  Scene scene0 = create_scene(overworld_update, overworld_draw, &scene0_data);
+  Scene scene1 = create_scene(overworld_update, overworld_draw, &scene1_data);
 
   BulletHellSceneData bullet_hell_scene_data = create_bullet_hell_scene(vp_ubo);
   Scene scene_bullet_hell = create_scene(bullet_hell_update, bullet_hell_draw, &bullet_hell_scene_data);
@@ -168,15 +171,15 @@ int main() {
 
   // Main loop
   f64 t0 = glfwGetTime();
-  while (glfwWindowShouldClose(window) == false) {
+  while (glfwWindowShouldClose(global_state.window) == false) {
 
     f64 t = glfwGetTime();
     f64 dt = t - t0;
     t0 = t;
-    update_key_inputs_glfw(&global_state.inputs, window);
+    update_key_inputs_glfw(&global_state.inputs, global_state.window);
 
     // TODO lazy resize
-    glfwGetFramebufferSize(window, &global_state.window_width, &global_state.window_height);
+    glfwGetFramebufferSize(global_state.window, &global_state.window_width, &global_state.window_height);
     glViewport(0, 0, global_state.window_width, global_state.window_height);
 
     Scene *current_scene = get_current_scene(&global_state.scene_manager);
@@ -185,13 +188,13 @@ int main() {
     current_scene->render(current_scene->data);
     handle_scene_action(&global_state.scene_manager);
 
-    glfwSwapBuffers(window);
+    glfwSwapBuffers(global_state.window);
   }
 
   // Cleanup
   free(bullet_hell_scene_data.bullet_manager);
   glDeleteFramebuffers(1, &overworld_render_target.fbo);
-  glfwDestroyWindow(window);
+  glfwDestroyWindow(global_state.window);
   glfwTerminate();
   return 0;
 }

@@ -26,7 +26,7 @@ struct Camera {
   f32 mouse_sensitivity = 1e-3;
   f32 fovy = 45.0f;
 
-  void (*move_camera_function)(Camera *, const glm::vec3 &);
+  void (*move_camera_function)(Camera *, const glm::vec2);
 
   f32 last_mouse_x, last_mouse_y;
   bool has_moused_yet;
@@ -37,20 +37,31 @@ struct CameraMatrices {
   glm::mat4 view, projection;
 };
 
-Camera create_camera(CameraType type, const glm::vec3 &pos = {0.0, 0.0, 1.0},
-                     const glm::vec3 &direction = {0.0, 0.0, -1.0}, const glm::vec3 &up = {0.0, 1.0, 0.0},
-                     const glm::vec3 &right = {1.0, 0.0, 0.0});
+const glm::vec3 CAMERA_POSITION0 = glm::vec3(0.0, 0.0, 1.0);
+const glm::vec3 CAMERA_DIRECTION0 = glm::vec3(0.0, 0.0, -1.0);
+const glm::vec3 CAMERA_UP0 = glm::vec3(0.0, 1.0, 0.0);
+const glm::vec3 CAMERA_RIGHT0 = glm::vec3(1.0, 0.0, 0.0);
 
-inline void camera_move_2d(Camera *camera, const glm::vec3 &movement_direction) {
-  camera->position += movement_direction;
+Camera create_camera(CameraType type, const glm::vec3 pos = CAMERA_POSITION0,
+                     const glm::vec3 direction = CAMERA_DIRECTION0, const glm::vec3 up = CAMERA_UP0,
+                     const glm::vec3 right = CAMERA_RIGHT0);
+
+// xpos and y pos are the positions of the mouse queried from GLFW
+// This function assumes that direction is always synced with pitch and yaw.
+// If not, and the camera transitions to using this function, there will be a jump.
+void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos);
+
+inline void camera_move_2d(Camera *camera, const glm::vec2 movement_direction) {
+  camera->position.x += movement_direction.x;
+  camera->position.y += movement_direction.y;
 }
 
-inline void camera_move_3d(Camera *camera, const glm::vec3 &movement_direction) {
+inline void camera_move_3d(Camera *camera, const glm::vec2 movement_direction) {
   camera->position += movement_direction.y * camera->direction;
   camera->position += movement_direction.x * camera->right;
 }
 
-inline void move_camera(Camera *camera, const glm::vec3 &movement_direction) {
+inline void move_camera(Camera *camera, const glm::vec2 movement_direction) {
   // move_camera_function will only ever be camera_move_2d or camera_move_3d
   camera->move_camera_function(camera, movement_direction);
 }
