@@ -101,6 +101,19 @@ inline glm::vec3 inputs_to_movement_vector(const Inputs *inputs) {
   return glm::vec3(movement_vector.x, movement_vector.y, zoom_speed * inputs->scroll_dy);
 }
 
+enum ShaderID {
+  SHADER_ID_TILEMAP,
+  SHADER_ID_PLAYER,
+  SHADER_ID_FULLSCREEN_QUAD,
+  SHADER_ID_OVERWORLD_OVERLAY,
+  SHADER_ID_GLYPHS,
+  SHADER_ID_VISION_CONE,
+
+  NUM_SHADER_IDS
+};
+
+u32 shader_registry[NUM_SHADER_IDS];
+
 struct OverworldPlayer {
   glm::vec3 position;
 };
@@ -143,9 +156,6 @@ struct OverworldSceneData {
   OpenGLMesh fullscreen_quad_mesh;
   OpenGLMaterial fullscreen_quad_material;
 
-  u32 overworld_overlay_program;
-
-  u32 vision_cone_program;
   u32 vision_cone_ubo;
 };
 
@@ -231,8 +241,6 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
   }
 
   Camera *camera = &scene_data->camera;
-  log_vec3(&camera->direction);
-  printf("%d\n", camera->has_moused_yet);
   switch (scene_data->camera_mode) {
     // In overworld mode, the camera follows the player. On a reset back to overworld mode from
     // debug mode, the camera should jump back to the player's position.
@@ -352,6 +360,9 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
 inline void overworld_draw(const void *scene_data_void_ptr) {
   OverworldSceneData *scene_data = (OverworldSceneData *)scene_data_void_ptr;
 
+  glBindFramebuffer(GL_FRAMEBUFFER, scene_data->render_target.fbo);
+  glClear(GL_COLOR_BUFFER_BIT);
+
   glm::mat4 player_model = glm::mat4(1.0f);
   player_model = glm::translate(player_model, scene_data->player.position);
   player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
@@ -361,22 +372,20 @@ inline void overworld_draw(const void *scene_data_void_ptr) {
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
 
   // Draw world and player into overworld data's FBO
-  glBindFramebuffer(GL_FRAMEBUFFER, scene_data->render_target.fbo);
-  glClear(GL_COLOR_BUFFER_BIT);
-  draw_opengl_mesh(&scene_data->tilemap_mesh, scene_data->tilemap_material);
-  draw_opengl_mesh(&scene_data->player_mesh, scene_data->player_material);
+  draw_gl_mesh(&scene_data->tilemap_mesh, scene_data->tilemap_material);
+  draw_gl_mesh(&scene_data->player_mesh, scene_data->player_material);
 
   // Draw player vision cone
   // Is this more for debug?
   // NB: blendFunc is required for blending. Just Enabling doesn't get transparency.
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glUseProgram(scene_data->vision_cone_program);
+  glUseProgram(shader_registry[SHADER_ID_VISION_CONE]);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 
   // Draw overlay into overworld framebuffer
   glDisable(GL_BLEND);
-  glUseProgram(scene_data->overworld_overlay_program);
+  glUseProgram(shader_registry[SHADER_ID_OVERWORLD_OVERLAY]);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 
   // Present world to screen
@@ -384,5 +393,5 @@ inline void overworld_draw(const void *scene_data_void_ptr) {
   // Where do I enforce this?
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glBindTexture(GL_TEXTURE_2D, scene_data->render_target.texture.texture);
-  draw_opengl_mesh(&scene_data->fullscreen_quad_mesh, scene_data->fullscreen_quad_material);
+  draw_gl_mesh(&scene_data->fullscreen_quad_mesh, scene_data->fullscreen_quad_material);
 }

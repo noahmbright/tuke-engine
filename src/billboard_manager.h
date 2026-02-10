@@ -84,13 +84,11 @@ inline BillboardManager create_billboard_manager(u32 capacity, u32 vp_ubo) {
   billboard_manager.size = 0;
 
   // if OpenGL
-  u32 program =
-      shader_handles_to_opengl_program(SHADER_HANDLE_COMMON_BILLBOARD_VERT, SHADER_HANDLE_COMMON_BILLBOARD_FRAG);
+  u32 program = shader_handles_to_gl_program(SHADER_HANDLE_COMMON_BILLBOARD_VERT, SHADER_HANDLE_COMMON_BILLBOARD_FRAG);
 
-  u32 camera_up_right_ubo = create_opengl_ubo(sizeof(CameraUpRight), GL_DYNAMIC_DRAW);
-  opengl_bind_ubo_to_block(program, camera_up_right_ubo, UNIFORM_BUFFER_LABEL_BILLBOARD_CAMERA_VECTORS,
-                           "CameraUpRight");
-  opengl_bind_ubo_to_block(program, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
+  u32 camera_up_right_ubo = create_gl_ubo(sizeof(CameraUpRight), GL_DYNAMIC_DRAW);
+  gl_bind_ubo_to_block(program, camera_up_right_ubo, UNIFORM_BUFFER_LABEL_BILLBOARD_CAMERA_VECTORS, "CameraUpRight");
+  gl_bind_ubo_to_block(program, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
   billboard_manager.shader.program = program;
   billboard_manager.shader.camera_up_right_ubo = camera_up_right_ubo;
@@ -98,8 +96,8 @@ inline BillboardManager create_billboard_manager(u32 capacity, u32 vp_ubo) {
   billboard_manager.shader.vao = create_vao();
   billboard_manager.shader.vbo = allocate_vbo(capacity * sizeof(Billboard), GL_DYNAMIC_DRAW);
 
-  init_opengl_vertex_layout(VERTEX_LAYOUT_BINDING0INSTANCE_VEC3_VEC2_FLOAT, billboard_manager.shader.vao,
-                            &billboard_manager.shader.vbo, 1, 0);
+  init_gl_vertex_layout(VERTEX_LAYOUT_BINDING0INSTANCE_VEC3_VEC2_FLOAT, billboard_manager.shader.vao,
+                        &billboard_manager.shader.vbo, 1, 0);
 
   return billboard_manager;
 }

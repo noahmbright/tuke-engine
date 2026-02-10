@@ -2,27 +2,14 @@
 
 #include "glad/gl.h"
 #include "tuke_engine.h"
+#include "utils.h"
 #include <OpenGL/OpenGL.h>
 
 #define MAX_NUM_VBOS (4)
+#define MAX_NUM_UNIFORMS (8)
 #define MAX_NUM_POST_PROCESSING_EFFECTS (4)
 
 enum VBOTypes { VBO_VERTEX, VBO_INSTANCE };
-
-// TODO decide how to manage ownership of a VAO.
-// A VAO is semi determined by the Mesh, which contains the data, which constrains how a shader can interpret its vertex
-// input.
-// A VAO is also determined by the shader, and multiple shaders can draw the same mesh.
-// The practical issue is that identifying vertex layouts is harder than identifying a shader.
-struct OpenGLMesh {
-  u32 vao;
-
-  u32 vbo; // Goal is to delete this vbo
-  u32 vbos[MAX_NUM_VBOS];
-  u32 num_vbos;
-
-  u32 num_vertices;
-};
 
 inline u32 create_vbo() {
   u32 vbo;
@@ -52,7 +39,7 @@ inline u32 create_vao() {
   return vao;
 }
 
-inline u32 create_opengl_ubo(u32 size, u32 draw_mode) {
+inline u32 create_gl_ubo(u32 size, u32 draw_mode) {
   u32 ubo;
   glGenBuffers(1, &ubo);
   assert(ubo != 0 && "Tried to bind null UBO");
@@ -97,7 +84,7 @@ struct OpenGLTexture {
 // bind and set outside the caller, or write a new constructor.
 // Currently, there is no need to provide specialized format and internal_format. Use the
 // same format parameter for both.
-inline OpenGLTexture create_opengl_texture2d(u32 height, u32 width, GLenum format, GLenum type) {
+inline OpenGLTexture create_gl_texture2d(u32 height, u32 width, GLenum format, GLenum type) {
   OpenGLTexture res;
   res.height = height;
   res.width = width;
@@ -126,15 +113,24 @@ inline OpenGLTexture create_opengl_texture2d(u32 height, u32 width, GLenum forma
   return res;
 }
 
-inline void opengl_texture_buffer_data(const OpenGLTexture *texture, const u8 *data) {
+inline void gl_texture_buffer_data(const OpenGLTexture *texture, const u8 *data) {
   glBindTexture(GL_TEXTURE_2D, texture->texture);
   glTexImage2D(GL_TEXTURE_2D, 0, texture->format, texture->width, texture->height, 0, texture->format, GL_UNSIGNED_BYTE,
                data);
 }
 
-inline void opengl_texture_resize(OpenGLTexture *texture, u32 height, u32 width) {
+inline void gl_texture_resize(OpenGLTexture *texture, u32 height, u32 width) {
   glBindTexture(GL_TEXTURE_2D, texture->texture);
   glTexImage2D(GL_TEXTURE_2D, 0, texture->format, width, height, 0, texture->format, GL_UNSIGNED_BYTE, NULL);
+}
+
+inline OpenGLTexture create_gl_texture_from_image(const char *filepath) {
+  STBHandle stb_handle = load_texture(filepath);
+  GLenum texture_format = (stb_handle.n_channels == 4) ? GL_RGBA : GL_RGB;
+  OpenGLTexture texture = create_gl_texture2d(stb_handle.height, stb_handle.width, texture_format, GL_UNSIGNED_BYTE);
+  gl_texture_buffer_data(&texture, stb_handle.data);
+  free_stb_handle(&stb_handle);
+  return texture;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -165,14 +161,14 @@ struct OpenGLFramebuffer {
 
 // The framebuffers created here are empty and incomplete.
 // It is necessary to attach textures in a separate call.
-inline OpenGLFramebuffer create_opengl_framebuffer() {
+inline OpenGLFramebuffer create_gl_framebuffer() {
   OpenGLFramebuffer framebuffer;
   glGenFramebuffers(1, &framebuffer.fbo);
   return framebuffer;
 }
 
 // Possibly may want to pass GL_COLOR_ATTACHMENT as an argument
-inline void opengl_framebuffer_attach_texture2d(OpenGLFramebuffer *framebuffer, const OpenGLTexture *texture) {
+inline void gl_framebuffer_attach_texture2d(OpenGLFramebuffer *framebuffer, const OpenGLTexture *texture) {
   glBindFramebuffer(GL_FRAMEBUFFER, framebuffer->fbo);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture->texture, 0);
 
@@ -185,10 +181,10 @@ inline void opengl_framebuffer_attach_texture2d(OpenGLFramebuffer *framebuffer, 
 
 // TODO need to do some crazy stuff with framebuffers and textures to understand the right
 // ownership model.
-inline void opengl_framebuffer_resize(OpenGLFramebuffer *framebuffer, u32 height, u32 width) {
+inline void gl_framebuffer_resize(OpenGLFramebuffer *framebuffer, u32 height, u32 width) {
   // Resize texture
   // Assuming no change of format
-  opengl_texture_resize(&framebuffer->texture, height, width);
+  gl_texture_resize(&framebuffer->texture, height, width);
 }
 
 // Render Target
@@ -198,11 +194,11 @@ struct OpenGLRenderTarget {
   OpenGLTexture texture;
 };
 
-inline OpenGLRenderTarget create_opengl_render_target(u32 height, u32 width, GLenum format, GLenum type) {
+inline OpenGLRenderTarget create_gl_render_target(u32 height, u32 width, GLenum format, GLenum type) {
   OpenGLRenderTarget render_target;
 
   glGenFramebuffers(1, &render_target.fbo);
-  render_target.texture = create_opengl_texture2d(height, width, format, type);
+  render_target.texture = create_gl_texture2d(height, width, format, type);
 
   glBindFramebuffer(GL_FRAMEBUFFER, render_target.fbo);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render_target.texture.texture, 0);
@@ -223,11 +219,11 @@ struct OpenGLDoubleBuffer {
   u32 width;
 };
 
-inline OpenGLDoubleBuffer create_opengl_double_buffer(u32 height, u32 width, GLenum format, GLenum type) {
+inline OpenGLDoubleBuffer create_gl_double_buffer(u32 height, u32 width, GLenum format, GLenum type) {
   OpenGLDoubleBuffer double_buffer;
 
-  double_buffer.targets[0] = create_opengl_render_target(height, width, format, type);
-  double_buffer.targets[1] = create_opengl_render_target(height, width, format, type);
+  double_buffer.targets[0] = create_gl_render_target(height, width, format, type);
+  double_buffer.targets[1] = create_gl_render_target(height, width, format, type);
 
   double_buffer.height = 0;
   double_buffer.width = 0;
@@ -235,7 +231,7 @@ inline OpenGLDoubleBuffer create_opengl_double_buffer(u32 height, u32 width, GLe
   return double_buffer;
 }
 
-inline void opengl_double_buffer_resize(OpenGLDoubleBuffer *double_buffer, u32 height, u32 width) {
+inline void gl_double_buffer_resize(OpenGLDoubleBuffer *double_buffer, u32 height, u32 width) {
   if (double_buffer->width == width && double_buffer->height == height) {
     return;
   }
@@ -243,8 +239,8 @@ inline void opengl_double_buffer_resize(OpenGLDoubleBuffer *double_buffer, u32 h
   double_buffer->width = width;
   double_buffer->height = height;
 
-  opengl_texture_resize(&double_buffer->targets[0].texture, height, width);
-  opengl_texture_resize(&double_buffer->targets[1].texture, height, width);
+  gl_texture_resize(&double_buffer->targets[0].texture, height, width);
+  gl_texture_resize(&double_buffer->targets[1].texture, height, width);
 }
 
 // TODO come up with a scheme for describing post processing effects
@@ -258,7 +254,7 @@ struct OpenGLPostProcessing {
 };
 
 // Starting with the render in texture, perform post processing
-inline const OpenGLTexture *opengl_post_process(OpenGLPostProcessing *post_processing, const OpenGLTexture *texture) {
+inline const OpenGLTexture *gl_post_process(OpenGLPostProcessing *post_processing, const OpenGLTexture *texture) {
 
   if (post_processing->num_effects == 0) {
     return texture;
@@ -284,17 +280,11 @@ inline const OpenGLTexture *opengl_post_process(OpenGLPostProcessing *post_proce
 
 //////////////// Meshes and Materials ////////////////
 
-inline OpenGLMesh create_opengl_mesh(const void *arr, u32 num_bytes, u32 num_vertices, u32 draw_mode) {
-  OpenGLMesh opengl_mesh;
-
-  opengl_mesh.vbo = allocate_vbo_with_data(arr, num_bytes, draw_mode);
-  opengl_mesh.vao = create_vao();
-  opengl_mesh.num_vertices = num_vertices;
-
-  return opengl_mesh;
-}
-
 // OpenGLMaterial
+// Still finalizing what this is a conceptual wrapper around.
+// Zoning in on it being a wrapper for uniforms and textures, resources used by the shader.
+// You can bind different resources to the same shader.
+// TODO Primitive is absolutely not appropriate here.
 struct OpenGLMaterial {
   u32 program;
   OpenGLTexture texture;
@@ -302,7 +292,29 @@ struct OpenGLMaterial {
   GLenum primitive;
 };
 
-inline OpenGLMaterial create_opengl_material(u32 program) {
+// TODO decide how to manage ownership of a VAO.
+// A VAO is semi determined by the Mesh, which contains the data, which constrains how a shader can interpret its vertex
+// input.
+// A VAO is also determined by the shader, and multiple shaders can draw the same mesh.
+// The practical issue is that identifying vertex layouts is harder than identifying a shader.
+struct OpenGLMesh {
+  u32 vao;
+  u32 vbos[MAX_NUM_VBOS];
+  u32 num_vbos;
+  u32 num_vertices;
+};
+
+inline OpenGLMesh create_gl_mesh(const void *arr, u32 num_bytes, u32 num_vertices, u32 draw_mode) {
+  OpenGLMesh opengl_mesh;
+
+  opengl_mesh.vbos[0] = allocate_vbo_with_data(arr, num_bytes, draw_mode);
+  opengl_mesh.vao = create_vao();
+  opengl_mesh.num_vertices = num_vertices;
+
+  return opengl_mesh;
+}
+
+inline OpenGLMaterial create_gl_material(u32 program) {
   OpenGLMaterial material;
   material.program = program;
   material.uniform = 0;
@@ -312,7 +324,7 @@ inline OpenGLMaterial create_opengl_material(u32 program) {
   return material;
 }
 
-inline void opengl_bind_ubo_to_block(u32 program, u32 ubo, u32 binding_point, const char *block_name) {
+inline void gl_bind_ubo_to_block(u32 program, u32 ubo, u32 binding_point, const char *block_name) {
   u32 block_index = glGetUniformBlockIndex(program, block_name);
   if (block_index == GL_INVALID_INDEX) {
     fprintf(stderr, "Uniform block '%s' not found in program %u\n", block_name, program);
@@ -323,8 +335,8 @@ inline void opengl_bind_ubo_to_block(u32 program, u32 ubo, u32 binding_point, co
   glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, ubo);
 }
 
-inline void opengl_material_add_uniform(OpenGLMaterial *opengl_material, u32 ubo, u32 binding_point,
-                                        const char *block_name) {
+inline void gl_material_add_uniform(OpenGLMaterial *opengl_material, u32 ubo, u32 binding_point,
+                                    const char *block_name) {
   u32 block_index = glGetUniformBlockIndex(opengl_material->program, block_name);
   if (block_index == GL_INVALID_INDEX) {
     fprintf(stderr, "Uniform block '%s' not found in program %u\n", block_name, opengl_material->program);
@@ -337,7 +349,7 @@ inline void opengl_material_add_uniform(OpenGLMaterial *opengl_material, u32 ubo
   glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, opengl_material->uniform);
 }
 
-inline void draw_opengl_mesh(const OpenGLMesh *opengl_mesh, OpenGLMaterial material) {
+inline void draw_gl_mesh(const OpenGLMesh *opengl_mesh, OpenGLMaterial material) {
   glBindTexture(GL_TEXTURE_2D, material.texture.texture);
   glBindBuffer(GL_UNIFORM_BUFFER, material.uniform);
   glUseProgram(material.program);
@@ -345,7 +357,7 @@ inline void draw_opengl_mesh(const OpenGLMesh *opengl_mesh, OpenGLMaterial mater
   glDrawArrays(GL_TRIANGLES, 0, opengl_mesh->num_vertices);
 }
 
-inline void draw_opengl_mesh_instanced(const OpenGLMesh *opengl_mesh, OpenGLMaterial material, u32 num_instances) {
+inline void draw_gl_mesh_instanced(const OpenGLMesh *opengl_mesh, OpenGLMaterial material, u32 num_instances) {
   glBindTexture(GL_TEXTURE_2D, material.texture.texture);
   glBindBuffer(GL_UNIFORM_BUFFER, material.uniform);
   glUseProgram(material.program);
@@ -387,3 +399,14 @@ inline OpenGLLimits opengl_limits_get() {
 
   return limits;
 }
+
+// Render Object
+// Being stupid for now. Will need to rethink when I have shaders/materials/meshes to mix and match.
+// Embedding a Mesh and a Material directly in this struct. It would make more sense to have pointers
+// to them for mixing and matching. They'd have to live in a registry somewhere.
+struct GLRenderObject {
+  u32 flags;
+  u32 program;
+  OpenGLMesh mesh;
+  OpenGLMaterial material;
+};
