@@ -107,12 +107,14 @@ int main() {
                        UNIFORM_BUFFER_LABEL_OVERWORLD_VISION_CONE, "VisionCone");
   gl_bind_ubo_to_block(shader_registry[SHADER_ID_VISION_CONE], vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
-  // Scenes
   const glm::vec3 PLAYER_POSITION0(camera.position.x, camera.position.y, 0.0f);
+  Entities entities = create_entities();
+  EntityIndex player_index = entities_add(&entities);
+  entities.positions[player_index.idx] = PLAYER_POSITION0;
+
+  // Scenes
   OverworldSceneData scene0_data{
-      .player{
-          .position = PLAYER_POSITION0,
-      },
+      .player_index = player_index,
       .camera = camera,
       .tilemap = &tilemap0,
       .vp_ubo = vp_ubo,
@@ -133,9 +135,7 @@ int main() {
   };
 
   OverworldSceneData scene1_data{
-      .player{
-          .position = PLAYER_POSITION0,
-      },
+      .player_index = player_index,
       .camera = camera,
       .tilemap = &tilemap1,
       .vp_ubo = vp_ubo,

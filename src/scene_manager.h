@@ -78,3 +78,8 @@ inline void set_base_scene(SceneManager *scene_manager, Scene *scene) {
   scene_manager->top = 0;
   scene_manager->stack[0] = scene;
 }
+
+inline void request_set_scene(SceneManager *scene_manager, u32 scene_enum) {
+  scene_manager->pending_scene = scene_enum;
+  scene_manager->pending_scene_action = SCENE_ACTION_SET;
+}

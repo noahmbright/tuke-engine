@@ -15,10 +15,13 @@
 
 // TODO
 // Transition in and out of scene changes
+// Get GLFW and OpenGL explicit API calls out of here and into a platform/renderer layer
+// NPCs
 
 #define PLAYER_SIDE_LENGTH_METERS (0.6f)
 #define PLAYER_INTERACTION_DISTANCE (1.0f)
 #define PLAYER_INTERACTION_FOV (1.04f) // Radians, around 60 degrees
+#define NUM_ENTITIES (64)
 
 const f32 OVERWORLD_CAMERA_Z0 = 15.0f;
 const f32 PLAYER_INTERACTION_HALF_FOV = PLAYER_INTERACTION_FOV / 2.0f;
@@ -114,9 +117,56 @@ enum ShaderID {
 
 u32 shader_registry[NUM_SHADER_IDS];
 
-struct OverworldPlayer {
-  glm::vec3 position;
+enum EntityType {
+  ENTITY_NIL,
+  ENTITY_PLAYER,
+  ENTITY_NPC,
 };
+
+// Trying out a technique where 0 is a sentinel failure value. Index 0 into these arrays is always invalid.
+// ZII.
+struct EntityIndex {
+  u32 idx;
+};
+
+struct Entities {
+  EntityType types[NUM_ENTITIES];
+  bool active[NUM_ENTITIES];
+  glm::vec3 positions[NUM_ENTITIES];
+  f32 rotations[NUM_ENTITIES];
+
+  EntityIndex next_inactive;
+};
+
+inline Entities create_entities() {
+  Entities entities;
+  memset(&entities, 0, sizeof(entities));
+  entities.next_inactive.idx = 1;
+  return entities;
+}
+
+// Return the index of the added entity.
+inline EntityIndex entities_add(Entities *entities) {
+
+  u32 next_inactive = entities->next_inactive.idx;
+  if (next_inactive < NUM_ENTITIES && !entities->active[next_inactive]) {
+    entities->next_inactive.idx++;
+    return {
+        .idx = next_inactive,
+    };
+  }
+
+  for (u32 i = 1; i < NUM_ENTITIES; i++) {
+    if (entities->active[i] == false) {
+      entities->next_inactive.idx = i + 1;
+      return {
+          .idx = i,
+      };
+    }
+  }
+
+  assert(false && "Out of space for non nil entities");
+}
 
 enum SceneID { SCENE0, SCENE1, SCENE_BULLET_HELL, NUM_SCENES, SCENE_NONE };
 
@@ -128,9 +178,9 @@ enum CameraMode {
 struct OverworldSceneData {
   // Is this impure? This is half debug?
   CameraMode camera_mode;
+  Entities entities;
 
-  // Actual state specific to the overworld
-  OverworldPlayer player;
+  EntityIndex player_index;
 
   // CCW angle from right, in radians
   f32 player_rotation_simulation;
@@ -200,6 +250,24 @@ inline OverworldPlayerIntent overworld_process_inputs(const Inputs *inputs) {
   return player_intent;
 }
 
+static inline void move_player_in_tilemap(glm::vec2 movement_vector, const Tilemap *tilemap, glm::vec3 *player_pos,
+                                          u8 *x_tile, u8 *y_tile) {
+
+  const glm::vec3 tile_size(PLAYER_SIDE_LENGTH_METERS);
+  glm::vec3 final_movement_vector(0.0f);
+
+  // Right now, tile == 0 means move. Otherwise, reset motion
+  glm::vec3 x_moved_position = *player_pos + glm::vec3(movement_vector.x, 0.0f, 0.0f);
+  *x_tile = tilemap_check_collision(tilemap, x_moved_position, tile_size);
+  final_movement_vector.x = (*x_tile == 0) * movement_vector.x;
+
+  glm::vec3 y_moved_position = *player_pos + glm::vec3(0.0f, movement_vector.y, 0.0f);
+  *y_tile = tilemap_check_collision(tilemap, y_moved_position, tile_size);
+  final_movement_vector.y = (*y_tile == 0) * movement_vector.y;
+
+  *player_pos += final_movement_vector;
+}
+
 // TODO will I consider the players position within a tilemap? within the whole world?
 inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_ptr, f32 dt) {
 
@@ -211,7 +279,6 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
   // collision detection, player movement, and input cleanly - will continue to think.
   // TODO camera_mode is more like control_mode
   OverworldPlayerIntent player_intent = overworld_process_inputs(&global_state->inputs);
-  const f32 SPEED = 5.0f;
   const f32 ROTATION_SPEED = 0.05f;
   const f32 ZOOM_SPEED = 2.0f;
 
@@ -245,27 +312,16 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
     // In overworld mode, the camera follows the player. On a reset back to overworld mode from
     // debug mode, the camera should jump back to the player's position.
   case CAMERA_MODE_OVERWORLD: {
+    // Move player.
+    const f32 SPEED = 5.0f;
+    glm::vec3 *player_pos = &scene_data->entities.positions[scene_data->player_index.idx];
     glm::vec2 movement_vector = SPEED * dt * player_intent.key_movement_vector;
-
-    const glm::vec3 tile_size(PLAYER_SIDE_LENGTH_METERS);
-    OverworldPlayer *player = &scene_data->player;
-    glm::vec3 last_player_pos = player->position;
-    glm::vec3 final_movement_vector(0.0f);
-
-    // Right now, tile == 0 means move. Otherwise, reset motion
-    glm::vec3 x_moved_position = last_player_pos + glm::vec3(movement_vector.x, 0.0f, 0.0f);
-    u8 x_tile = tilemap_check_collision(scene_data->tilemap, x_moved_position, tile_size);
-    final_movement_vector.x = (x_tile == 0) * movement_vector.x;
-
-    glm::vec3 y_moved_position = last_player_pos + glm::vec3(0.0f, movement_vector.y, 0.0f);
-    u8 y_tile = tilemap_check_collision(scene_data->tilemap, y_moved_position, tile_size);
-    final_movement_vector.y = (y_tile == 0) * movement_vector.y;
-
-    player->position += final_movement_vector;
+    u8 x_tile, y_tile;
+    move_player_in_tilemap(movement_vector, scene_data->tilemap, player_pos, &x_tile, &y_tile);
 
     // Move camera.
-    camera->position.x = player->position.x;
-    camera->position.y = player->position.y;
+    camera->position.x = player_pos->x;
+    camera->position.y = player_pos->y;
 
     f32 next_camera_z = camera->position.z + ZOOM_SPEED * player_intent.scroll;
     camera->position.z = clamp_f32(next_camera_z, 1.0f, CAMERA_PERSPECTIVE_PROJECTION_FAR_Z - EPSILON);
@@ -281,7 +337,7 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
     }
     scene_data->just_transitioned = should_transition;
 
-    glm::vec3 player_xy(player->position.x, player->position.y, 0.0f);
+    glm::vec3 player_xy(player_pos->x, player_pos->y, 0.0f);
 
     f32 input_x = player_intent.key_movement_vector.x;
     f32 input_y = player_intent.key_movement_vector.y;
@@ -296,6 +352,7 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
     // The view cone is a single triangle. Find the bounding box for the triangle, and then
     // intersect that with the tilemap. If an interactable object is in the BB, then check its
     // barycentric coords to confirm collision with the triangle.
+    // TODO not doing any triangle stuff yet
     f32 theta_b = scene_data->player_rotation_simulation + PLAYER_INTERACTION_HALF_FOV;
     f32 theta_c = scene_data->player_rotation_simulation - PLAYER_INTERACTION_HALF_FOV;
     glm::vec3 cone_b = PLAYER_INTERACTION_DISTANCE * glm::vec3(cosf(theta_b), sinf(theta_b), 0.0f);
@@ -364,7 +421,7 @@ inline void overworld_draw(const void *scene_data_void_ptr) {
   glClear(GL_COLOR_BUFFER_BIT);
 
   glm::mat4 player_model = glm::mat4(1.0f);
-  player_model = glm::translate(player_model, scene_data->player.position);
+  player_model = glm::translate(player_model, scene_data->entities.positions[scene_data->player_index.idx]);
   player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
   player_model = glm::rotate(player_model, scene_data->player_rotation_render, glm::vec3(0.0f, 0.0f, 1.0f));
 
