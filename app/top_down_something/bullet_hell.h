@@ -167,17 +167,17 @@ struct BulletHellSceneData {
   Camera camera;
   u32 vp_ubo;
 
-  OpenGLMesh player_mesh;
-  OpenGLMaterial player_material;
+  GLMesh player_mesh;
+  GLMaterial player_material;
 
-  OpenGLMesh arena_mesh;
-  OpenGLMaterial arena_material;
+  GLMesh arena_mesh;
+  GLMaterial arena_material;
 
-  OpenGLMesh bullet_mesh;
-  OpenGLMaterial bullet_material;
+  GLMesh bullet_mesh;
+  GLMaterial bullet_material;
 
-  OpenGLMesh enemy_mesh;
-  OpenGLMaterial enemy_material;
+  GLMesh enemy_mesh;
+  GLMaterial enemy_material;
 
   u32 overlay_program;
 
@@ -487,7 +487,8 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   }
 }
 
-inline void bullet_hell_draw(const void *scene_data) {
+inline void bullet_hell_draw(const GLRenderer *renderer, const void *scene_data) {
+  (void)renderer;
   BulletHellSceneData *data = (BulletHellSceneData *)scene_data;
 
   // Draw directly to screen, no post processing yet
@@ -531,14 +532,14 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
   u32 player_model_ubo = create_gl_ubo(sizeof(PlayerModel), GL_DYNAMIC_DRAW);
   u32 player_frag_ubo = create_gl_ubo(sizeof(BulletHellPlayerFrag), GL_DYNAMIC_DRAW);
 
-  OpenGLMaterial player_material = create_gl_material(player_program);
+  GLMaterial player_material = create_gl_material(player_program);
   gl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_BULLET_HELL_PLAYER_MODEL,
                           "PlayerModel");
   gl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
-  OpenGLMesh bullet_player_mesh = create_gl_mesh_with_vertex_layout(
-      player_vertices, sizeof(player_vertices), 6, VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
-  OpenGLMaterial bullet_player_material = create_gl_material(player_program);
+  GLMesh bullet_player_mesh = create_gl_mesh_with_vertex_layout(player_vertices, sizeof(player_vertices), 6,
+                                                                VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
+  GLMaterial bullet_player_material = create_gl_material(player_program);
   gl_material_add_uniform(&player_material, player_frag_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_BULLET_HELL_PLAYER_FRAG,
                           "BulletHellPlayerFrag");
   gl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_PLAYER_MODEL, "PlayerModel");
@@ -547,35 +548,35 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
   // Arena
   u32 arena_program = shader_handles_to_gl_program(SHADER_HANDLE_TOPDOWN_ARENA_VERT, SHADER_HANDLE_TOPDOWN_ARENA_FRAG);
 
-  OpenGLMesh arena_mesh = create_gl_mesh_with_vertex_layout(arena_vertices, sizeof(arena_vertices), 6,
-                                                            VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
-  OpenGLMaterial arena_material = create_gl_material(arena_program);
+  GLMesh arena_mesh = create_gl_mesh_with_vertex_layout(arena_vertices, sizeof(arena_vertices), 6,
+                                                        VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
+  GLMaterial arena_material = create_gl_material(arena_program);
   gl_material_add_uniform(&arena_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
   // Bullets
   u32 bullet_program =
       shader_handles_to_gl_program(SHADER_HANDLE_TOPDOWN_BULLET_VERT, SHADER_HANDLE_TOPDOWN_BULLET_FRAG);
 
-  OpenGLMesh bullet_mesh;
+  GLMesh bullet_mesh;
   bullet_mesh.vbos[0] = allocate_vbo(sizeof(bullet_manager->render_data), GL_DYNAMIC_DRAW);
   bullet_mesh.num_vbos = 1;
   bullet_mesh.num_vertices = 4;
   init_gl_mesh_vao(&bullet_mesh, SHADER_HANDLE_TOPDOWN_BULLET_VERT);
 
-  OpenGLMaterial bullet_material = create_gl_material(bullet_program);
+  GLMaterial bullet_material = create_gl_material(bullet_program);
   bullet_material.primitive = GL_TRIANGLE_STRIP;
   gl_material_add_uniform(&bullet_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
   // Enemy
   u32 enemy_program = shader_handles_to_gl_program(SHADER_HANDLE_TOPDOWN_ENEMY_VERT, SHADER_HANDLE_TOPDOWN_ENEMY_FRAG);
 
-  OpenGLMesh enemy_mesh;
+  GLMesh enemy_mesh;
   enemy_mesh.vbos[0] = allocate_vbo(member_size(EnemyManager, render_data), GL_DYNAMIC_DRAW);
   enemy_mesh.num_vbos = 1;
   enemy_mesh.num_vertices = 4;
   init_gl_mesh_vao(&enemy_mesh, SHADER_HANDLE_TOPDOWN_ENEMY_VERT);
 
-  OpenGLMaterial enemy_material = create_gl_material(enemy_program);
+  GLMaterial enemy_material = create_gl_material(enemy_program);
   enemy_material.primitive = GL_TRIANGLE_STRIP;
   gl_material_add_uniform(&enemy_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 

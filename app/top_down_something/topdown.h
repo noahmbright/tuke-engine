@@ -1,5 +1,6 @@
 #pragma once
 
+#include "renderer.h"
 #include "window.h"
 
 #include "camera.h"
@@ -105,6 +106,7 @@ inline glm::vec3 inputs_to_movement_vector(const Inputs *inputs) {
 }
 
 enum ShaderID {
+  SHADER_ID_NIL = 0,
   SHADER_ID_TILEMAP,
   SHADER_ID_PLAYER,
   SHADER_ID_FULLSCREEN_QUAD,
@@ -115,10 +117,23 @@ enum ShaderID {
   NUM_SHADER_IDS
 };
 
-u32 shader_registry[NUM_SHADER_IDS];
+enum MeshID {
+  MESH_ID_NIL = 0,
+  MESH_TILEMAP,
+  MESH_TILEMAP1,
+  MESH_PLAYER,
+  MESH_FULLSCREEN_QUAD,
+};
+
+enum MaterialID {
+  MATERIAL_ID_NIL = 0,
+  MATERIAL_TILEMAP,
+  MATERIAL_PLAYER,
+  MATERIAL_FULLSCREEN_QUAD,
+};
 
 enum EntityType {
-  ENTITY_NIL,
+  ENTITY_NIL = 0,
   ENTITY_PLAYER,
   ENTITY_NPC,
 };
@@ -134,6 +149,10 @@ struct Entities {
   bool active[NUM_ENTITIES];
   glm::vec3 positions[NUM_ENTITIES];
   f32 rotations[NUM_ENTITIES];
+
+  // ShaderID shader_id[NUM_ENTITIES];
+  // MaterialID material_id[NUM_ENTITIES];
+  // MeshID mesh_id[NUM_ENTITIES];
 
   EntityIndex next_inactive;
 };
@@ -196,15 +215,13 @@ struct OverworldSceneData {
   u32 vp_ubo;
 
   u32 player_model_ubo;
-  OpenGLMesh player_mesh;
-  OpenGLMaterial player_material;
 
-  OpenGLMesh tilemap_mesh;
-  OpenGLMaterial tilemap_material;
+  GLMesh tilemap_mesh;
+  GLMaterial tilemap_material;
 
-  OpenGLRenderTarget render_target;
-  OpenGLMesh fullscreen_quad_mesh;
-  OpenGLMaterial fullscreen_quad_material;
+  GLRenderTarget render_target;
+  GLMesh fullscreen_quad_mesh;
+  GLMaterial fullscreen_quad_material;
 
   u32 vision_cone_ubo;
 };
@@ -216,6 +233,7 @@ enum GameState {
 
 struct GlobalState {
   GLFWwindow *window;
+  GLRenderer renderer;
   SceneManager scene_manager;
   Inputs inputs;
   f64 t;
@@ -223,6 +241,24 @@ struct GlobalState {
   int window_height;
   GameState game_state;
 };
+
+GlobalState create_global_state(u32 window_width, u32 window_height) {
+  GlobalState global_state;
+
+  global_state.window = create_window(false /* is vulkan */, "topdown", window_width, window_height);
+  glfwGetFramebufferSize(global_state.window, &global_state.window_width, &global_state.window_height);
+
+  global_state.renderer = create_gl_renderer();
+
+  init_inputs(&global_state.inputs);
+  memset(&global_state.scene_manager, 0, sizeof(SceneManager));
+  global_state.t = 0.0;
+  global_state.game_state = GAME_STATE_RUNNING;
+
+  return global_state;
+}
+
+void destroy_global_state(GlobalState *global_state) { glfwDestroyWindow(global_state->window); }
 
 // Processing inputs
 
@@ -268,15 +304,12 @@ static inline void move_player_in_tilemap(glm::vec2 movement_vector, const Tilem
   *player_pos += final_movement_vector;
 }
 
-// TODO will I consider the players position within a tilemap? within the whole world?
 inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_ptr, f32 dt) {
 
   GlobalState *global_state = (GlobalState *)global_state_void_ptr;
   OverworldSceneData *scene_data = (OverworldSceneData *)scene_data_void_ptr;
 
   // Move player.
-  // This is a lot of code, could be nice to extract into functions, but hard to separate out
-  // collision detection, player movement, and input cleanly - will continue to think.
   // TODO camera_mode is more like control_mode
   OverworldPlayerIntent player_intent = overworld_process_inputs(&global_state->inputs);
   const f32 ROTATION_SPEED = 0.05f;
@@ -414,7 +447,7 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
   buffer_vp_matrix_to_gl_ubo(&camera_matrices, scene_data->vp_ubo);
 }
 
-inline void overworld_draw(const void *scene_data_void_ptr) {
+inline void overworld_draw(const GLRenderer *renderer, const void *scene_data_void_ptr) {
   OverworldSceneData *scene_data = (OverworldSceneData *)scene_data_void_ptr;
 
   glBindFramebuffer(GL_FRAMEBUFFER, scene_data->render_target.fbo);
@@ -430,19 +463,19 @@ inline void overworld_draw(const void *scene_data_void_ptr) {
 
   // Draw world and player into overworld data's FBO
   draw_gl_mesh(&scene_data->tilemap_mesh, scene_data->tilemap_material);
-  draw_gl_mesh(&scene_data->player_mesh, scene_data->player_material);
+  draw_gl_mesh(&renderer->meshes[MESH_PLAYER], renderer->materials[MATERIAL_PLAYER]);
 
   // Draw player vision cone
   // Is this more for debug?
   // NB: blendFunc is required for blending. Just Enabling doesn't get transparency.
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glUseProgram(shader_registry[SHADER_ID_VISION_CONE]);
+  glUseProgram(renderer->programs[SHADER_ID_VISION_CONE]);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 
   // Draw overlay into overworld framebuffer
   glDisable(GL_BLEND);
-  glUseProgram(shader_registry[SHADER_ID_OVERWORLD_OVERLAY]);
+  glUseProgram(renderer->programs[SHADER_ID_OVERWORLD_OVERLAY]);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 
   // Present world to screen

@@ -23,22 +23,22 @@ int main() {
   printf("Compiled programs\n");
 
   // meshes
-  OpenGLMesh triangle_mesh = create_gl_mesh_with_vertex_layout(triangle_vertices, sizeof(triangle_vertices), 3,
-                                                               VERTEX_LAYOUT_BINDING0VERTEX_VEC3, GL_STATIC_DRAW);
-  OpenGLMaterial triangle_material = create_gl_material(program);
+  GLMesh triangle_mesh = create_gl_mesh_with_vertex_layout(triangle_vertices, sizeof(triangle_vertices), 3,
+                                                           VERTEX_LAYOUT_BINDING0VERTEX_VEC3, GL_STATIC_DRAW);
+  GLMaterial triangle_material = create_gl_material(program);
 
-  OpenGLMesh transformed_mesh = create_gl_mesh_with_vertex_layout(triangle_vertices, sizeof(triangle_vertices), 3,
-                                                                  VERTEX_LAYOUT_BINDING0VERTEX_VEC3, GL_STATIC_DRAW);
+  GLMesh transformed_mesh = create_gl_mesh_with_vertex_layout(triangle_vertices, sizeof(triangle_vertices), 3,
+                                                              VERTEX_LAYOUT_BINDING0VERTEX_VEC3, GL_STATIC_DRAW);
 
   u32 transformation_ubo = create_gl_ubo(sizeof(TriangleTransformation), GL_DYNAMIC_DRAW);
-  OpenGLMaterial transformed_material = create_gl_material(transformed_program);
+  GLMaterial transformed_material = create_gl_material(transformed_program);
   gl_material_add_uniform(&transformed_material, transformation_ubo, UNIFORM_BUFFER_LABEL_TRIANGLE_TRANSFORMATION,
                           "TriangleTransformation");
 
-  OpenGLMesh textured_quad_mesh =
+  GLMesh textured_quad_mesh =
       create_gl_mesh_with_vertex_layout(textured_quad_vertices, sizeof(textured_quad_vertices), 6,
                                         VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
-  OpenGLMaterial textured_quad_material = create_gl_material(textured_quad_program);
+  GLMaterial textured_quad_material = create_gl_material(textured_quad_program);
   textured_quad_material.texture.texture = load_texture_opengl("textures/girl_face.jpg");
 
   TriangleTransformation triangle_transformation;

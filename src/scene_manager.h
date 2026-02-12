@@ -1,5 +1,6 @@
 #pragma once
 
+#include "opengl_base.h"
 #include "tuke_engine.h"
 
 #define MAX_SCENES 32
@@ -7,10 +8,12 @@
 
 enum SceneAction { SCENE_ACTION_NONE, SCENE_ACTION_SET, SCENE_ACTION_PUSH, SCENE_ACTION_POP };
 
-// UpdateFunction's take a pointer to scene specific data and global state per application
-// RenderFunction's take a pointer to scene specific data
+// UpdateFunction's take a pointer to scene specific data and global state per application.
 typedef void (*UpdateFunction)(void *, void *, f32);
-typedef void (*RenderFunction)(const void *);
+
+// RenderFunction's take a pointer to a renderer and scene specific data.
+// FIXME will eventually want to make the GLRenderer here something more generic.
+typedef void (*RenderFunction)(const GLRenderer *, const void *);
 
 struct Scene {
   UpdateFunction update;

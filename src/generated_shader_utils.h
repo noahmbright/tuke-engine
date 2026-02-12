@@ -39,14 +39,14 @@ inline u32 shader_handles_to_gl_program(ShaderHandle vertex_shader_handle, Shade
 }
 
 // TODO deprecate lol
-inline OpenGLMesh create_gl_mesh_with_vertex_layout(const f32 *arr, f32 num_f32s, u32 num_vertices,
-                                                    VertexLayoutID vertex_layout_id, u32 draw_mode) {
-  OpenGLMesh opengl_mesh = create_gl_mesh(arr, num_f32s, num_vertices, draw_mode);
+inline GLMesh create_gl_mesh_with_vertex_layout(const f32 *arr, f32 num_f32s, u32 num_vertices,
+                                                VertexLayoutID vertex_layout_id, u32 draw_mode) {
+  GLMesh opengl_mesh = create_gl_mesh(arr, num_f32s, num_vertices, draw_mode);
   init_gl_vertex_layout(vertex_layout_id, opengl_mesh.vao, opengl_mesh.vbos, 1, 0);
   return opengl_mesh;
 }
 
-inline void init_gl_mesh_vao(OpenGLMesh *opengl_mesh, ShaderHandle shader_handle) {
+inline void init_gl_mesh_vao(GLMesh *opengl_mesh, ShaderHandle shader_handle) {
   VertexLayoutID vertex_layout_id = generated_shader_specs[shader_handle]->vertex_layout_id;
   u32 vao = create_vao();
   init_gl_vertex_layout(vertex_layout_id, vao, opengl_mesh->vbos, opengl_mesh->num_vbos, 0);
