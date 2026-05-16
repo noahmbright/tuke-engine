@@ -32,5 +32,5 @@ target_include_directories(engine
 )
 
 target_compile_options(engine PRIVATE 
-    -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address)
+    -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address, -Wno-c99-designator)
 target_link_options(engine PUBLIC -fsanitize=address)

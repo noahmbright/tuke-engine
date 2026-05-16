@@ -15,7 +15,7 @@ int main() {
   f64 second_accumulator = 0.0f;
   f64 total_time = 0.0f;
   f64 fps = 0;
-  while (!glfwWindowShouldClose(ctx->window)) {
+  while (!glfwWindowShouldClose(state.window)) {
     glfwPollEvents();
     f64 t = glfwGetTime();
     f64 dt = t - t_prev;
@@ -32,7 +32,7 @@ int main() {
       u64 total_frames = state.context.current_frame;
       f64 fps = total_frames / total_time;
       snprintf(title, sizeof(title), "My Vulkan App - %.1f FPS", fps);
-      glfwSetWindowTitle(state.context.window, title);
+      glfwSetWindowTitle(state.window, title);
     }
   }
 

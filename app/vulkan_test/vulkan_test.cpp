@@ -4,19 +4,13 @@
 #include "generated_shader_utils.h"
 
 #include "camera.h"
+#include "glfw_vulkan.h"
 #include "glm/ext/matrix_transform.hpp"
-#include "glm/ext/quaternion_transform.hpp"
-#include "glm/glm.hpp"
 #include "glm/gtx/string_cast.hpp"
 #include "tuke_engine.h"
-#include "utils.h"
 #include "vulkan_base.h"
 #include "vulkan_test.h"
 #include "window.h"
-
-#include <stdalign.h>
-#include <stdio.h>
-#include <vulkan/vulkan_core.h>
 
 static const VkPipelineVertexInputStateCreateInfo empty_vertex_input_state = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -29,7 +23,9 @@ static const VkPipelineVertexInputStateCreateInfo empty_vertex_input_state = {
 };
 
 int main() {
-  VulkanContext context = create_vulkan_context("Tuke");
+  GLFWwindow *window = create_window(true /* is_vulkan */);
+  VulkanWindowInfo window_info = create_glfw_vulkan_window_info(window);
+  VulkanContext context = create_vulkan_context("Tuke", window_info);
   VkDescriptorPool descriptor_pool =
       create_descriptor_pool(context.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
   init_generated_shader_vk_modules(context.device);
@@ -216,10 +212,10 @@ int main() {
   init_inputs(&inputs);
 
   f32 t0 = glfwGetTime();
-  while (!glfwWindowShouldClose(context.window)) {
+  while (!glfwWindowShouldClose(window)) {
     i32 height, width;
-    glfwGetWindowSize(context.window, &width, &height);
-    update_key_inputs_glfw(&inputs, context.window);
+    glfwGetWindowSize(window, &width, &height);
+    update_key_inputs_glfw(&inputs, window);
 
     glfwPollEvents();
     f32 t = glfwGetTime();

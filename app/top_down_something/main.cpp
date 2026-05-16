@@ -120,41 +120,41 @@ int main() {
 
   // Scenes
   OverworldSceneData scene0_data{
+      .camera_mode = CAMERA_MODE_OVERWORLD,
       .player_index = player_index,
+      .player_rotation_simulation = 0.0f,
+      .player_rotation_render = 0.0f,
       .camera = camera,
       .tilemap = &tilemap0,
+      .other_scene = SCENE1,
+      .just_transitioned = false,
       .vp_ubo = vp_ubo,
       .player_model_ubo = player_model_ubo,
       .tilemap_mesh = tilemap_mesh,
       .tilemap_material = tilemap_material,
-      .other_scene = SCENE1,
-      .just_transitioned = false,
-      .player_rotation_simulation = 0.0f,
-      .player_rotation_render = 0.0f,
       .render_target = overworld_render_target,
       .fullscreen_quad_mesh = fullscreen_quad_mesh,
       .fullscreen_quad_material = fullscreen_quad_material,
       .vision_cone_ubo = vision_cone_ubo,
-      .camera_mode = CAMERA_MODE_OVERWORLD,
   };
 
   OverworldSceneData scene1_data{
+      .camera_mode = CAMERA_MODE_OVERWORLD,
       .player_index = player_index,
+      .player_rotation_simulation = 0.0f,
+      .player_rotation_render = 0.0f,
       .camera = camera,
       .tilemap = &tilemap1,
+      .other_scene = SCENE0,
+      .just_transitioned = false,
       .vp_ubo = vp_ubo,
       .player_model_ubo = player_model_ubo,
       .tilemap_mesh = tilemap1_mesh,
       .tilemap_material = tilemap_material,
-      .other_scene = SCENE0,
-      .just_transitioned = false,
-      .player_rotation_simulation = 0.0f,
-      .player_rotation_render = 0.0f,
       .render_target = overworld_render_target,
       .fullscreen_quad_mesh = fullscreen_quad_mesh,
       .fullscreen_quad_material = fullscreen_quad_material,
       .vision_cone_ubo = vision_cone_ubo,
-      .camera_mode = CAMERA_MODE_OVERWORLD,
   };
 
   Scene scene0 = create_scene(overworld_update, overworld_draw, &scene0_data);

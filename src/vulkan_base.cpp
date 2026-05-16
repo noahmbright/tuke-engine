@@ -1,25 +1,13 @@
 #include "vulkan_base.h"
-#include "hashmap.h"
-#include "renderer.h"
-#include "tuke_engine.h"
 #include "utils.h"
 
-// https://www.glfw.org/docs/latest/group__vulkan.html#ga9308f2acf6b5f6ff49cf0d4aa9ba1fab
-#include "GLFW/glfw3.h"
 #include "vulkan/vulkan_beta.h"
 #include "vulkan/vulkan_core.h"
-#include "window.h"
-#include <cassert>
-#include <cstdint>
-#include <cstring>
-#include <memory>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-// If you're multithreading submissions, use a mutex or lockless ring buffer
-// per queue.
-
+// If you're multithreading submissions, use a mutex or lockless ring buffer per queue.
 void destroy_swapchain(VulkanContext *context) {
   SwapchainStorage *storage = &context->swapchain_storage;
 
@@ -62,9 +50,6 @@ void destroy_swapchain(VulkanContext *context) {
 
 void destroy_vulkan_context(VulkanContext *context) {
   vkDeviceWaitIdle(context->device);
-
-  destroy_shader_cache(context->shader_cache);
-  delete context->shader_cache;
 
   vkDestroyPipelineCache(context->device, context->pipeline_cache, NULL);
   vkDestroyCommandPool(context->device, context->transient_command_pool, NULL);
@@ -138,7 +123,7 @@ void populate_debug_msngr_create_info(VkDebugUtilsMessengerCreateInfoEXT *debug_
   debug_msngr_create_info->pUserData = NULL;
 }
 
-VkInstance create_instance(const char *name) {
+VkInstance create_instance(const char *name, VulkanWindowInfo window_info) {
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkApplicationInfo.html
   VkApplicationInfo application_info;
   application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -148,14 +133,6 @@ VkInstance create_instance(const char *name) {
   application_info.pEngineName = NULL;
   application_info.engineVersion = 0;
   application_info.apiVersion = VK_API_VERSION_1_3;
-
-  // https://www.glfw.org/docs/latest/vulkan_guide.html#vulkan_ext
-  u32 glfw_extension_count;
-  const char **glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-  if (glfw_extensions == NULL) {
-    fprintf(stderr, "create_instance: glfw_extensions is NULL\n");
-    exit(1);
-  }
 
   // TODO debug/release
 #ifdef TUKE_DISABLE_VULKAN_VALIDATION
@@ -176,7 +153,7 @@ VkInstance create_instance(const char *name) {
 #endif
 
   const u32 MAX_EXTENSIONS = 16;
-  const u32 total_extension_count = extra_extension_count + glfw_extension_count;
+  const u32 total_extension_count = extra_extension_count + window_info.extension_count;
   if (total_extension_count > MAX_EXTENSIONS) {
     fprintf(stderr,
             "create_instance: Too many extensions enabled. MAX_EXTENSIONS is "
@@ -186,10 +163,10 @@ VkInstance create_instance(const char *name) {
   }
 
   const char *enabled_extensions[MAX_EXTENSIONS];
-  memcpy(enabled_extensions, glfw_extensions, sizeof(char *) * glfw_extension_count);
+  memcpy(enabled_extensions, window_info.extensions, sizeof(char *) * window_info.extension_count);
 
   for (u32 i = 0; i < extra_extension_count; i++) {
-    enabled_extensions[glfw_extension_count + i] = extra_extensions[i];
+    enabled_extensions[window_info.extension_count + i] = extra_extensions[i];
   }
 
   VkDebugUtilsMessengerCreateInfoEXT debug_msngr_create_info;
@@ -230,14 +207,6 @@ VkDebugUtilsMessengerEXT create_debug_messenger(VkInstance instance) {
   VK_CHECK(create_fn(instance, &debug_msngr_create_info, NULL, &debug_messenger),
            "create_instance: Failed to create VkDebugUtilsMessengerEXT");
   return debug_messenger;
-}
-
-VkSurfaceKHR create_surface(VkInstance instance, GLFWwindow *window) {
-  // https://www.glfw.org/docs/latest/vulkan_guide.html#vulkan_surface
-  VkSurfaceKHR surface;
-  VK_CHECK(glfwCreateWindowSurface(instance, window, NULL, &surface),
-           "create_surface: Failed to createWindowSurface\n");
-  return surface;
 }
 
 u32 get_physical_devices(VkInstance instance, VkPhysicalDevice *physical_devices) {
@@ -441,18 +410,16 @@ VkSurfaceFormatKHR get_surface_format(VkPhysicalDevice physical_device, VkSurfac
   return surface_format;
 }
 
-VkExtent2D get_swapchain_extent(GLFWwindow *window, VkSurfaceCapabilitiesKHR surface_capabilities) {
-  VkExtent2D extent;
-  i32 window_width, window_height;
-  glfwGetFramebufferSize(window, &window_width, &window_height);
+VkExtent2D get_swapchain_extent(u32 width, u32 height, VkSurfaceCapabilitiesKHR surface_capabilities) {
   if (surface_capabilities.currentExtent.width != UINT32_MAX) {
-    extent = surface_capabilities.currentExtent;
-  } else {
-    extent.width =
-        clamp_u32(window_width, surface_capabilities.minImageExtent.width, surface_capabilities.maxImageExtent.width);
-    extent.height = clamp_u32(window_height, surface_capabilities.minImageExtent.height,
-                              surface_capabilities.maxImageExtent.height);
+    return surface_capabilities.currentExtent;
   }
+
+  VkExtent2D extent;
+  VkExtent2D min_extent = surface_capabilities.minImageExtent;
+  VkExtent2D max_extent = surface_capabilities.maxImageExtent;
+  extent.width = clamp_u32(width, min_extent.width, max_extent.width);
+  extent.height = clamp_u32(height, min_extent.height, max_extent.height);
   return extent;
 }
 
@@ -1092,18 +1059,18 @@ PipelineConfig create_default_graphics_pipeline_config(VkRenderPass render_pass,
   return pipeline_config;
 }
 
-VulkanContext create_vulkan_context(const char *title) {
+// May want this to be create_instance_graphics(), or something. Or need to have
+// VulkanWindowInfo be something that can equally well describe compute pipelines.
+VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_info) {
   VulkanContext context;
-  context.window = create_window(true /* is_vulkan*/, title);
-  glfwGetFramebufferSize(context.window, &context.window_framebuffer_width, &context.window_framebuffer_height);
 
-  context.instance = create_instance(title);
+  context.instance = create_instance(title, window_info);
 #ifdef TUKE_DISABLE_VULKAN_VALIDATION
   context.debug_messenger = VK_NULL_HANDLE;
 #else
   context.debug_messenger = create_debug_messenger(context.instance);
 #endif
-  context.surface = create_surface(context.instance, context.window);
+  context.surface = window_info.create_surface(context.instance, window_info.window);
   context.physical_device = pick_physical_device(context.instance, &context.queue_family_indices, context.surface);
   vkGetPhysicalDeviceProperties(context.physical_device, &context.physical_device_properties);
 
@@ -1143,7 +1110,7 @@ VulkanContext create_vulkan_context(const char *title) {
   // swapchain creation needs to happen after the transient command pool is
   // allocated because depth buffer creation requires an image transition
   context.surface_capabilities = get_surface_capabilities(context.physical_device, context.surface);
-  context.swapchain_extent = get_swapchain_extent(context.window, context.surface_capabilities);
+  context.swapchain_extent = get_swapchain_extent(window_info.width, window_info.height, context.surface_capabilities);
   context.swapchain =
       create_swapchain(context.device, context.physical_device, context.surface, context.queue_family_indices,
                        context.surface_format, context.surface_capabilities, context.swapchain_extent);
@@ -1168,7 +1135,6 @@ VulkanContext create_vulkan_context(const char *title) {
                            context.compute_command_buffers);
 
   context.pipeline_cache = create_pipeline_cache(context.device);
-  context.shader_cache = create_shader_cache(context.device);
 
   VK_CHECK(vkWaitForFences(context.device, 1, &context.frame_sync_objects[context.current_frame_index].in_flight_fence,
                            VK_TRUE, UINT64_MAX),
@@ -2200,20 +2166,6 @@ DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescri
 
 void destroy_descriptor_set_handle(VkDevice device, DescriptorSetHandle *handle) {
   vkDestroyDescriptorSetLayout(device, handle->descriptor_set_layout, NULL);
-}
-
-VulkanShaderCache *create_shader_cache(VkDevice device) {
-  VulkanShaderCache *cache = new VulkanShaderCache;
-  cache->device = device;
-  return cache;
-}
-
-void destroy_shader_cache(VulkanShaderCache *cache) {
-  for (u32 i = 0; i < cache->hash_map.capacity; i++) {
-    if (cache->hash_map.key_values[i].occupancy == HASHMAP_OCCUPIED) {
-      vkDestroyShaderModule(cache->device, cache->hash_map.key_values[i].value.module, NULL);
-    }
-  }
 }
 
 void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call) {

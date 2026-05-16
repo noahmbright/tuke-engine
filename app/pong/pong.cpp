@@ -2,6 +2,7 @@
 #include "generated_shader_utils.h"
 
 #include "camera.h"
+#include "glfw_vulkan.h"
 #include "physics.h"
 #include "pong.h"
 #include "statistics.h"
@@ -160,7 +161,9 @@ State setup_state(const char *title) {
   state.pong_mode = PONG_MODE_BETWEEN_POINTS;
   state.left_score = state.right_score = 0;
 
-  state.context = create_vulkan_context(title);
+  state.window = create_window(true /* is_vulkan */);
+  VulkanWindowInfo window_info = create_glfw_vulkan_window_info(state.window);
+  state.context = create_vulkan_context(title, window_info);
   VulkanContext *ctx = &state.context;
 
   load_vulkan_textures(ctx, texture_names, NUM_TEXTURES, state.textures);
@@ -369,7 +372,7 @@ void process_inputs_main_menu(State *state) {
 }
 
 void process_inputs(State *state, const f32 dt) {
-  update_key_inputs_glfw(&state->inputs, state->context.window);
+  update_key_inputs_glfw(&state->inputs, state->window);
 
   switch (state->game_mode) {
   case GAMEMODE_PAUSED: {

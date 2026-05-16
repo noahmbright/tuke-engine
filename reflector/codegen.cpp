@@ -306,10 +306,10 @@ void generate_vulkan_vertex_layout_array(FILE *destination, const ParsedShadersI
     // attributes
     fprintf(destination, "const VkVertexInputAttributeDescription vertex_attributes_%s[] = {\n", vertex_layout->name);
     for (u32 i = 0; i < vertex_layout->attribute_count; i++) {
-      fprintf(destination, "  { .binding = %u, ", vertex_layout->attributes[i].binding);
-      fprintf(destination, ".location = %u, ", vertex_layout->attributes[i].location);
-      fprintf(destination, ".offset = %u, ", vertex_layout->attributes[i].offset);
-      fprintf(destination, ".format = %s },\n", glsl_type_to_vulkan_format(vertex_layout->attributes[i].glsl_type));
+      fprintf(destination, "  {  .location = %u, ", vertex_layout->attributes[i].location);
+      fprintf(destination, ".binding = %u, ", vertex_layout->attributes[i].binding);
+      fprintf(destination, ".format = %s,", glsl_type_to_vulkan_format(vertex_layout->attributes[i].glsl_type));
+      fprintf(destination, ".offset = %u, }\n,", vertex_layout->attributes[i].offset);
     }
     fprintf(destination, "};\n\n"); // close attributes
   }

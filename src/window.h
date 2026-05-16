@@ -1,7 +1,6 @@
 #pragma once
 
 #include "GLFW/glfw3.h"
-#include "glm/glm.hpp"
 #include "tuke_engine.h"
 
 // TODO does input belong in the windowing file?

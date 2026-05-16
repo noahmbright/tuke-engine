@@ -3,12 +3,12 @@
 #include "c_reflector_bringup.h"
 #include "camera.h"
 #include "glm/ext/matrix_transform.hpp"
-#include "glm/glm.hpp"
 #include "physics.h"
 #include "statistics.h"
 #include "transform.h"
 #include "tuke_engine.h"
 #include "vulkan_base.h"
+#include "window.h"
 
 #define MAX_POWERUPS (8)
 #define POWERUP_MAX (MAX_POWERUPS - 1)
@@ -154,6 +154,7 @@ struct PowerUp {
 };
 
 struct State {
+  GLFWwindow *window;
   u32 right_score, left_score;
 
   glm::vec2 arena_dimensions;

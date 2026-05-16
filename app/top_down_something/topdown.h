@@ -1,13 +1,8 @@
 #pragma once
 
-#include "renderer.h"
 #include "window.h"
 
 #include "camera.h"
-#include "generated_shader_utils.h"
-#include "glm/ext.hpp"
-#include "glm/ext/quaternion_transform.hpp"
-#include "glm/geometric.hpp"
 #include "opengl_base.h"
 #include "scene_manager.h"
 #include "tilemap.h"

@@ -12,6 +12,14 @@
 #define MAX_NUM_MATERIALS (64)
 #define MAX_NUM_MESHES (64)
 
+//////////////////// Buffers ////////////////////
+// Buffer mapping patterns:
+// https://docs.mesa3d.org/gallium/buffermapping.html#buffer-mapping-conclusions
+//
+// Bind/map buffer range. Could be useful for a Vulkan like bump allocator.
+// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glBindBufferRange.xhtml
+// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glMapBufferRange.xhtml
+
 enum VBOTypes { VBO_VERTEX, VBO_INSTANCE };
 
 inline u32 create_vbo() {
@@ -56,12 +64,13 @@ inline u32 create_gl_ubo(u32 size, u32 draw_mode) {
 
 //////////////////// Textures ////////////////////
 
-// Currently, we are only supporting 2D textures.
+// Currently, are only supporting 2D textures.
 // When we need to support 1D and 3D textures, cubemaps, and texture arrays, we will
 // abstract them.
 
 // TODO consider how to manage samplers as together/separate from textures
 // https://registry.khronos.org/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml
+// https://stackoverflow.com/questions/34497195/difference-between-format-and-internalformat
 struct GLTexture {
   u32 texture; // the u32 handle the driver returns to us
   u32 height;
@@ -74,12 +83,14 @@ struct GLTexture {
   GLenum internal_format;
 
   // Format specifes the layout of the data on the CPU.
-  GLenum format;
-
   // Type specifies the way the fields in the texture are laid out.
   // A standard choice is GL_UNSIGNED_BYTE.
   // If format == GL_RGBA, then using GL_UNSIGNED_BYTE would mean
   // that R, G, B, and A are each an unsigned byte in the GPU's memory.
+  // Together, the format and type describe the data that gets passed
+  // to glTexImage2D from the CPU. Format tells what the data is - e.g. RGBA,
+  // and type describes the datatype of that data, e.g. unsigned byte.
+  GLenum format;
   GLenum type;
 };
 
@@ -137,15 +148,6 @@ inline GLTexture create_gl_texture_from_image(const char *filepath) {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-//////////////////////////////// Passes //////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////
-
-// Passes is a placeholder name.
-// These are supposed to be things that aren't quite materials. These should always
-// be simple, read from texture, draw quad to other texture. It may be necessary
-// to bind uniforms as well.
-
-//////////////////////////////////////////////////////////////////////////////
 //////////////////////////////// Framebuffers ////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 
@@ -185,8 +187,7 @@ inline void gl_framebuffer_attach_texture2d(GLFramebuffer *framebuffer, const GL
 // TODO need to do some crazy stuff with framebuffers and textures to understand the right
 // ownership model.
 inline void gl_framebuffer_resize(GLFramebuffer *framebuffer, u32 height, u32 width) {
-  // Resize texture
-  // Assuming no change of format
+  // Resize texture. Assuming no change of format.
   gl_texture_resize(&framebuffer->texture, height, width);
 }
 

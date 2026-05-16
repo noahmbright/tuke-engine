@@ -21,7 +21,7 @@ target_link_libraries(opengl_test PRIVATE engine)
 
 add_executable(top_down_something ${CMAKE_SOURCE_DIR}/app/top_down_something/main.cpp)
 target_link_libraries(top_down_something PRIVATE engine)
-target_compile_options(top_down_something  PRIVATE -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined)
+target_compile_options(top_down_something  PRIVATE -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -Wno-c99-designator)
 target_link_options(top_down_something  PRIVATE -fsanitize=address,undefined)
 
 
@@ -48,7 +48,7 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR DEBUG_REFLECTOR)
     message("Building reflector in debug mode")
     target_compile_options(reflector PRIVATE
         -g
-        -Wall -Wextra -Wpedantic -Werror
+        -Wall -Wextra -Wpedantic -Werror -Wno-c99-designator
         -fsanitize=address
     )
     target_link_options(reflector PRIVATE
@@ -58,7 +58,7 @@ else() # Release, RelWithDebInfo, etc.
     message("Building reflector in release mode")
     target_compile_options(reflector PRIVATE
         -O3
-        -Wall -Wextra -Wpedantic -Werror
+        -Wall -Wextra -Wpedantic -Werror -Wno-c99-designator
         -DNDEBUG
     )
 endif()

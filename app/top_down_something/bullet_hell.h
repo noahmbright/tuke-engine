@@ -286,8 +286,8 @@ inline PlayerIntent handle_inputs_player(const Inputs *inputs) {
   flags |= q_held * PLAYER_INTENT_CANCEL_ABILITY;
 
   PlayerIntent player_intents{
-      .flags = flags,
       .movement_vector = input_movement_vector,
+      .flags = flags,
   };
 
   return player_intents;
@@ -455,11 +455,11 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   if (data->bullet_spawn_time > spawn_interval) {
     Enemy *enemy0 = &enemy_manager->enemies[0];
     Bullet new_bullet{
-        .pattern = BULLET_PATTERN_LINEAR,
         .position = enemy0->position,
+        .velocity = glm::vec3(0.0f, -8.0f, 0.0f),
         .size = glm::vec3(0.3f),
         .t0 = gs->t,
-        .velocity = glm::vec3(0.0f, -8.0f, 0.0f),
+        .pattern = BULLET_PATTERN_LINEAR,
     };
     spawn_bullet(bullet_manager, new_bullet);
     data->bullet_spawn_time -= spawn_interval;
@@ -503,8 +503,8 @@ inline void bullet_hell_draw(const GLRenderer *renderer, const void *scene_data)
 
   // Overlay: health (Weapon wheel?)
   BulletHellData bullet_hell_render_data{
-      .health = data->player.current_health,
       .max_health = data->player.max_health,
+      .health = data->player.current_health,
   };
 
   glUseProgram(data->overlay_program);
@@ -588,10 +588,10 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
 
   // Make Player
   Player player{
-      .current_health = 100,
-      .max_health = 100,
       .pos = glm::vec3(0.0f, 0.0f, 0.0f),
       .size = glm::vec3(PLAYER_SIDE_LENGTH_METERS),
+      .current_health = 100,
+      .max_health = 100,
       .invincibility_time = 0.0f,
       .state = PLAYER_STATE_NORMAL,
       .ability = PLAYER_ABILITY_DASH,
@@ -613,22 +613,22 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
 
   // Make Scene
   BulletHellSceneData bullet_hell{
-      .camera = bullet_hell_camera,
       .player = player,
+      .bullet_manager = bullet_manager,
+      .bullet_spawn_time = 0.0,
+      // FIXME need a real scale for number of billboards
+      .billboard_manager = create_billboard_manager(5, vp_ubo),
+      .camera = bullet_hell_camera,
       .vp_ubo = vp_ubo,
       .player_mesh = bullet_player_mesh,
       .player_material = bullet_player_material,
       .arena_mesh = arena_mesh,
       .arena_material = arena_material,
-      .bullet_manager = bullet_manager,
       .bullet_mesh = bullet_mesh,
       .bullet_material = bullet_material,
       .enemy_mesh = enemy_mesh,
       .enemy_material = enemy_material,
       .overlay_program = overlay_program,
-      .bullet_spawn_time = 0.0,
-      // FIXME need a real scale for number of billboards
-      .billboard_manager = create_billboard_manager(5, vp_ubo),
   };
 
   bullet_hell.uniforms[UNIFORM_PLAYER_MODEL] = player_model_ubo;

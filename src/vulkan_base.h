@@ -1,14 +1,30 @@
 #pragma once
 
-#include "hashmap.h"
 #include "tuke_engine.h"
 #include "vulkan/vulkan_core.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#define GLFW_INCLUDE_VULKAN
-#include "GLFW/glfw3.h"
-#include "glm/glm.hpp"
-#include "window.h"
+
+// TODO adapt to print validation layer errors on failure
+#define VK_CHECK(result, fmt)                                                                                          \
+  do {                                                                                                                 \
+    if ((result) != VK_SUCCESS) {                                                                                      \
+      const char *type = vk_result_string(result);                                                                     \
+      fprintf(stderr, "Vulkan error of type %s at %s:%d\n" fmt "\n", type, __FILE__, __LINE__);                        \
+      fflush(stderr);                                                                                                  \
+      fflush(stdout);                                                                                                  \
+      assert(0);                                                                                                       \
+    }                                                                                                                  \
+  } while (0)
+
+#define VK_CHECK_VARIADIC(result, fmt, ...)                                                                            \
+  do {                                                                                                                 \
+    if ((result) != VK_SUCCESS) {                                                                                      \
+      fprintf(stderr, "Vulkan error at %s:%d\n" fmt "\n", __FILE__, __LINE__, __VA_ARGS__);                            \
+      exit(1);                                                                                                         \
+    }                                                                                                                  \
+  } while (0)
 
 #define NUM_SWAPCHAIN_IMAGES (4)
 #define MAX_FRAMES_IN_FLIGHT (2)
@@ -74,27 +90,7 @@ inline const char *vk_result_string(VkResult result) {
   }
 }
 
-// TODO adapt to print validation layer errors on failure
-#define VK_CHECK(result, fmt)                                                                                          \
-  do {                                                                                                                 \
-    if ((result) != VK_SUCCESS) {                                                                                      \
-      const char *type = vk_result_string(result);                                                                     \
-      fprintf(stderr, "Vulkan error of type %s at %s:%d\n" fmt "\n", type, __FILE__, __LINE__);                        \
-      fflush(stderr);                                                                                                  \
-      fflush(stdout);                                                                                                  \
-      assert(0);                                                                                                       \
-    }                                                                                                                  \
-  } while (0)
-
-#define VK_CHECK_VARIADIC(result, fmt, ...)                                                                            \
-  do {                                                                                                                 \
-    if ((result) != VK_SUCCESS) {                                                                                      \
-      fprintf(stderr, "Vulkan error at %s:%d\n" fmt "\n", __FILE__, __LINE__, __VA_ARGS__);                            \
-      exit(1);                                                                                                         \
-    }                                                                                                                  \
-  } while (0)
-
-typedef struct FrameSyncObjects {
+typedef struct {
   VkSemaphore image_available_semaphore;
   VkSemaphore render_finished_semaphore;
   VkFence in_flight_fence;
@@ -105,6 +101,16 @@ struct QueueFamilyIndices {
   int present_family;
   int compute_family;
 };
+
+// History: here is the first C typedef struct of this project's life cycle.
+typedef struct {
+  u32 extension_count;
+  const char **extensions;
+  VkSurfaceKHR (*create_surface)(VkInstance, void *window);
+  void *window;
+  int width;
+  int height;
+} VulkanWindowInfo;
 
 struct DepthBuffer {
   VkImage image;
@@ -137,15 +143,9 @@ struct ShaderModule {
   const char *entry_point;
 };
 
-using ShaderCacheMap = HashMap<const char *, ShaderModule, CStringHashFunctor, CStringEqualityFunctor>;
-struct VulkanShaderCache {
-  VkDevice device;
-  ShaderCacheMap hash_map;
-};
-
 struct VulkanContext {
   // needed most often
-  GLFWwindow *window;
+  // GLFWwindow *window;
   VkDevice device;
   VkQueue graphics_queue;
   VkQueue present_queue;
@@ -172,12 +172,6 @@ struct VulkanContext {
   VkCommandBuffer compute_command_buffers[NUM_SWAPCHAIN_IMAGES];
 
   VkPipelineCache pipeline_cache;
-
-  // this cache is a templated type. the compiler freaks out if I put the
-  // data directly here. I need to use a pointer instead. I don't understand
-  // the fundamental issue. Something to do with constructors perhaps. Could
-  // be good to try and lump allocations for these into one.
-  VulkanShaderCache *shader_cache;
 
   // init
   VkInstance instance;
@@ -380,7 +374,7 @@ struct ColorDepthFramebuffer {
   VkImageView depth_image_view;
 };
 
-VulkanContext create_vulkan_context(const char *title);
+VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_info);
 void destroy_vulkan_context(VulkanContext *);
 VulkanBuffer create_buffer_explicit(const VulkanContext *context, VkBufferUsageFlags usage, VkDeviceSize size,
                                     VkMemoryPropertyFlags properties);
@@ -485,9 +479,6 @@ void add_image_descriptor_set(DescriptorSetBuilder *builder, VkImageView image_v
                               u32 descriptor_count, VkShaderStageFlags stage_flags);
 
 void destroy_descriptor_set_handle(VkDevice device, DescriptorSetHandle *handle);
-
-VulkanShaderCache *create_shader_cache(VkDevice device);
-void destroy_shader_cache(VulkanShaderCache *cache);
 
 void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call);
 

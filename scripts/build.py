@@ -2,6 +2,13 @@
 import subprocess
 import sys
 import argparse
+import os
+
+REFLECTOR_PATH = "./build/reflector"
+
+def build_reflector():
+    print("Building reflector...")
+    subprocess.run(["make", "-C", "build", "reflector"], check=True)
 
 def main():
     parser = argparse.ArgumentParser(description="Build, compile shaders, and run executables.")
@@ -11,24 +18,29 @@ def main():
     parser.add_argument("--run", type=str, default="", help="Executable to run from ./build/")
     args = parser.parse_args()
 
+    if not os.path.isdir("build"):
+        print("build/ not found, running cmake...")
+        subprocess.run(["cmake", "-B", "build", "-S", "."], check=True)
+
+    build_reflector()
+
     if not args.no_shaders:
-        invocations = ["./build/reflector"]
+        invocations = [REFLECTOR_PATH]
         if args.force_shaders:
             invocations.append("--force-shaders")
 
         try:
             subprocess.run(invocations, check=True)
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             print("Reflector failed. Stopping")
             exit(1)
-
 
     if not args.no_build:
         subprocess.run(["make", "-C", "build"], check=True)
 
     if args.run != "":
         exe_path = f"./build/{args.run}"
-        print(f"🚀 Running {exe_path}...")
+        print(f"Running {exe_path}...")
         subprocess.run([exe_path], check=True)
 
 if __name__ == "__main__":
