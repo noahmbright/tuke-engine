@@ -75,9 +75,6 @@ int main() {
   UniformWrite mvp_handle = push_uniform(&ub_manager, sizeof(MVPUniform));
   UniformWrite cube_model_handle = push_uniform(&ub_manager, sizeof(CubeModel));
   UniformWrite x_handle = push_uniform(&ub_manager, sizeof(UniformBufferObject));
-  // FIXME manual padding
-  // either need a new philosophy for managing UBs or a way to push up to next alignment
-  push_uniform(&ub_manager, 12);
   UniformWrite light_position_handle = push_uniform(&ub_manager, sizeof(LightPosition));
   UniformWrite camera_vp_handle = push_uniform(&ub_manager, sizeof(CameraVP));
   UniformBuffer global_uniform_buffer = create_uniform_buffer(&context, ub_manager.current_offset);
@@ -242,7 +239,7 @@ int main() {
     f32 dt = t - t0;
     t0 = t;
     f32 sint = sinf(t);
-    f32 x = fabs(sint);
+    UniformBufferObject ubo = {.x = fabs(sint)};
 
     mvp.model = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
     mvp.model = glm::rotate(mvp.model, sint, glm::vec3(0.0f, 0.0f, 1.0f));
@@ -263,7 +260,7 @@ int main() {
 
     write_to_uniform_buffer(&global_uniform_buffer, &mvp, mvp_handle);
     write_to_uniform_buffer(&global_uniform_buffer, &cube_model, cube_model_handle);
-    write_to_uniform_buffer(&global_uniform_buffer, &x, x_handle);
+    write_to_uniform_buffer(&global_uniform_buffer, &ubo, x_handle);
     write_to_uniform_buffer(&global_uniform_buffer, &light_position, light_position_handle);
     write_to_uniform_buffer(&global_uniform_buffer, &camera_vp, camera_vp_handle);
 
