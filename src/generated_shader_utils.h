@@ -3,7 +3,7 @@
 
 // TODO need to include vulkan base after generated headers because opengl cruft
 #include "opengl_base.h"
-#include "vulkan_base.h"
+#include "vulkan/vulkan_base.h"
 
 u32 link_shader_program(const char *vertex_shader_source, const char *fragment_shader_source);
 

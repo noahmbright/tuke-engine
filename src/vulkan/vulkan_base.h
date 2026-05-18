@@ -201,6 +201,21 @@ struct VulkanBuffer {
   VkMemoryPropertyFlags memory_property_flags;
 };
 
+// Uniform buffer layout is currently managed manually via push_uniform, which
+// advances a linear offset and returns an (offset, size) handle. Callers are
+// responsible for:
+//   - passing data whose size matches the reserved slot size
+//   - ensuring structs whose sizes are not multiples of minUniformBufferOffsetAlignment
+//     don't leave the next slot unaligned (validation error on vkUpdateDescriptorSets)
+//
+// Potential improvements:
+//   - Store alignment in UniformBufferManager and round up current_offset after
+//     each push, so misalignment is structurally impossible.
+//   - Replace push_uniform entirely with a single mapped struct whose fields are
+//     the actual uniform types. offsetof() gives correct aligned offsets for free,
+//     and writes become direct field assignments through the mapped pointer.
+//   - Add explicit data_size to write_to_uniform_buffer so the copy size is always
+//     the caller's actual type size, not the reserved slot size.
 struct UniformBufferManager {
   u32 current_offset;
 };

@@ -9,7 +9,7 @@
 #include "transform.h"
 #include "tuke_engine.h"
 #include "vulkan/vulkan_core.h"
-#include "vulkan_base.h"
+#include "vulkan/vulkan_base.h"
 #include "window.h"
 
 static const char *texture_names[NUM_TEXTURES] = {"textures/generic_girl.jpg", "textures/pong/field_background.jpg",

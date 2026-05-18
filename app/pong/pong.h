@@ -7,7 +7,7 @@
 #include "statistics.h"
 #include "transform.h"
 #include "tuke_engine.h"
-#include "vulkan_base.h"
+#include "vulkan/vulkan_base.h"
 #include "window.h"
 
 #define MAX_POWERUPS (8)

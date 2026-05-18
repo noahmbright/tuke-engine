@@ -1,6 +1,6 @@
 #define GLFW_INCLUDE_VULKAN
 #include "GLFW/glfw3.h"
-#include "vulkan_base.h"
+#include "vulkan/vulkan_base.h"
 
 // https://www.glfw.org/docs/latest/group__vulkan.html#ga9308f2acf6b5f6ff49cf0d4aa9ba1fab
 // https://www.glfw.org/docs/latest/vulkan_guide.html#vulkan_surface
