@@ -10,20 +10,24 @@ find_package(Vulkan REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glfw)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src)
 
+function(add_game_executable target)
+    target_link_libraries(${target} PRIVATE engine)
+    target_compile_options(${target} PRIVATE
+        -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -Wno-c99-designator)
+    target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+endfunction()
+
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/app/og_main/main.cpp)
-target_link_libraries(${PROJECT_NAME} PRIVATE engine)
+add_game_executable(${PROJECT_NAME})
 
 add_executable(vulkan_test ${CMAKE_SOURCE_DIR}/app/vulkan_test/vulkan_test.cpp)
-target_link_libraries(vulkan_test PRIVATE engine)
+add_game_executable(vulkan_test)
 
 add_executable(opengl_test ${CMAKE_SOURCE_DIR}/app/opengl_test/opengl_test.cpp)
-target_link_libraries(opengl_test PRIVATE engine)
+add_game_executable(opengl_test)
 
 add_executable(top_down_something ${CMAKE_SOURCE_DIR}/app/top_down_something/main.cpp)
-target_link_libraries(top_down_something PRIVATE engine)
-target_compile_options(top_down_something  PRIVATE -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -Wno-c99-designator)
-target_link_options(top_down_something  PRIVATE -fsanitize=address,undefined)
-
+add_game_executable(top_down_something)
 
 file(GLOB_RECURSE PONG_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/app/pong/pong.cpp
@@ -31,7 +35,7 @@ file(GLOB_RECURSE PONG_SOURCE_FILES
 )
 
 add_executable(pong ${PONG_SOURCE_FILES})
-target_link_libraries(pong PRIVATE engine)
+add_game_executable(pong)
 
 file(GLOB_RECURSE REFLECTOR_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/reflector/main.cpp

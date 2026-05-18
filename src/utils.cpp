@@ -1,6 +1,5 @@
 #include <glad/gl.h>
 
-#include "camera.h"
 #include "stb_image.h"
 #include "utils.h"
 
@@ -59,7 +58,7 @@ void free_stb_handle(STBHandle *handle) {
   if (handle->data) {
     stbi_image_free(handle->data);
   } else {
-    fprintf(stderr, "free_stb_handle: Tried to free NULL STBHandle");
+    fprintf(stderr, "free_stb_handle: Tried to free NULL STBHandle.\n");
   }
   handle->data = NULL;
 }

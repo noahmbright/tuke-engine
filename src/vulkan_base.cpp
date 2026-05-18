@@ -1,11 +1,21 @@
 #include "vulkan_base.h"
-#include "utils.h"
 
 #include "vulkan/vulkan_beta.h"
 #include "vulkan/vulkan_core.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
+static inline u32 clamp_u32(u32 x, u32 min, u32 max) {
+  if (x < min) {
+    return min;
+  }
+  if (x > max) {
+    return max;
+  }
+  return x;
+}
 
 // If you're multithreading submissions, use a mutex or lockless ring buffer per queue.
 void destroy_swapchain(VulkanContext *context) {
@@ -1916,67 +1926,67 @@ ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *contex
 // TODO how to handle reusing staging buffers?
 // Need to see usage when multiple textures are present
 // current idea: anticipate loading several textures at once, read from files,
-// pick one with max size, and allocate staging buffer with that size, and
+// pick one with max size, allocate staging buffer with that size, and
 // stream the textures in one by one after that
-VulkanTexture create_vulkan_texture_from_file(VulkanContext *context, const char *path, VulkanBuffer staging_buffer,
-                                              void *ptr_to_mapped_memory) {
-
+VulkanTexture create_vulkan_texture(VulkanContext *context, VulkanImageData image_data, VulkanBuffer staging_buffer,
+                                    void *ptr_to_mapped_memory) {
   VulkanTexture vulkan_texture;
-  STBHandle stb_handle = load_texture(path);
+  vulkan_texture.width = image_data.width;
+  vulkan_texture.height = image_data.height;
 
-  vulkan_texture.image =
-      create_default_image(context, stb_handle.width, stb_handle.height,
-                           VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_FORMAT_R8G8B8A8_SRGB);
+  VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+  vulkan_texture.image = create_default_image(context, image_data.width, image_data.height, usage, format);
 
+  // Allocating device memory must come after image creation.
   vulkan_texture.device_memory = allocate_and_bind_image_memory(context, vulkan_texture.image);
 
   // map memory
-  u32 texture_size = 4 * stb_handle.width * stb_handle.height;
-  assert(stb_handle.data);
+  assert(image_data.data);
   assert(ptr_to_mapped_memory);
-  memcpy(ptr_to_mapped_memory, stb_handle.data, texture_size);
+  u32 texture_size = image_data.n_channels * image_data.width * image_data.height;
+  memcpy(ptr_to_mapped_memory, image_data.data, texture_size);
 
+  // TODO what does this do? Still don't understand transitions
   // first transition
-  VkCommandBuffer command_buffer = begin_single_use_command_buffer(context);
-  transition_image_layout(command_buffer, vulkan_texture.image, VK_IMAGE_LAYOUT_UNDEFINED,
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-  end_single_use_command_buffer(context, command_buffer);
+  VkCommandBuffer cmd = begin_single_use_command_buffer(context);
+  VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+  VkImageLayout new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  transition_image_layout(cmd, vulkan_texture.image, old_layout, new_layout);
 
   // copy buffer to image
-  VkBufferImageCopy buffer_image_copy;
-  buffer_image_copy.bufferOffset = 0;
-  // 0 indicates tightly packed - could we also used handle width/height?
-  buffer_image_copy.bufferRowLength = 0;
-  buffer_image_copy.bufferImageHeight = 0;
+  VkBufferImageCopy buffer_image_copy = {
+      .bufferOffset = 0,
+      .bufferRowLength = 0, // 0 indicates tightly packed - could we also used handle width/height?
+      .bufferImageHeight = 0,
 
-  buffer_image_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  buffer_image_copy.imageSubresource.mipLevel = 0;
-  buffer_image_copy.imageSubresource.baseArrayLayer = 0;
-  buffer_image_copy.imageSubresource.layerCount = 1;
+      .imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+      .imageSubresource.mipLevel = 0,
+      .imageSubresource.baseArrayLayer = 0,
+      .imageSubresource.layerCount = 1,
 
-  buffer_image_copy.imageOffset.x = 0;
-  buffer_image_copy.imageOffset.y = 0;
-  buffer_image_copy.imageOffset.z = 0;
-  buffer_image_copy.imageExtent.width = stb_handle.width;
-  buffer_image_copy.imageExtent.height = stb_handle.height;
-  buffer_image_copy.imageExtent.depth = 1;
+      .imageOffset.x = 0,
+      .imageOffset.y = 0,
+      .imageOffset.z = 0,
+      .imageExtent.width = image_data.width,
+      .imageExtent.height = image_data.height,
+      .imageExtent.depth = 1,
+  };
 
-  VkCommandBuffer image_copy_command_buffer = begin_single_use_command_buffer(context);
-  vkCmdCopyBufferToImage(image_copy_command_buffer, staging_buffer.buffer, vulkan_texture.image,
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_image_copy);
-  end_single_use_command_buffer(context, image_copy_command_buffer);
+  VkImageLayout image_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  u32 region_count = 1;
+  vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, vulkan_texture.image, image_layout, region_count,
+                         &buffer_image_copy);
 
   // second transition
-  command_buffer = begin_single_use_command_buffer(context);
-  transition_image_layout(command_buffer, vulkan_texture.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-  end_single_use_command_buffer(context, command_buffer);
+  old_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  transition_image_layout(cmd, vulkan_texture.image, old_layout, new_layout);
+  end_single_use_command_buffer(context, cmd);
 
-  vulkan_texture.width = stb_handle.width;
-  vulkan_texture.height = stb_handle.height;
-  vulkan_texture.image_view =
-      create_default_image_view(context, vulkan_texture.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
-  free_stb_handle(&stb_handle);
+  VkImageAspectFlags aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT;
+  format = VK_FORMAT_R8G8B8A8_SRGB;
+  vulkan_texture.image_view = create_default_image_view(context, vulkan_texture.image, format, aspect_flags);
 
   return vulkan_texture;
 }
@@ -1985,15 +1995,14 @@ VulkanTexture create_vulkan_texture_from_file(VulkanContext *context, const char
 // want to be able to refer to textures by name?
 // I could pass an array of structs containing a VulkanTexture and a path
 // Also could do hashing
-void load_vulkan_textures(VulkanContext *context, const char **paths, u32 num_paths, VulkanTexture *out_textures) {
+void load_vulkan_textures(VulkanContext *context, const VulkanImageData *image_datas, u32 num_images,
+                          VulkanTexture *out_textures) {
 
   u32 max_size = 0;
-
-  for (u32 i = 0; i < num_paths; i++) {
-    STBHandle metadata = load_texture_metadata(paths[i]);
-
+  for (u32 i = 0; i < num_images; i++) {
     // TODO need to fix this 4 issue
-    u32 texture_size = metadata.width * metadata.height * 4;
+    const VulkanImageData *data = &image_datas[i];
+    u32 texture_size = data->width * data->height * data->n_channels;
     max_size = (texture_size > max_size) ? texture_size : max_size;
   }
 
@@ -2004,8 +2013,8 @@ void load_vulkan_textures(VulkanContext *context, const char **paths, u32 num_pa
       vkMapMemory(context->device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data),
       "load_vulkan_textures: failed to VkMapMemory");
 
-  for (u32 i = 0; i < num_paths; i++) {
-    out_textures[i] = create_vulkan_texture_from_file(context, paths[i], staging_buffer, texture_data);
+  for (u32 i = 0; i < num_images; i++) {
+    out_textures[i] = create_vulkan_texture(context, image_datas[i], staging_buffer, texture_data);
   }
 
   vkUnmapMemory(context->device, staging_buffer.memory);

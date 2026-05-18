@@ -1,10 +1,15 @@
 #pragma once
 
-#include "tuke_engine.h"
 #include "vulkan/vulkan_core.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+typedef float f32;
+typedef uint8_t u8;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef int32_t i32;
 
 // TODO adapt to print validation layer errors on failure
 #define VK_CHECK(result, fmt)                                                                                          \
@@ -307,9 +312,18 @@ struct DescriptorSetHandle {
   VkDescriptorSetLayout descriptor_set_layout;
 };
 
+// TODO don't like how this is redefined for my personal engine, STB, and Vulkan
+struct VulkanImageData {
+  u32 width;
+  u32 height;
+  u32 n_channels;
+  u8 *data;
+};
+
 struct VulkanTexture {
   VkImage image;
-  u32 height, width;
+  u32 height;
+  u32 width;
   VkDeviceMemory device_memory;
   VkImageView image_view;
 };
@@ -457,8 +471,10 @@ VkVertexInputAttributeDescription create_vertex_attribute_description(u32 locati
 VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u32 stride);
 
 u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties);
-VulkanTexture create_vulkan_texture_from_file(VulkanContext *context, const char *path);
-void load_vulkan_textures(VulkanContext *context, const char **paths, u32 num_paths, VulkanTexture *out_textures);
+VulkanTexture create_vulkan_texture(VulkanContext *context, VulkanImageData image_data, VulkanBuffer staging_buffer,
+                                    void *ptr_to_mapped_memory);
+void load_vulkan_textures(VulkanContext *context, const VulkanImageData *image_datas, u32 num_images,
+                          VulkanTexture *out_textures);
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
 VkSampler create_sampler(VkDevice device);
 

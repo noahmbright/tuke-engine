@@ -7,14 +7,14 @@ int main() {
 
   const char *tuke_pong_string = "Tuke Pong";
   State state = setup_state(tuke_pong_string);
-  VulkanContext *ctx = &state.context;
+  // VulkanContext *ctx = &state.context;
   char title[64];
 
   // main loop
   f64 t_prev = glfwGetTime();
   f64 second_accumulator = 0.0f;
   f64 total_time = 0.0f;
-  f64 fps = 0;
+  // f64 fps = 0;
   while (!glfwWindowShouldClose(state.window)) {
     glfwPollEvents();
     f64 t = glfwGetTime();

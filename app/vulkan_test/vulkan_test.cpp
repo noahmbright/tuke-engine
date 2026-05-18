@@ -1,4 +1,5 @@
 #include "c_reflector_bringup.h"
+#include "utils.h"
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include "generated_shader_utils.h"
@@ -12,6 +13,7 @@
 #include "vulkan_test.h"
 #include "window.h"
 
+#if 0
 static const VkPipelineVertexInputStateCreateInfo empty_vertex_input_state = {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
     .pNext = NULL,
@@ -21,6 +23,7 @@ static const VkPipelineVertexInputStateCreateInfo empty_vertex_input_state = {
     .vertexAttributeDescriptionCount = 0,
     .pVertexAttributeDescriptions = NULL,
 };
+#endif
 
 int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
@@ -33,8 +36,23 @@ int main() {
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {{.color = {{0.01, 0.01, 0.01, 1.0}}},
                                                       {.depthStencil = {.depth = 1.0f, .stencil = 0}}};
 
+  STBHandle stbs[NUM_TEXTURES];
+  VulkanImageData image_datas[NUM_TEXTURES];
+  for (u32 i = 0; i < NUM_TEXTURES; i++) {
+    stbs[i] = load_texture(texture_names[i]);
+    image_datas[i].n_channels = stbs[i].n_channels;
+    image_datas[i].data = stbs[i].data;
+    image_datas[i].width = stbs[i].width;
+    image_datas[i].height = stbs[i].height;
+  }
+
   VulkanTexture textures[NUM_TEXTURES];
-  load_vulkan_textures(&context, texture_names, NUM_TEXTURES, textures);
+  load_vulkan_textures(&context, image_datas, NUM_TEXTURES, textures);
+
+  for (u32 i = 0; i < NUM_TEXTURES; i++) {
+    free_stb_handle(&stbs[i]);
+  }
+
   VkSampler sampler = create_sampler(context.device);
 
   ColorDepthFramebuffer offscreen_framebuffer =
@@ -47,6 +65,7 @@ int main() {
   const BufferHandle *quad_position_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, quad_positions);
   const BufferHandle *unit_square_indices_slice = UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
   const BufferHandle *cube_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, cube_vertices);
+  (void)unit_square_indices_slice;
 
   BufferManager buffer_manager = flush_buffers(&context, &buffer_upload_queue);
   VulkanBuffer *vertex_buffer = &buffer_manager.vertex_buffer;
@@ -204,6 +223,7 @@ int main() {
   const glm::vec3 cube_translation_vector = {1.5f, -1.3f, 1.5f};
   const f32 root3 = 0.57735026919;
   const glm::vec3 cube_rotation_axis = {root3, root3, root3};
+  (void)cube_rotation_axis;
 
   Camera camera = create_camera(CAMERA_TYPE_3D);
   camera.position = {0.0f, 0.0f, 5.0f};

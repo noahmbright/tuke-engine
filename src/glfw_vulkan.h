@@ -24,7 +24,7 @@ static inline VulkanWindowInfo create_glfw_vulkan_window_info(GLFWwindow *window
   int width, height;
   glfwGetFramebufferSize(window, &width, &height);
 
-  return (VulkanWindowInfo){
+  VulkanWindowInfo ret = {
       .extension_count = extension_count,
       .extensions = extensions,
       .create_surface = create_glfw_vulkan_surface,
@@ -32,4 +32,6 @@ static inline VulkanWindowInfo create_glfw_vulkan_window_info(GLFWwindow *window
       .width = width,
       .height = height,
   };
+
+  return ret;
 }

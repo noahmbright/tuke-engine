@@ -66,6 +66,10 @@ int main() {
 
     const glm::mat4 player_model = model_from_player(&player);
     const glm::mat4 tilemap_model = glm::mat4(1.0);
+    (void)player_model;
+    (void)tilemap_model;
+    (void)player_texture;
+    (void)level_map;
 
     // opengl_draw_tilemap(&tilemap_render_data, tilemap_model);
     // opengl_draw_player(&player_render_data, player_model);

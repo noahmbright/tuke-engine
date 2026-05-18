@@ -21,8 +21,8 @@ void init_buffers(State *state) {
   // big vertex/index buffers
   BufferUploadQueue buffer_upload_queue = create_buffer_upload_queue();
 
-  const BufferHandle *unit_quad_vertices_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, paddle_vertices);
-  const BufferHandle *quad_inices_slice = UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
+  // const BufferHandle *unit_quad_vertices_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, paddle_vertices);
+  // const BufferHandle *quad_inices_slice = UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
 
   state->buffer_manager = flush_buffers(ctx, &buffer_upload_queue);
 
@@ -166,7 +166,16 @@ State setup_state(const char *title) {
   state.context = create_vulkan_context(title, window_info);
   VulkanContext *ctx = &state.context;
 
-  load_vulkan_textures(ctx, texture_names, NUM_TEXTURES, state.textures);
+  VulkanImageData image_datas[NUM_TEXTURES];
+  for (u32 i = 0; i < NUM_TEXTURES; i++) {
+    STBHandle stb = load_texture(texture_names[i]);
+    image_datas[i].n_channels = stb.n_channels;
+    image_datas[i].data = stb.data;
+    image_datas[i].width = stb.width;
+    image_datas[i].height = stb.height;
+  }
+
+  load_vulkan_textures(ctx, image_datas, NUM_TEXTURES, state.textures);
   init_buffers(&state);
 
   // TODO this sampler never changes - look into wiring immutable samplers
@@ -405,7 +414,7 @@ void handle_collisions(State *state, const f32 dt) {
 
   glm::vec3 right_paddle_pos = positions[ENTITY_RIGHT_PADDLE];
   glm::vec3 right_paddle_scale = scales[ENTITY_RIGHT_PADDLE];
-  glm::vec3 right_paddle_velocity = velocities[ENTITY_RIGHT_PADDLE];
+  // glm::vec3 right_paddle_velocity = velocities[ENTITY_RIGHT_PADDLE];
 
   // TODO Pong: Maybe have this resize dynamically
   f32 arena_horizontal_boundary = arena_dimensions_x0 / 2.0f;
@@ -531,7 +540,7 @@ void update_game_state(State *state, const f32 dt) {
 
     f32 prob_to_spawn = random_f32_xoroshiro128_plus(&state->rngs.powerup_spawn);
     if (prob_to_spawn < prob_powerup_spawns) {
-      u32 powerup_index = draw_alias_method(&state->powerup_alias_table);
+      // u32 powerup_index = draw_alias_method(&state->powerup_alias_table);
     }
   }
 
