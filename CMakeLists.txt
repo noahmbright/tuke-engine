@@ -7,6 +7,17 @@ set(CMAKE_CXX_STANDARD 23)
 
 find_package(Vulkan REQUIRED)
 
+# SDL3: dev uses system install (dynamic), shipping uses vendored static build.
+# To ship: add SDL as a git submodule at third_party/sdl, then:
+#   cmake -DSDL_STATIC_LINK=ON ...
+# and link against SDL3::SDL3-static instead.
+option(SDL_STATIC_LINK "Link SDL3 statically for shipping" OFF)
+if(SDL_STATIC_LINK)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/sdl)
+else()
+    find_package(SDL3 REQUIRED)
+endif()
+
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glfw)
 add_subdirectory(${CMAKE_SOURCE_DIR}/src)
 
@@ -36,6 +47,13 @@ file(GLOB_RECURSE PONG_SOURCE_FILES
 
 add_executable(pong ${PONG_SOURCE_FILES})
 add_game_executable(pong)
+
+file(GLOB VULKAN_TEST_FILES ${CMAKE_SOURCE_DIR}/app/vulkan_tests/*.cpp)
+foreach(test_file ${VULKAN_TEST_FILES})
+    get_filename_component(test_name ${test_file} NAME_WE)
+    add_executable(${test_name} ${test_file})
+    add_game_executable(${test_name})
+endforeach()
 
 file(GLOB_RECURSE REFLECTOR_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/reflector/main.cpp

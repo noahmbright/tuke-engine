@@ -17,7 +17,11 @@ file(GLOB_RECURSE ENGINE_SOURCE_FILES
 
 add_library(engine STATIC ${ENGINE_SOURCE_FILES})
 
-target_link_libraries(engine PUBLIC tuke_vulkan)
+if(SDL_STATIC_LINK)
+    target_link_libraries(engine PUBLIC tuke_vulkan glfw SDL3::SDL3-static)
+else()
+    target_link_libraries(engine PUBLIC tuke_vulkan glfw SDL3::SDL3)
+endif()
 
 
 target_include_directories(engine

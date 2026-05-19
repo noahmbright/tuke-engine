@@ -198,7 +198,8 @@ VkInstance create_instance(const char *name, VulkanWindowInfo window_info) {
   instance_create_info.ppEnabledExtensionNames = enabled_extensions;
 
   VkInstance instance;
-  VK_CHECK(vkCreateInstance(&instance_create_info, NULL, &instance), "create_instance: Failed to createInstance");
+  VkResult result = vkCreateInstance(&instance_create_info, NULL, &instance);
+  VK_CHECK(result, "Failed to create instance");
   return instance;
 }
 
@@ -210,44 +211,40 @@ VkDebugUtilsMessengerEXT create_debug_messenger(VkInstance instance) {
       (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 
   if (!create_fn) {
-    fprintf(stderr, "Failed to load vkCreateDebugUtilsMessengerEXT\n");
+    fprintf(stderr, "%s(): Failed to load vkCreateDebugUtilsMessengerEXT\n", __func__);
     exit(1);
   }
   VkDebugUtilsMessengerEXT debug_messenger;
-  VK_CHECK(create_fn(instance, &debug_msngr_create_info, NULL, &debug_messenger),
-           "create_instance: Failed to create VkDebugUtilsMessengerEXT");
+  VkResult result = create_fn(instance, &debug_msngr_create_info, NULL, &debug_messenger);
+  VK_CHECK(result, "Failed to create VkDebugUtilsMessengerEXT");
   return debug_messenger;
 }
 
 u32 get_physical_devices(VkInstance instance, VkPhysicalDevice *physical_devices) {
   u32 device_count;
-  VK_CHECK(vkEnumeratePhysicalDevices(instance, &device_count, NULL),
-           "get_physical_devices, failed to vkEnumeratePhysicalDevices");
+  VkResult result = vkEnumeratePhysicalDevices(instance, &device_count, NULL);
+  VK_CHECK(result, "Failed to enumerate physical device count");
   if (device_count == 0) {
-    fprintf(stderr, "get_physical_devices: Failed to find a physical device. "
-                    "device_count = 0\n");
+    fprintf(stderr, "%s(): Failed to find a physical device. device_count = 0\n", __func__);
     exit(1);
   }
 
   if (device_count > MAX_PHYSICAL_DEVICES) {
-    printf("get_physical_devices: Found more physical devices (%u) than "
-           "MAX_PHYSICAL_DEVICES (%u)\n",
-           device_count, MAX_PHYSICAL_DEVICES);
+    printf("%s(): Found more physical devices (%u) than MAX_PHYSICAL_DEVICES (%u)\n", __func__, device_count,
+           MAX_PHYSICAL_DEVICES);
     device_count = MAX_PHYSICAL_DEVICES;
   }
 
-  VK_CHECK(vkEnumeratePhysicalDevices(instance, &device_count, physical_devices),
-           "get_physical_devices, failed to vkEnumeratePhysicalDevices");
+  result = vkEnumeratePhysicalDevices(instance, &device_count, physical_devices);
+  VK_CHECK(result, "Failed to enumerate physical devices");
 
   return device_count;
 }
 
 QueueFamilyIndices queue_family_indices_from_physical_device(VkPhysicalDevice physical_device, VkSurfaceKHR surface) {
   u32 queue_family_count = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, NULL);
-
-  const i32 MAX_QUEUE_FAMILIES = 16;
   VkQueueFamilyProperties queue_families[MAX_QUEUE_FAMILIES];
+  vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, NULL);
   vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_count, queue_families);
 
   i32 graphics_family = -1;
@@ -255,9 +252,8 @@ QueueFamilyIndices queue_family_indices_from_physical_device(VkPhysicalDevice ph
   i32 compute_family = -1;
 
   if (queue_family_count > MAX_QUEUE_FAMILIES) {
-    printf("is_suitable_physical_device: MAX_QUEUE_FAMILIES is %d but "
-           "queue_family_count is %d\n",
-           MAX_QUEUE_FAMILIES, queue_family_count);
+    printf("%s(): MAX_QUEUE_FAMILIES is %d but queue_family_count is %d\n", __func__, MAX_QUEUE_FAMILIES,
+           queue_family_count);
     queue_family_count = MAX_QUEUE_FAMILIES;
   }
 
@@ -270,7 +266,6 @@ QueueFamilyIndices queue_family_indices_from_physical_device(VkPhysicalDevice ph
       graphics_family = i;
     }
 
-    // Check for compute support
     if (queue_families[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
       compute_family = i;
     }
@@ -290,6 +285,8 @@ QueueFamilyIndices queue_family_indices_from_physical_device(VkPhysicalDevice ph
   return res;
 }
 
+// TODO May want to extend this to support compute only.
+// Not sure if we'd ever want graphics without present.
 bool is_valid_queue_family_indices(QueueFamilyIndices indices) {
   bool is_invalid = indices.compute_family == -1 || indices.present_family == -1 || indices.graphics_family == -1;
   return !is_invalid;
@@ -319,10 +316,15 @@ VkPhysicalDevice pick_physical_device(VkInstance instance, QueueFamilyIndices *q
   }
 
   if (res == NULL) {
-    fprintf(stderr, "pick_physical_device: result is NULL "
-                    "failed to find suitable physical device\n");
+    fprintf(stderr, "%s(): result is NULL failed to find suitable physical device\n", __func__);
     exit(1);
   }
+
+  VkPhysicalDeviceProperties2 device_properties = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+  };
+  vkGetPhysicalDeviceProperties2(res, &device_properties);
+  printf("%s(): Selected physical device: %s\n", __func__, device_properties.properties.deviceName);
 
   return res;
 }
@@ -348,15 +350,16 @@ u32 get_unique_queue_infos(QueueFamilyIndices queue_family_indices, VkDeviceQueu
       continue;
     }
 
-    f32 queue_priority = 1.0f;
     // https://registry.khronos.org/vulkan/specs/latest/man/html/VkDeviceQueueCreateInfo.html
-    VkDeviceQueueCreateInfo device_queue_create_info;
-    device_queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    device_queue_create_info.pNext = NULL;
-    device_queue_create_info.flags = 0;
-    device_queue_create_info.queueFamilyIndex = indices[i];
-    device_queue_create_info.queueCount = 1;
-    device_queue_create_info.pQueuePriorities = &queue_priority;
+    f32 queue_priority = 1.0f;
+    VkDeviceQueueCreateInfo device_queue_create_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .queueFamilyIndex = indices[i],
+        .queueCount = 1,
+        .pQueuePriorities = &queue_priority,
+    };
     out_infos[num_unique_queue_families++] = device_queue_create_info;
   }
 
@@ -368,45 +371,81 @@ VkDevice create_device(QueueFamilyIndices queue_family_indices, VkPhysicalDevice
   VkDeviceQueueCreateInfo queue_create_infos[NUM_QUEUE_FAMILY_INDICES];
   u32 num_unique_queue_families = get_unique_queue_infos(queue_family_indices, queue_create_infos);
 
-  const char *device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, // "VK_KHR_swapchain"
-                                     VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME};
-  VkPhysicalDeviceFeatures device_features = {};
+  u32 device_extension_count = 1;
+  const char *device_extensions[2] = {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  };
+
+  // Check to see if we are on MacOS and need the portability subset extension
+  // The Vulkan spec states: If the VK_KHR_portability_subset extension is included in pProperties of
+  // vkEnumerateDeviceExtensionProperties, ppEnabledExtensionNames must include "VK_KHR_portability_subset"
+  u32 ext_count = 0;
+  vkEnumerateDeviceExtensionProperties(physical_device, NULL, &ext_count, NULL);
+  VkExtensionProperties exts[256]; // or however you handle it
+  vkEnumerateDeviceExtensionProperties(physical_device, NULL, &ext_count, exts);
+
+  bool need_portability = false;
+  for (u32 i = 0; i < ext_count; i++) {
+    if (strcmp(exts[i].extensionName, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME) == 0) {
+      need_portability = true;
+      break;
+    }
+  }
+
+  if (need_portability) {
+    device_extensions[device_extension_count++] = VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
+  }
+
+  // Versioned features — only chain 1.3 struct if the device actually supports 1.3.
+  // Chaining a versioned features struct for a version the device doesn't support is a validation error.
+  VkPhysicalDeviceProperties device_props;
+  vkGetPhysicalDeviceProperties(physical_device, &device_props);
+
+  VkPhysicalDeviceVulkan12Features vk_1_2_features{
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+  };
+  VkPhysicalDeviceVulkan13Features vk_1_3_features{
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+      .pNext = &vk_1_2_features,
+  };
+  VkPhysicalDeviceFeatures vk_1_0_features = {};
+
+  u32 minor_version = VK_VERSION_MINOR(device_props.apiVersion);
+  void *features_pnext = (minor_version >= 3) ? (void *)&vk_1_3_features : (void *)&vk_1_2_features;
 
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkDeviceCreateInfo.html
-  VkDeviceCreateInfo device_create_info;
-  device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  device_create_info.pNext = NULL;
-  device_create_info.flags = 0;
-  device_create_info.queueCreateInfoCount = num_unique_queue_families;
-  device_create_info.pQueueCreateInfos = queue_create_infos;
-  // enabledLayerCount is deprecated and should not be used
-  device_create_info.enabledLayerCount = 0;
-  // ppEnabledLayerNames is deprecated and should not be used
-  device_create_info.ppEnabledLayerNames = NULL;
-  device_create_info.enabledExtensionCount = 2;
-  device_create_info.ppEnabledExtensionNames = device_extensions;
-  device_create_info.pEnabledFeatures = &device_features;
+  VkDeviceCreateInfo device_create_info = {
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .pNext = features_pnext,
+      .flags = 0,
+      .queueCreateInfoCount = num_unique_queue_families,
+      .pQueueCreateInfos = queue_create_infos,
+      .enabledLayerCount = 0,      // enabledLayerCount is deprecated and should not be used
+      .ppEnabledLayerNames = NULL, // ppEnabledLayerNames is deprecated and should not be used
+      .enabledExtensionCount = device_extension_count,
+      .ppEnabledExtensionNames = device_extensions,
+      .pEnabledFeatures = &vk_1_0_features,
+  };
 
   // https://registry.khronos.org/vulkan/specs/latest/man/html/vkCreateDevice.html
   VkDevice device;
-  VK_CHECK(vkCreateDevice(physical_device, &device_create_info, NULL, &device),
-           "create_device: Failed to createDevice");
+  VkResult result = vkCreateDevice(physical_device, &device_create_info, NULL, &device);
+  VK_CHECK(result, "Failed to vkCreateDevice()");
   return device;
 }
 
 VkSurfaceFormatKHR get_surface_format(VkPhysicalDevice physical_device, VkSurfaceKHR surface) {
 
   u32 format_count = 0;
-  const u32 max_format_count = 128;
   vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, NULL);
 
-  if (format_count > max_format_count) {
-    printf("get_surface_format: found more formats than expected. Max is %d, "
-           "found %d. Clamping.\n",
-           max_format_count, format_count);
-    format_count = max_format_count;
+  const u32 MAX_FORMAT_COUNT = 128;
+  if (format_count > MAX_FORMAT_COUNT) {
+    printf("%s(): found more formats than expected. Max is %d, found %d. Clamping.\n", __func__, MAX_FORMAT_COUNT,
+           format_count);
+    format_count = MAX_FORMAT_COUNT;
   }
-  VkSurfaceFormatKHR formats[max_format_count];
+  VkSurfaceFormatKHR formats[MAX_FORMAT_COUNT];
   vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, formats);
 
   VkSurfaceFormatKHR surface_format = formats[0];
@@ -425,9 +464,9 @@ VkExtent2D get_swapchain_extent(u32 width, u32 height, VkSurfaceCapabilitiesKHR 
     return surface_capabilities.currentExtent;
   }
 
-  VkExtent2D extent;
   VkExtent2D min_extent = surface_capabilities.minImageExtent;
   VkExtent2D max_extent = surface_capabilities.maxImageExtent;
+  VkExtent2D extent;
   extent.width = clamp_u32(width, min_extent.width, max_extent.width);
   extent.height = clamp_u32(height, min_extent.height, max_extent.height);
   return extent;
@@ -435,8 +474,8 @@ VkExtent2D get_swapchain_extent(u32 width, u32 height, VkSurfaceCapabilitiesKHR 
 
 VkSurfaceCapabilitiesKHR get_surface_capabilities(VkPhysicalDevice physical_device, VkSurfaceKHR surface) {
   VkSurfaceCapabilitiesKHR surface_capabilities;
-  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities),
-           "create_swapchain: Failed to vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+  VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities);
+  VK_CHECK(result, "Failed to get surface capabilities");
   return surface_capabilities;
 }
 
@@ -449,15 +488,16 @@ VkSwapchainKHR create_swapchain(VkDevice device, VkPhysicalDevice physical_devic
   }
 
   u32 present_mode_count = 0;
-  const u32 max_present_mode_count = 16;
+  const u32 MAX_PRESENT_MODE_COUNT = 16;
   vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_mode_count, NULL);
-  VkPresentModeKHR present_modes[max_present_mode_count];
+  VkPresentModeKHR present_modes[MAX_PRESENT_MODE_COUNT];
   vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_mode_count, present_modes);
   VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
 
-  if (present_mode_count > max_present_mode_count) {
-    present_mode_count = max_present_mode_count;
+  if (present_mode_count > MAX_PRESENT_MODE_COUNT) {
+    present_mode_count = MAX_PRESENT_MODE_COUNT;
   }
+
   for (u32 i = 0; i < present_mode_count; i++) {
     if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR) {
       present_mode = present_modes[i];
@@ -470,61 +510,60 @@ VkSwapchainKHR create_swapchain(VkDevice device, VkPhysicalDevice physical_devic
       (u32)queue_family_indices.present_family,
   };
 
-  VkSwapchainCreateInfoKHR swapchain_create_info;
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkSwapchainCreateInfoKHR.html
-  swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  swapchain_create_info.pNext = NULL;
-  swapchain_create_info.flags = 0;
-  swapchain_create_info.surface = surface;
-  swapchain_create_info.minImageCount = image_count;
-  swapchain_create_info.imageFormat = surface_format.format;
-  swapchain_create_info.imageColorSpace = surface_format.colorSpace;
-  swapchain_create_info.imageExtent = swapchain_extent;
-  swapchain_create_info.imageArrayLayers = 1;
-  swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  VkSwapchainCreateInfoKHR swapchain_ci = {
+      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+      .pNext = NULL,
+      .flags = 0,
+      .surface = surface,
+      .minImageCount = image_count,
+      .imageFormat = surface_format.format,
+      .imageColorSpace = surface_format.colorSpace,
+      .imageExtent = swapchain_extent,
+      .imageArrayLayers = 1,
+      .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+  };
 
   if (queue_family_indices.graphics_family != queue_family_indices.present_family) {
-    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-    swapchain_create_info.queueFamilyIndexCount = 2;
-    swapchain_create_info.pQueueFamilyIndices = queue_family_indices_array;
+    swapchain_ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+    swapchain_ci.queueFamilyIndexCount = 2;
+    swapchain_ci.pQueueFamilyIndices = queue_family_indices_array;
   } else {
-    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchain_create_info.queueFamilyIndexCount = 0;
-    swapchain_create_info.pQueueFamilyIndices = NULL;
+    swapchain_ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_ci.queueFamilyIndexCount = 0;
+    swapchain_ci.pQueueFamilyIndices = NULL;
   }
-  swapchain_create_info.preTransform = surface_capabilities.currentTransform;
-  swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  swapchain_create_info.presentMode = present_mode;
-  swapchain_create_info.clipped = VK_TRUE;
-  swapchain_create_info.oldSwapchain = VK_NULL_HANDLE;
+  swapchain_ci.preTransform = surface_capabilities.currentTransform;
+  swapchain_ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  swapchain_ci.presentMode = present_mode;
+  swapchain_ci.clipped = VK_TRUE;
+  swapchain_ci.oldSwapchain = VK_NULL_HANDLE;
 
   // https://registry.khronos.org/vulkan/specs/latest/man/html/vkCreateSwapchainKHR.html
   VkSwapchainKHR swapchain;
-  VK_CHECK(vkCreateSwapchainKHR(device, &swapchain_create_info, NULL, &swapchain),
-           "create_swapchain: Failed to createSwapchain");
+  VkResult result = vkCreateSwapchainKHR(device, &swapchain_ci, NULL, &swapchain);
+  VK_CHECK(result, "Failed to create swapchain");
   return swapchain;
 }
 
 void transition_image_layout(VkCommandBuffer command_buffer, VkImage image, VkImageLayout old_layout,
                              VkImageLayout new_layout) {
-  // printf("Transitioning image %p: %d -> %d\n", (void *)image, old_layout,
-  // new_layout);
-
-  VkImageMemoryBarrier image_memory_barrier;
-  image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-  image_memory_barrier.pNext = NULL;
-  image_memory_barrier.srcAccessMask = 0;
-  image_memory_barrier.dstAccessMask = 0;
-  image_memory_barrier.oldLayout = old_layout;
-  image_memory_barrier.newLayout = new_layout;
-  image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-  image_memory_barrier.image = image;
-  image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-  image_memory_barrier.subresourceRange.baseMipLevel = 0;
-  image_memory_barrier.subresourceRange.levelCount = 1;
-  image_memory_barrier.subresourceRange.baseArrayLayer = 0;
-  image_memory_barrier.subresourceRange.layerCount = 1;
+  VkImageMemoryBarrier image_memory_barrier{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .pNext = NULL,
+      .srcAccessMask = 0,
+      .dstAccessMask = 0,
+      .oldLayout = old_layout,
+      .newLayout = new_layout,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = image,
+      .subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+      .subresourceRange.baseMipLevel = 0,
+      .subresourceRange.levelCount = 1,
+      .subresourceRange.baseArrayLayer = 0,
+      .subresourceRange.layerCount = 1,
+  };
 
   // TODO I don't yet understand these transition cases
   VkPipelineStageFlags src_stage, dst_stage;
@@ -565,7 +604,9 @@ void transition_image_layout(VkCommandBuffer command_buffer, VkImage image, VkIm
   } else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED &&
              new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
 
-    image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    // Always include stencil bit: formats like D32_SFLOAT_S8_UINT require both
+    // unless separateDepthStencilLayouts is enabled (we don't enable it).
+    image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 
     image_memory_barrier.srcAccessMask = 0;
     image_memory_barrier.dstAccessMask =
@@ -610,61 +651,61 @@ void transition_image_layout(VkCommandBuffer command_buffer, VkImage image, VkIm
 
 VkImageView create_default_image_view(const VulkanContext *context, VkImage image, VkFormat format,
                                       VkImageAspectFlags aspect_flags) {
-  VkImageViewCreateInfo image_view_create_info;
-  image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-  image_view_create_info.pNext = NULL;
-  image_view_create_info.flags = 0;
-  image_view_create_info.image = image;
-  image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  image_view_create_info.format = format;
-  image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-  image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-  image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-  image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
   // TODO allow for depth and stencil attachments
-  image_view_create_info.subresourceRange.aspectMask = aspect_flags;
-  image_view_create_info.subresourceRange.baseMipLevel = 0;
-  image_view_create_info.subresourceRange.levelCount = 1;
-  image_view_create_info.subresourceRange.baseArrayLayer = 0;
-  image_view_create_info.subresourceRange.layerCount = 1;
+  VkImageViewCreateInfo image_view_create_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .image = image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = format,
+      .components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+      .components.g = VK_COMPONENT_SWIZZLE_IDENTITY,
+      .components.b = VK_COMPONENT_SWIZZLE_IDENTITY,
+      .components.a = VK_COMPONENT_SWIZZLE_IDENTITY,
+      .subresourceRange.aspectMask = aspect_flags,
+      .subresourceRange.baseMipLevel = 0,
+      .subresourceRange.levelCount = 1,
+      .subresourceRange.baseArrayLayer = 0,
+      .subresourceRange.layerCount = 1,
+  };
 
   VkImageView image_view;
-  VK_CHECK(vkCreateImageView(context->device, &image_view_create_info, NULL, &image_view),
-           "create_default_image_view: Failed to vkCreateImageView");
+  VkResult result = vkCreateImageView(context->device, &image_view_create_info, NULL, &image_view);
+  VK_CHECK(result, "Failed to create image view");
 
   return image_view;
 }
 
 VkImage create_default_image(const VulkanContext *context, u32 width, u32 height, VkImageUsageFlags usage,
                              VkFormat format) {
-
   // TODO better understand all these fields
   // When do I need more samples? Need mipmap support
-  // don't understand queue families
+  // Don't understand queue families
   // what is needed for a texture image vs other images?
-  VkImageCreateInfo texture_image_info;
-  texture_image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  texture_image_info.pNext = 0;
-  texture_image_info.flags = 0;
-  texture_image_info.imageType = VK_IMAGE_TYPE_2D;
-  // TODO fallback for HW where formats are not supported?
-  texture_image_info.format = format;
-  texture_image_info.extent.width = width;
-  texture_image_info.extent.height = height;
-  texture_image_info.extent.depth = 1;
-  texture_image_info.mipLevels = 1;
-  texture_image_info.arrayLayers = 1;
-  texture_image_info.samples = VK_SAMPLE_COUNT_1_BIT;
-  texture_image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-  texture_image_info.usage = usage;
-  texture_image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  texture_image_info.queueFamilyIndexCount = 0;
-  texture_image_info.pQueueFamilyIndices = NULL;
-  texture_image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  VkImageCreateInfo texture_image_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .pNext = 0,
+      .flags = 0,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = format, // TODO fallback for HW where formats are not supported?
+      .extent.width = width,
+      .extent.height = height,
+      .extent.depth = 1,
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = usage,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .queueFamilyIndexCount = 0,
+      .pQueueFamilyIndices = NULL,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
 
   VkImage image;
-  VK_CHECK(vkCreateImage(context->device, &texture_image_info, NULL, &image),
-           "create_default_image: failed to vkCreateImage");
+  VkResult result = vkCreateImage(context->device, &texture_image_info, NULL, &image);
+  VK_CHECK(result, "Failed to create image");
 
   return image;
 }
@@ -682,37 +723,48 @@ VkDeviceMemory allocate_and_bind_image_memory(const VulkanContext *context, VkIm
                                                           VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
   VkDeviceMemory device_memory;
-  VK_CHECK(vkAllocateMemory(context->device, &memory_allocate_info, NULL, &device_memory),
-           "allocate_and_bind_image_memory: failed to vkAllocateMemory");
+  VkResult result = vkAllocateMemory(context->device, &memory_allocate_info, NULL, &device_memory);
+  VK_CHECK(result, "Failed to allocate image memory");
 
-  VK_CHECK(vkBindImageMemory(context->device, image, device_memory, 0),
-           "allocate_and_bind_image_memory: failed to vkBindImageMemory");
+  result = vkBindImageMemory(context->device, image, device_memory, 0);
+  VK_CHECK(result, "Failed to bind image memory");
 
   return device_memory;
 }
 
-DepthBuffer create_depth_buffer(VulkanContext *context) {
+VkFormat find_depth_format(VkPhysicalDevice physical_device) {
+  VkFormat candidates[] = {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT};
+  for (u32 i = 0; i < sizeof(candidates) / sizeof(VkFormat); i++) {
+    VkFormatProperties2 props{.sType = VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2};
+    vkGetPhysicalDeviceFormatProperties2(physical_device, candidates[i], &props);
+    if (props.formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+      return candidates[i];
+  }
+  fprintf(stderr, "%s(): no supported depth format found\n", __func__);
+  exit(1);
+}
+
+DepthBuffer create_depth_buffer(VulkanContext *context, VkFormat depth_format) {
+
   DepthBuffer depth_buffer;
-
-  // TODO depth query formats
-  VkFormat depth_format = VK_FORMAT_D32_SFLOAT;
-  depth_buffer.image = create_default_image(context, context->swapchain_extent.width, context->swapchain_extent.height,
-                                            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, depth_format);
-
+  VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  VkExtent2D extent = context->swapchain_extent;
+  depth_buffer.image = create_default_image(context, extent.width, extent.height, usage, depth_format);
   depth_buffer.device_memory = allocate_and_bind_image_memory(context, depth_buffer.image);
 
   depth_buffer.image_view =
       create_default_image_view(context, depth_buffer.image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 
   VkCommandBuffer command_buffer = begin_single_use_command_buffer(context);
-  transition_image_layout(command_buffer, depth_buffer.image, VK_IMAGE_LAYOUT_UNDEFINED,
-                          VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+  VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+  VkImageLayout new_layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  transition_image_layout(command_buffer, depth_buffer.image, old_layout, new_layout);
   end_single_use_command_buffer(context, command_buffer);
 
   return depth_buffer;
 }
 
-SwapchainStorage create_swapchain_storage(VulkanContext *context) {
+SwapchainStorage create_swapchain_storage(VulkanContext *context, VkFormat depth_format) {
   SwapchainStorage storage;
   storage.use_static = true;
 
@@ -735,58 +787,59 @@ SwapchainStorage create_swapchain_storage(VulkanContext *context) {
                                      storage.as.static_storage.images);
   }
 
-  VK_CHECK(result, "get_swapchain_images: Failed to vkGetSwapchainImagesKHR");
+  VK_CHECK(result, "Failed to get swapchain images");
 
   for (u32 i = 0; i < swapchain_image_count; i++) {
+    VkImageAspectFlags aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT;
+    VkFormat surface_format = context->surface_format.format;
 
     if (storage.use_static) {
       VkImage image = storage.as.static_storage.images[i];
-
       storage.as.static_storage.image_views[i] =
-          create_default_image_view(context, image, context->surface_format.format, VK_IMAGE_ASPECT_COLOR_BIT);
+          create_default_image_view(context, image, surface_format, aspect_flags);
     } else {
-
       VkImage image = storage.as.dynamic_storage.images[i];
-
       storage.as.dynamic_storage.image_views[i] =
-          create_default_image_view(context, image, context->surface_format.format, VK_IMAGE_ASPECT_COLOR_BIT);
+          create_default_image_view(context, image, surface_format, aspect_flags);
     }
   }
 
   storage.image_count = swapchain_image_count;
 
   for (u32 i = 0; i < NUM_SWAPCHAIN_IMAGES; i++) {
-    storage.depth_buffers[i] = create_depth_buffer(context);
+    storage.depth_buffers[i] = create_depth_buffer(context, depth_format);
   }
 
   return storage;
 }
 
 VkAttachmentDescription make_color_attachment(VkFormat format) {
-  VkAttachmentDescription color_attachment;
-  color_attachment.flags = 0;
-  color_attachment.format = format;
-  color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-  color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  color_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  color_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  color_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  color_attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  VkAttachmentDescription color_attachment = {
+      .flags = 0,
+      .format = format,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+  };
   return color_attachment;
 }
 
 VkAttachmentDescription make_depth_attachment(VkFormat format) {
-  VkAttachmentDescription depth_attachment;
-  depth_attachment.flags = 0;
-  depth_attachment.format = format;
-  depth_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-  depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  depth_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  depth_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  depth_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  depth_attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  VkAttachmentDescription depth_attachment = {
+      .flags = 0,
+      .format = format,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  };
   return depth_attachment;
 }
 
@@ -795,61 +848,65 @@ VkRenderPass create_render_pass(VkDevice device, u32 num_attachment_descriptions
                                 const VkSubpassDescription *subpass_descriptions, u32 num_dependencies,
                                 const VkSubpassDependency *dependencies) {
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkRenderPassCreateInfo.html
-  VkRenderPassCreateInfo render_pass_create_info;
-  render_pass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  render_pass_create_info.pNext = NULL;
-  render_pass_create_info.flags = 0;
-  render_pass_create_info.attachmentCount = num_attachment_descriptions;
-  render_pass_create_info.pAttachments = attachment_descriptions;
-  render_pass_create_info.subpassCount = num_subpass_descriptions;
-  render_pass_create_info.pSubpasses = subpass_descriptions;
-  render_pass_create_info.dependencyCount = num_dependencies;
-  render_pass_create_info.pDependencies = dependencies;
+  VkRenderPassCreateInfo render_pass_create_info = {
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .attachmentCount = num_attachment_descriptions,
+      .pAttachments = attachment_descriptions,
+      .subpassCount = num_subpass_descriptions,
+      .pSubpasses = subpass_descriptions,
+      .dependencyCount = num_dependencies,
+      .pDependencies = dependencies,
+  };
 
   VkRenderPass render_pass;
-  VK_CHECK(vkCreateRenderPass(device, &render_pass_create_info, NULL, &render_pass),
-           "create_render_pass: Failed to vkCreateRenderPass");
+  VkResult result = vkCreateRenderPass(device, &render_pass_create_info, NULL, &render_pass);
+  VK_CHECK(result, "Failed to create render pass");
   return render_pass;
 }
 
-VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat format) {
-  const u32 num_attachments = 2;
-  VkAttachmentDescription color_attachment = make_color_attachment(format);
-  VkAttachmentDescription depth_attachment = make_depth_attachment(VK_FORMAT_D32_SFLOAT);
+VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat color_format, VkFormat depth_format) {
+  VkAttachmentDescription color_attachment = make_color_attachment(color_format);
+  VkAttachmentDescription depth_attachment = make_depth_attachment(depth_format);
 
-  VkAttachmentDescription attachment_descriptions[num_attachments] = {color_attachment, depth_attachment};
+  VkAttachmentDescription attachment_descriptions[NUM_ATTACHMENTS] = {color_attachment, depth_attachment};
 
-  VkAttachmentReference color_attachment_ref;
-  color_attachment_ref.attachment = 0;
-  color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  VkAttachmentReference color_attachment_ref = {
+      .attachment = 0,
+      .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  };
 
-  VkAttachmentReference depth_attachment_ref;
-  depth_attachment_ref.attachment = 1;
-  depth_attachment_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  VkAttachmentReference depth_attachment_ref = {
+      .attachment = 1,
+      .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+  };
 
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkSubpassDescription.html
-  VkSubpassDescription subpass;
-  subpass.flags = 0;
-  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.inputAttachmentCount = 0;
-  subpass.pInputAttachments = NULL;
-  subpass.pColorAttachments = &color_attachment_ref;
-  subpass.colorAttachmentCount = 1;
-  subpass.pResolveAttachments = NULL;
-  subpass.pDepthStencilAttachment = &depth_attachment_ref;
-  subpass.preserveAttachmentCount = 0;
-  subpass.pPreserveAttachments = NULL;
+  VkSubpassDescription subpass = {
+      .flags = 0,
+      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+      .inputAttachmentCount = 0,
+      .pInputAttachments = NULL,
+      .pColorAttachments = &color_attachment_ref,
+      .colorAttachmentCount = 1,
+      .pResolveAttachments = NULL,
+      .pDepthStencilAttachment = &depth_attachment_ref,
+      .preserveAttachmentCount = 0,
+      .pPreserveAttachments = NULL,
+  };
 
-  VkSubpassDependency dependency;
-  dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-  dependency.dstSubpass = 0;
-  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-  dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-  dependency.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+  VkSubpassDependency dependency = {
+      .srcSubpass = VK_SUBPASS_EXTERNAL,
+      .dstSubpass = 0,
+      .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+      .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+      .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+  };
 
-  return create_render_pass(device, num_attachments, attachment_descriptions, 1, &subpass, 1, &dependency);
+  return create_render_pass(device, NUM_ATTACHMENTS, attachment_descriptions, 1, &subpass, 1, &dependency);
 }
 
 VkRenderPass create_color_render_pass(VkDevice device, VkFormat format) {
@@ -858,31 +915,34 @@ VkRenderPass create_color_render_pass(VkDevice device, VkFormat format) {
 
   VkAttachmentDescription attachment_descriptions[num_attachments] = {color_attachment};
 
-  VkAttachmentReference color_attachment_ref;
-  color_attachment_ref.attachment = 0;
-  color_attachment_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  VkAttachmentReference color_attachment_ref = {
+      .attachment = 0,
+      .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  };
 
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkSubpassDescription.html
-  VkSubpassDescription subpass;
-  subpass.flags = 0;
-  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.inputAttachmentCount = 0;
-  subpass.pInputAttachments = NULL;
-  subpass.pColorAttachments = &color_attachment_ref;
-  subpass.colorAttachmentCount = 1;
-  subpass.pResolveAttachments = NULL;
-  subpass.pDepthStencilAttachment = NULL;
-  subpass.preserveAttachmentCount = 0;
-  subpass.pPreserveAttachments = NULL;
+  VkSubpassDescription subpass = {
+      .flags = 0,
+      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+      .inputAttachmentCount = 0,
+      .pInputAttachments = NULL,
+      .pColorAttachments = &color_attachment_ref,
+      .colorAttachmentCount = 1,
+      .pResolveAttachments = NULL,
+      .pDepthStencilAttachment = NULL,
+      .preserveAttachmentCount = 0,
+      .pPreserveAttachments = NULL,
+  };
 
-  VkSubpassDependency dependency;
-  dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-  dependency.dstSubpass = 0;
-  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-  dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-  dependency.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+  VkSubpassDependency dependency = {
+      .srcSubpass = VK_SUBPASS_EXTERNAL,
+      .dstSubpass = 0,
+      .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+      .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+      .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+  };
 
   return create_render_pass(device, num_attachments, attachment_descriptions, 1, &subpass, 1, &dependency);
 }
@@ -902,8 +962,8 @@ VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass render_pass, u32 
   framebuffer_create_info.layers = 1;
 
   VkFramebuffer framebuffer;
-  VK_CHECK(vkCreateFramebuffer(device, &framebuffer_create_info, NULL, &framebuffer),
-           "create_framebuffer: Failed to vkCreateFramebuffer");
+  VkResult result = vkCreateFramebuffer(device, &framebuffer_create_info, NULL, &framebuffer);
+  VK_CHECK(result, "Failed to create framebuffer");
   return framebuffer;
 }
 
@@ -928,7 +988,7 @@ void recreate_swapchain(VulkanContext *context) {
   context->swapchain =
       create_swapchain(context->device, context->physical_device, context->surface, context->queue_family_indices,
                        context->surface_format, context->surface_capabilities, context->swapchain_extent);
-  create_swapchain_storage(context);
+  create_swapchain_storage(context, find_depth_format(context->physical_device));
   init_framebuffers(context);
 }
 
@@ -944,21 +1004,16 @@ void create_frame_sync_objects(VkDevice device, FrameSyncObjects *frame_sync_obj
   fence_create_info.pNext = NULL;
   fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
+  VkResult result;
   for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    VK_CHECK_VARIADIC(
-        vkCreateSemaphore(device, &semaphore_create_info, NULL, &frame_sync_objects[i].image_available_semaphore),
-        "create_frame_sync_objects: Failed to create image_available_semaphore "
-        "%d",
-        i);
+    result = vkCreateSemaphore(device, &semaphore_create_info, NULL, &frame_sync_objects[i].image_available_semaphore);
+    VK_CHECK_VARIADIC(result, "Failed to create image_available_semaphore %d", i);
 
-    VK_CHECK_VARIADIC(
-        vkCreateSemaphore(device, &semaphore_create_info, NULL, &frame_sync_objects[i].render_finished_semaphore),
-        "create_frame_sync_objects: Failed to create render_finished_semaphore "
-        "%d",
-        i);
+    result = vkCreateSemaphore(device, &semaphore_create_info, NULL, &frame_sync_objects[i].render_finished_semaphore);
+    VK_CHECK_VARIADIC(result, "Failed to create render_finished_semaphore %d", i);
 
-    VK_CHECK_VARIADIC(vkCreateFence(device, &fence_create_info, NULL, &frame_sync_objects[i].in_flight_fence),
-                      "create_frame_sync_objects: Failed to create in_flight_fence %d", i);
+    result = vkCreateFence(device, &fence_create_info, NULL, &frame_sync_objects[i].in_flight_fence);
+    VK_CHECK_VARIADIC(result, "Failed to create in_flight_fence %d", i);
   }
 }
 
@@ -971,8 +1026,8 @@ VkCommandPool create_command_pool(VkDevice device, u32 queue_family_index, bool 
   command_pool_create_info.queueFamilyIndex = queue_family_index;
 
   VkCommandPool command_pool;
-  VK_CHECK(vkCreateCommandPool(device, &command_pool_create_info, NULL, &command_pool),
-           "create_command_pool: failed to vkCreateCommandPool");
+  VkResult result = vkCreateCommandPool(device, &command_pool_create_info, NULL, &command_pool);
+  VK_CHECK(result, "Failed to create command pool");
   return command_pool;
 }
 
@@ -985,8 +1040,8 @@ void allocate_command_buffers(VkDevice device, VkCommandPool command_pool, u32 c
   allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   allocate_info.commandBufferCount = command_buffer_count;
 
-  VK_CHECK(vkAllocateCommandBuffers(device, &allocate_info, command_buffers),
-           "allocate_command_buffer: Failed to vkAllocateCommandBuffers");
+  VkResult result = vkAllocateCommandBuffers(device, &allocate_info, command_buffers);
+  VK_CHECK(result, "Failed to allocate command buffers");
 }
 
 VkPipelineCache create_pipeline_cache(VkDevice device) {
@@ -998,8 +1053,8 @@ VkPipelineCache create_pipeline_cache(VkDevice device) {
   pipeline_cache_create_info.flags = 0;
   pipeline_cache_create_info.initialDataSize = 0;
   pipeline_cache_create_info.pInitialData = NULL;
-  VK_CHECK(vkCreatePipelineCache(device, &pipeline_cache_create_info, NULL, &pipeline_cache),
-           "create_pipeline_cache: Failed to vkCreatePipelineLayout");
+  VkResult result = vkCreatePipelineCache(device, &pipeline_cache_create_info, NULL, &pipeline_cache);
+  VK_CHECK(result, "Failed to create pipeline cache");
   return pipeline_cache;
 }
 
@@ -1128,11 +1183,12 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
   vkGetDeviceQueue(context.device, context.queue_family_indices.graphics_family, 0, &context.graphics_queue);
   vkGetDeviceQueue(context.device, context.queue_family_indices.present_family, 0, &context.present_queue);
   vkGetDeviceQueue(context.device, context.queue_family_indices.compute_family, 0, &context.compute_queue);
-  context.swapchain_storage = create_swapchain_storage(&context);
+  VkFormat depth_format = find_depth_format(context.physical_device);
+  context.swapchain_storage = create_swapchain_storage(&context, depth_format);
 
   // TODO sync this with init_framebuffers()
   // don't need a depth attachment here
-  context.render_pass = create_color_depth_render_pass(context.device, context.surface_format.format);
+  context.render_pass = create_color_depth_render_pass(context.device, context.surface_format.format, depth_format);
 
   init_framebuffers(&context);
 
@@ -1146,9 +1202,9 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
 
   context.pipeline_cache = create_pipeline_cache(context.device);
 
-  VK_CHECK(vkWaitForFences(context.device, 1, &context.frame_sync_objects[context.current_frame_index].in_flight_fence,
-                           VK_TRUE, UINT64_MAX),
-           "new_vulkan_context: Failed to vkWaitForFences");
+  VkResult result = vkWaitForFences(
+      context.device, 1, &context.frame_sync_objects[context.current_frame_index].in_flight_fence, VK_TRUE, UINT64_MAX);
+  VK_CHECK(result, "Failed to wait for fences");
 
   return context;
 }
@@ -1185,7 +1241,8 @@ VulkanBuffer create_buffer_explicit(const VulkanContext *context, VkBufferUsageF
   buffer_create_info.pQueueFamilyIndices = NULL;
 
   VkBuffer buffer;
-  VK_CHECK(vkCreateBuffer(context->device, &buffer_create_info, NULL, &buffer), "Failed to create staging buffer");
+  VkResult result = vkCreateBuffer(context->device, &buffer_create_info, NULL, &buffer);
+  VK_CHECK(result, "Failed to create buffer");
   vulkan_buffer.buffer = buffer;
 
   VkMemoryRequirements memory_requirements;
@@ -1199,16 +1256,16 @@ VulkanBuffer create_buffer_explicit(const VulkanContext *context, VkBufferUsageF
   memory_allocate_info.memoryTypeIndex =
       find_memory_type(context->physical_device, memory_requirements.memoryTypeBits, properties);
 
-  VK_CHECK(vkAllocateMemory(context->device, &memory_allocate_info, NULL, &vulkan_buffer.memory),
-           "create_buffer: failed to vkAllocateMemory");
+  result = vkAllocateMemory(context->device, &memory_allocate_info, NULL, &vulkan_buffer.memory);
+  VK_CHECK(result, "Failed to allocate buffer memory");
 
   VkPhysicalDeviceMemoryProperties memory_properties;
   vkGetPhysicalDeviceMemoryProperties(context->physical_device, &memory_properties);
   vulkan_buffer.memory_property_flags =
       memory_properties.memoryTypes[memory_allocate_info.memoryTypeIndex].propertyFlags;
 
-  VK_CHECK(vkBindBufferMemory(context->device, buffer, vulkan_buffer.memory, 0),
-           "create_buffer: Failed to vkBindBufferMemory");
+  result = vkBindBufferMemory(context->device, buffer, vulkan_buffer.memory, 0);
+  VK_CHECK(result, "Failed to bind buffer memory");
 
   return vulkan_buffer;
 }
@@ -1288,8 +1345,8 @@ void write_to_vulkan_buffer(const VulkanContext *context, const void *src_data, 
   }
 
   void *dest_data;
-  VK_CHECK(vkMapMemory(context->device, vulkan_buffer.memory, aligned_offset, aligned_size, 0, &dest_data),
-           "write_to_vulkan_buffer: Failed to VkMapMemory");
+  VkResult result = vkMapMemory(context->device, vulkan_buffer.memory, aligned_offset, aligned_size, 0, &dest_data);
+  VK_CHECK(result, "Failed to map memory");
   memcpy((char *)dest_data + (offset - aligned_offset), src_data, size);
 
   if (not_coherent) {
@@ -1300,8 +1357,8 @@ void write_to_vulkan_buffer(const VulkanContext *context, const void *src_data, 
     range.offset = aligned_offset;
     range.size = aligned_size;
 
-    VK_CHECK(vkFlushMappedMemoryRanges(context->device, 1, &range),
-             "write_to_vulkan_buffer: Failed to vkFlushMappedMemoryRanges");
+    result = vkFlushMappedMemoryRanges(context->device, 1, &range);
+    VK_CHECK(result, "Failed to flush mapped memory ranges");
   }
 
   vkUnmapMemory(context->device, vulkan_buffer.memory);
@@ -1326,22 +1383,23 @@ VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context) {
   allocate_info.commandBufferCount = 1;
 
   VkCommandBuffer command_buffer;
-  VK_CHECK(vkAllocateCommandBuffers(context->device, &allocate_info, &command_buffer),
-           "allocate_command_buffer: Failed to vkAllocateCommandBuffers");
+  VkResult result = vkAllocateCommandBuffers(context->device, &allocate_info, &command_buffer);
+  VK_CHECK(result, "Failed to allocate command buffer");
 
   VkCommandBufferBeginInfo begin_info;
   begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   begin_info.pNext = 0;
   begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
   begin_info.pInheritanceInfo = NULL;
-  VK_CHECK(vkBeginCommandBuffer(command_buffer, &begin_info),
-           "begin_single_use_command_buffer: Failed to vkBeginCommandBuffer");
+  result = vkBeginCommandBuffer(command_buffer, &begin_info);
+  VK_CHECK(result, "Failed to begin command buffer");
 
   return command_buffer;
 }
 
 void end_single_use_command_buffer(const VulkanContext *context, VkCommandBuffer command_buffer) {
-  VK_CHECK(vkEndCommandBuffer(command_buffer), "end_single_use_command_buffer: failed to vkEndCommandBuffer");
+  VkResult result = vkEndCommandBuffer(command_buffer);
+  VK_CHECK(result, "Failed to end command buffer");
 
   VkSubmitInfo submit_info;
   submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1354,9 +1412,10 @@ void end_single_use_command_buffer(const VulkanContext *context, VkCommandBuffer
   submit_info.signalSemaphoreCount = 0;
   submit_info.pSignalSemaphores = 0;
 
-  VK_CHECK(vkQueueSubmit(context->graphics_queue, 1, &submit_info, VK_NULL_HANDLE),
-           "end_single_use_command_buffer: failed to vkQueueSubmit");
-  VK_CHECK(vkQueueWaitIdle(context->graphics_queue), "end_single_use_command_buffer: failed to vkQueueWaitIdle");
+  result = vkQueueSubmit(context->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+  VK_CHECK(result, "Failed to submit queue");
+  result = vkQueueWaitIdle(context->graphics_queue);
+  VK_CHECK(result, "Failed to wait for queue idle");
 
   vkFreeCommandBuffers(context->device, context->transient_command_pool, 1, &command_buffer);
 }
@@ -1370,8 +1429,8 @@ VkShaderModule create_shader_module(VkDevice device, const u32 *code, u32 code_s
   shader_module_create_info.pCode = code;
 
   VkShaderModule module;
-  VK_CHECK(vkCreateShaderModule(device, &shader_module_create_info, NULL, &module),
-           "create_shader_module: failed to vkCreateShaderModule");
+  VkResult result = vkCreateShaderModule(device, &shader_module_create_info, NULL, &module);
+  VK_CHECK(result, "Failed to create shader module");
   return module;
 }
 
@@ -1591,9 +1650,9 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
   graphics_pipeline_create_info.basePipelineIndex = -1;
 
   VkPipeline graphics_pipeline;
-  VK_CHECK(
-      vkCreateGraphicsPipelines(device, pipeline_cache, 1, &graphics_pipeline_create_info, NULL, &graphics_pipeline),
-      "create_graphics_pipeline: Failed to vkCreateGraphicsPipelines");
+  VkResult result =
+      vkCreateGraphicsPipelines(device, pipeline_cache, 1, &graphics_pipeline_create_info, NULL, &graphics_pipeline);
+  VK_CHECK(result, "Failed to create graphics pipeline");
   return graphics_pipeline;
 }
 
@@ -1609,17 +1668,16 @@ VkPipeline create_default_graphics_pipeline(const VulkanContext *context, VkRend
 }
 
 bool begin_frame(VulkanContext *context) {
-  VK_CHECK(vkWaitForFences(context->device, 1,
-                           &context->frame_sync_objects[context->current_frame_index].in_flight_fence, VK_TRUE,
-                           UINT64_MAX),
-           "begin_frame: failed to vkWaitForFences");
+  VkResult result =
+      vkWaitForFences(context->device, 1, &context->frame_sync_objects[context->current_frame_index].in_flight_fence,
+                      VK_TRUE, UINT64_MAX);
+  VK_CHECK(result, "Failed to wait for fences");
 
   vkResetFences(context->device, 1, &context->frame_sync_objects[context->current_frame_index].in_flight_fence);
 
-  VkResult result =
-      vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX,
-                            context->frame_sync_objects[context->current_frame_index].image_available_semaphore,
-                            VK_NULL_HANDLE, &context->image_index);
+  result = vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX,
+                                 context->frame_sync_objects[context->current_frame_index].image_available_semaphore,
+                                 VK_NULL_HANDLE, &context->image_index);
 
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
     recreate_swapchain(context);
@@ -1627,7 +1685,7 @@ bool begin_frame(VulkanContext *context) {
   }
 
   if (result == VK_ERROR_DEVICE_LOST) {
-    fprintf(stderr, "begin_frame: result = VK_ERROR_DEVICE_LOST");
+    fprintf(stderr, "%s(): result = VK_ERROR_DEVICE_LOST", __func__);
     exit(1);
   }
 
@@ -1644,8 +1702,8 @@ VkCommandBuffer begin_command_buffer(const VulkanContext *context) {
   command_buffer_begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
   command_buffer_begin_info.pInheritanceInfo = NULL;
 
-  VK_CHECK(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info),
-           "begin_command_buffer: failed to vkBeginCommandBuffer");
+  VkResult result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+  VK_CHECK(result, "Failed to begin command buffer");
 
   return command_buffer;
 }
@@ -1682,9 +1740,9 @@ void submit_and_present(const VulkanContext *context, VkCommandBuffer command_bu
   submit_info.signalSemaphoreCount = 1;
   submit_info.pSignalSemaphores = &context->frame_sync_objects[context->current_frame_index].render_finished_semaphore;
 
-  VK_CHECK(vkQueueSubmit(context->graphics_queue, 1, &submit_info,
-                         context->frame_sync_objects[context->current_frame_index].in_flight_fence),
-           "sumbit_and_present: Failed to vkQueueSubmit");
+  VkResult result = vkQueueSubmit(context->graphics_queue, 1, &submit_info,
+                                  context->frame_sync_objects[context->current_frame_index].in_flight_fence);
+  VK_CHECK(result, "Failed to submit queue");
 
   VkPresentInfoKHR present_info;
   present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1697,8 +1755,8 @@ void submit_and_present(const VulkanContext *context, VkCommandBuffer command_bu
   present_info.pResults = NULL;
 
   // TODO handle swapchain recreation here if need be
-  VK_CHECK(vkQueuePresentKHR(context->graphics_queue, &present_info),
-           "sumbit_and_present: Failed to vkQueuePresentKHR");
+  result = vkQueuePresentKHR(context->graphics_queue, &present_info);
+  VK_CHECK(result, "Failed to present queue");
 }
 
 VkPipelineVertexInputStateCreateInfo
@@ -1735,8 +1793,8 @@ VkPipelineLayout create_pipeline_layout(VkDevice device, const VkDescriptorSetLa
   pipeline_layout_create_info.pPushConstantRanges = NULL;
 
   VkPipelineLayout pipeline_layout;
-  VK_CHECK(vkCreatePipelineLayout(device, &pipeline_layout_create_info, NULL, &pipeline_layout),
-           "create_graphics_pipeline: Failed to vkCreatePipelineLayout");
+  VkResult result = vkCreatePipelineLayout(device, &pipeline_layout_create_info, NULL, &pipeline_layout);
+  VK_CHECK(result, "Failed to create pipeline layout");
   return pipeline_layout;
 }
 
@@ -1752,8 +1810,8 @@ VkDescriptorPool create_descriptor_pool(VkDevice device, const VkDescriptorPoolS
   descriptor_pool_create_info.pPoolSizes = pool_sizes;
 
   VkDescriptorPool descriptor_pool;
-  VK_CHECK(vkCreateDescriptorPool(device, &descriptor_pool_create_info, NULL, &descriptor_pool),
-           "create_descriptor_pool: Failed to vkCreateDescriptorPool");
+  VkResult result = vkCreateDescriptorPool(device, &descriptor_pool_create_info, NULL, &descriptor_pool);
+  VK_CHECK(result, "Failed to create descriptor pool");
   return descriptor_pool;
 }
 
@@ -1768,8 +1826,8 @@ VkDescriptorSet create_descriptor_set(VkDevice device, VkDescriptorPool descript
   descriptor_set_allocate_info.pSetLayouts = descriptor_set_layout;
 
   VkDescriptorSet descriptor_set;
-  VK_CHECK(vkAllocateDescriptorSets(device, &descriptor_set_allocate_info, &descriptor_set),
-           "create_descriptor_set: failed to vkAllocateDescriptorSets");
+  VkResult result = vkAllocateDescriptorSets(device, &descriptor_set_allocate_info, &descriptor_set);
+  VK_CHECK(result, "Failed to allocate descriptor set");
   return descriptor_set;
 }
 
@@ -1785,8 +1843,9 @@ VkDescriptorSetLayout create_descriptor_set_layout(VkDevice device, const VkDesc
   descriptor_set_layout_create_info.pBindings = bindings;
 
   VkDescriptorSetLayout descriptor_set_layout;
-  VK_CHECK(vkCreateDescriptorSetLayout(device, &descriptor_set_layout_create_info, NULL, &descriptor_set_layout),
-           "create_descriptor_set_layout: failed to vkCreateDescriptorSetLayout");
+  VkResult result =
+      vkCreateDescriptorSetLayout(device, &descriptor_set_layout_create_info, NULL, &descriptor_set_layout);
+  VK_CHECK(result, "Failed to create descriptor set layout");
 
   return descriptor_set_layout;
 }
@@ -1894,9 +1953,9 @@ UniformBuffer create_uniform_buffer(const VulkanContext *context, u32 buffer_siz
   uniform_buffer.vulkan_buffer = create_buffer(context, BUFFER_TYPE_UNIFORM, buffer_size);
   uniform_buffer.size = buffer_size;
 
-  VK_CHECK(vkMapMemory(context->device, uniform_buffer.vulkan_buffer.memory, 0, buffer_size, 0,
-                       (void **)&uniform_buffer.mapped),
-           "create_uniform_buffer: failed to vkMapMemory");
+  VkResult result = vkMapMemory(context->device, uniform_buffer.vulkan_buffer.memory, 0, buffer_size, 0,
+                                (void **)&uniform_buffer.mapped);
+  VK_CHECK(result, "Failed to map uniform buffer memory");
 
   return uniform_buffer;
 }
@@ -1916,9 +1975,9 @@ ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *contex
   readonly_storage_buffer.vulkan_buffer = create_buffer(context, BUFFER_TYPE_READONLY_STORAGE, buffer_size);
   readonly_storage_buffer.size = buffer_size;
 
-  VK_CHECK(vkMapMemory(context->device, readonly_storage_buffer.vulkan_buffer.memory, 0, buffer_size, 0,
-                       (void **)&readonly_storage_buffer.mapped),
-           "create_readonly_storage_buffer: failed to vkMapMemory");
+  VkResult result = vkMapMemory(context->device, readonly_storage_buffer.vulkan_buffer.memory, 0, buffer_size, 0,
+                                (void **)&readonly_storage_buffer.mapped);
+  VK_CHECK(result, "Failed to map storage buffer memory");
 
   return readonly_storage_buffer;
 }
@@ -2009,9 +2068,9 @@ void load_vulkan_textures(VulkanContext *context, const VulkanImageData *image_d
   // TODO find a way to reuse another staging buffer, already allocated
   VulkanBuffer staging_buffer = create_buffer(context, BUFFER_TYPE_STAGING, max_size);
   void *texture_data;
-  VK_CHECK(
-      vkMapMemory(context->device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data),
-      "load_vulkan_textures: failed to VkMapMemory");
+  VkResult result =
+      vkMapMemory(context->device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data);
+  VK_CHECK(result, "Failed to map staging buffer memory");
 
   for (u32 i = 0; i < num_images; i++) {
     out_textures[i] = create_vulkan_texture(context, image_datas[i], staging_buffer, texture_data);
@@ -2051,7 +2110,8 @@ VkSampler create_sampler(VkDevice device) {
   sampler_create_info.unnormalizedCoordinates = VK_FALSE;
 
   VkSampler sampler;
-  VK_CHECK(vkCreateSampler(device, &sampler_create_info, NULL, &sampler), "create_sampler: failed to vkCreateSampler");
+  VkResult result = vkCreateSampler(device, &sampler_create_info, NULL, &sampler);
+  VK_CHECK(result, "Failed to create sampler");
   return sampler;
 }
 
@@ -2339,7 +2399,7 @@ ColorDepthFramebuffer create_color_depth_framebuffer(const VulkanContext *contex
                                                      VkFormat color_format, VkFormat depth_format) {
   ColorDepthFramebuffer color_depth_framebuffer;
 
-  color_depth_framebuffer.render_pass = create_color_depth_render_pass(context->device, color_format);
+  color_depth_framebuffer.render_pass = create_color_depth_render_pass(context->device, color_format, depth_format);
 
   color_depth_framebuffer.color_image =
       create_default_image(context, extent.width, extent.height,

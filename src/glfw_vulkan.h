@@ -1,3 +1,5 @@
+#pragma once
+
 #define GLFW_INCLUDE_VULKAN
 #include "GLFW/glfw3.h"
 #include "vulkan/vulkan_base.h"
@@ -5,11 +7,10 @@
 // https://www.glfw.org/docs/latest/group__vulkan.html#ga9308f2acf6b5f6ff49cf0d4aa9ba1fab
 // https://www.glfw.org/docs/latest/vulkan_guide.html#vulkan_surface
 // https://www.glfw.org/docs/latest/vulkan_guide.html#vulkan_ext
-
 static inline VkSurfaceKHR create_glfw_vulkan_surface(VkInstance instance, void *window) {
   VkSurfaceKHR surface;
-  VK_CHECK(glfwCreateWindowSurface(instance, (GLFWwindow *)window, NULL, &surface),
-           "create_surface: Failed to createWindowSurface\n");
+  VkResult result = glfwCreateWindowSurface(instance, (GLFWwindow *)window, NULL, &surface);
+  VK_CHECK(result, "Failed to glfwCreateWindowSurface\n");
   return surface;
 }
 

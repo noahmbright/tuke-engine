@@ -11,12 +11,10 @@ typedef uint32_t u32;
 typedef uint64_t u64;
 typedef int32_t i32;
 
-// TODO adapt to print validation layer errors on failure
 #define VK_CHECK(result, fmt)                                                                                          \
   do {                                                                                                                 \
     if ((result) != VK_SUCCESS) {                                                                                      \
-      const char *type = vk_result_string(result);                                                                     \
-      fprintf(stderr, "Vulkan error of type %s at %s:%d\n" fmt "\n", type, __FILE__, __LINE__);                        \
+      fprintf(stderr, "[%s] %s:%d — %s: " fmt "\n", __func__, __FILE__, __LINE__, vk_result_string(result));           \
       fflush(stderr);                                                                                                  \
       fflush(stdout);                                                                                                  \
       assert(0);                                                                                                       \
@@ -26,17 +24,21 @@ typedef int32_t i32;
 #define VK_CHECK_VARIADIC(result, fmt, ...)                                                                            \
   do {                                                                                                                 \
     if ((result) != VK_SUCCESS) {                                                                                      \
-      fprintf(stderr, "Vulkan error at %s:%d\n" fmt "\n", __FILE__, __LINE__, __VA_ARGS__);                            \
-      exit(1);                                                                                                         \
+      fprintf(stderr, "[%s] %s:%d — %s: " fmt "\n", __func__, __FILE__, __LINE__, vk_result_string(result),            \
+              __VA_ARGS__);                                                                                            \
+      fflush(stderr);                                                                                                  \
+      fflush(stdout);                                                                                                  \
+      assert(0);                                                                                                       \
     }                                                                                                                  \
   } while (0)
 
 #define NUM_SWAPCHAIN_IMAGES (4)
 #define MAX_FRAMES_IN_FLIGHT (2)
-#define NUM_QUEUE_FAMILY_INDICES (3)
-#define NUM_ATTACHMENTS (2) // 0 color, 1 depth
+#define NUM_QUEUE_FAMILY_INDICES (3) // Graphics, Compute, Present
+#define NUM_ATTACHMENTS (2)          // 0 color, 1 depth
 #define MAX_SHADER_STAGE_COUNT (5)
 #define MAX_PHYSICAL_DEVICES (16)
+#define MAX_QUEUE_FAMILIES (16)
 #define MAX_COPY_REGIONS (32)
 #define MAX_VERTEX_BINDINGS (4)
 #define MAX_VERTEX_ATTRIBUTES (4)
@@ -532,7 +534,8 @@ VkRenderPass create_render_pass(VkDevice device, u32 num_attachment_descriptions
                                 const VkSubpassDescription *subpass_descriptions, u32 num_dependencies,
                                 const VkSubpassDependency *dependencies);
 
-VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat format);
+VkFormat find_depth_format(VkPhysicalDevice physical_device);
+VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat color_format, VkFormat depth_format);
 VkRenderPass create_color_render_pass(VkDevice device, VkFormat format);
 
 VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass render_pass, u32 num_attachments,
