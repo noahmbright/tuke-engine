@@ -1,29 +1,15 @@
-#include "c_reflector_bringup.h"
-#include "utils.h"
 #define GLM_ENABLE_EXPERIMENTAL
 
-#include "generated_shader_utils.h"
-
+#include "vulkan_test.h"
+#include "c_reflector_bringup.h"
 #include "camera.h"
+#include "generated_shader_utils.h"
 #include "glfw_vulkan.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/gtx/string_cast.hpp"
-#include "tuke_engine.h"
+#include "utils.h"
 #include "vulkan/vulkan_base.h"
-#include "vulkan_test.h"
 #include "window.h"
-
-#if 0
-static const VkPipelineVertexInputStateCreateInfo empty_vertex_input_state = {
-    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-    .pNext = NULL,
-    .flags = 0,
-    .vertexBindingDescriptionCount = 0,
-    .pVertexBindingDescriptions = NULL,
-    .vertexAttributeDescriptionCount = 0,
-    .pVertexAttributeDescriptions = NULL,
-};
-#endif
 
 int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
@@ -79,6 +65,8 @@ int main() {
   UniformWrite camera_vp_handle = push_uniform(&ub_manager, sizeof(CameraVP));
   UniformBuffer global_uniform_buffer = create_uniform_buffer(&context, ub_manager.current_offset);
 
+  // It is unacceptable that I need to think this hard about sets and bindings in the app.
+  // Stateful builders are kind of ugly.
   // for simple.frag.in, x uniform is set/binding 0/0
   DescriptorSetBuilder simple_set_builder = create_descriptor_set_builder(&context);
 
@@ -88,9 +76,9 @@ int main() {
                                     camera_vp_handle.size, 1, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
   add_uniform_buffer_descriptor_set(&simple_set_builder, &global_uniform_buffer, light_position_handle.offset,
                                     light_position_handle.size, 2, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
-  DescriptorSetHandle simple__descriptor = build_descriptor_set(&simple_set_builder, descriptor_pool);
+  DescriptorSetHandle simple_descriptor = build_descriptor_set(&simple_set_builder, descriptor_pool);
   VkPipelineLayout x_pipeline_layout =
-      create_pipeline_layout(context.device, &simple__descriptor.descriptor_set_layout, 1);
+      create_pipeline_layout(context.device, &simple_descriptor.descriptor_set_layout, 1);
 
   // instanced quad: the mvp uniform is set/binding 0/0, the float is 0/1
   DescriptorSetBuilder mvp_set_builder = create_descriptor_set_builder(&context);
@@ -160,7 +148,7 @@ int main() {
   triangle_render_call.vertex_buffers[0] = vertex_buffer->buffer;
   triangle_render_call.pipeline_layout = x_pipeline_layout;
   triangle_render_call.num_descriptor_sets = 1;
-  triangle_render_call.descriptor_sets[0] = simple__descriptor.descriptor_set;
+  triangle_render_call.descriptor_sets[0] = simple_descriptor.descriptor_set;
   triangle_render_call.is_indexed = false;
 
   RenderCall square_render_call;
@@ -172,7 +160,7 @@ int main() {
   square_render_call.vertex_buffers[0] = vertex_buffer->buffer;
   square_render_call.pipeline_layout = x_pipeline_layout;
   square_render_call.num_descriptor_sets = 1;
-  square_render_call.descriptor_sets[0] = simple__descriptor.descriptor_set;
+  square_render_call.descriptor_sets[0] = simple_descriptor.descriptor_set;
   square_render_call.is_indexed = false;
 
   RenderCall cube_render_call;
@@ -253,10 +241,7 @@ int main() {
     CameraMatrices camera_matrices = create_camera_matrices(&camera, width, height);
     camera_vp = camera_matrices.projection * camera_matrices.view;
 
-    if (!begin_frame(&context)) {
-      fprintf(stderr, "Failed to begin frame\n");
-      continue;
-    }
+    begin_frame(&context);
 
     write_to_uniform_buffer(&global_uniform_buffer, &mvp, mvp_handle);
     write_to_uniform_buffer(&global_uniform_buffer, &cube_model, cube_model_handle);
@@ -323,6 +308,7 @@ int main() {
 #endif
   }
 
+  // This is all too manual. Need a deletion queue managed internally.
   // cleanup
   vkDeviceWaitIdle(context.device);
 
@@ -334,7 +320,7 @@ int main() {
   free_generated_shader_vk_modules(context.device);
 
   destroy_color_depth_framebuffer(&context, &offscreen_framebuffer);
-  destroy_descriptor_set_handle(context.device, &simple__descriptor);
+  destroy_descriptor_set_handle(context.device, &simple_descriptor);
   destroy_descriptor_set_handle(context.device, &mvp_descriptor);
   destroy_descriptor_set_handle(context.device, &cube_descriptor);
   destroy_descriptor_set_handle(context.device, &fullscreen_quad_descriptor);

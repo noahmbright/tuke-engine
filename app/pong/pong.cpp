@@ -8,8 +8,8 @@
 #include "statistics.h"
 #include "transform.h"
 #include "tuke_engine.h"
-#include "vulkan/vulkan_core.h"
 #include "vulkan/vulkan_base.h"
+#include "vulkan/vulkan_core.h"
 #include "window.h"
 
 static const char *texture_names[NUM_TEXTURES] = {"textures/generic_girl.jpg", "textures/pong/field_background.jpg",
@@ -290,10 +290,7 @@ void destroy_state(State *state) {
 void render(State *state) {
   VulkanContext *ctx = &state->context;
 
-  if (!begin_frame(ctx)) {
-    fprintf(stderr, "Failed to begin frame\n");
-    return;
-  }
+  begin_frame(ctx);
 
   VkCommandBuffer command_buffer = begin_command_buffer(ctx);
   begin_render_pass(ctx, command_buffer, ctx->render_pass, ctx->framebuffers[ctx->image_index], state->clear_values, 2,

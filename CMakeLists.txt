@@ -31,8 +31,8 @@ endfunction()
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/app/og_main/main.cpp)
 add_game_executable(${PROJECT_NAME})
 
-add_executable(vulkan_test ${CMAKE_SOURCE_DIR}/app/vulkan_test/vulkan_test.cpp)
-add_game_executable(vulkan_test)
+#add_executable(vulkan_test ${CMAKE_SOURCE_DIR}/app/vulkan_test/vulkan_test.cpp)
+#add_game_executable(vulkan_test)
 
 add_executable(opengl_test ${CMAKE_SOURCE_DIR}/app/opengl_test/opengl_test.cpp)
 add_game_executable(opengl_test)
@@ -48,7 +48,7 @@ file(GLOB_RECURSE PONG_SOURCE_FILES
 add_executable(pong ${PONG_SOURCE_FILES})
 add_game_executable(pong)
 
-file(GLOB VULKAN_TEST_FILES ${CMAKE_SOURCE_DIR}/app/vulkan_tests/*.cpp)
+file(GLOB VULKAN_TEST_FILES ${CMAKE_SOURCE_DIR}/app/vulkan_test/*.cpp)
 foreach(test_file ${VULKAN_TEST_FILES})
     get_filename_component(test_name ${test_file} NAME_WE)
     add_executable(${test_name} ${test_file})

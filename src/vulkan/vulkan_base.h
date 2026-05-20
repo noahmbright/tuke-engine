@@ -32,8 +32,13 @@ typedef int32_t i32;
     }                                                                                                                  \
   } while (0)
 
-#define NUM_SWAPCHAIN_IMAGES (4)
+// Frames in flight is usually not increased very high because it increases
+// latency between user input and rendering for a given frame.
+// Frames in flight only applies to resources shared by the CPU and GPU.
+// Resources used only by the GPU do not need multi-buffered.
 #define MAX_FRAMES_IN_FLIGHT (2)
+
+#define NUM_SWAPCHAIN_IMAGES (4)
 #define NUM_QUEUE_FAMILY_INDICES (3) // Graphics, Compute, Present
 #define NUM_ATTACHMENTS (2)          // 0 color, 1 depth
 #define MAX_SHADER_STAGE_COUNT (5)
@@ -152,14 +157,12 @@ struct ShaderModule {
 
 struct VulkanContext {
   // needed most often
-  // GLFWwindow *window;
   VkDevice device;
   VkQueue graphics_queue;
   VkQueue present_queue;
   VkQueue compute_queue;
   u32 image_index;
 
-  VkSurfaceCapabilitiesKHR surface_capabilities;
   VkSwapchainKHR swapchain;
   VkSurfaceFormatKHR surface_format;
   VkExtent2D swapchain_extent;
@@ -424,7 +427,7 @@ VkPipeline create_default_graphics_pipeline(const VulkanContext *context, VkRend
                                             const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
                                             VkPipelineLayout pipeline_layout);
 
-bool begin_frame(VulkanContext *context);
+void begin_frame(VulkanContext *context);
 VkCommandBuffer begin_command_buffer(const VulkanContext *context);
 
 ViewportState create_viewport_state_offset(VkExtent2D swapchain_extent, VkOffset2D offset);

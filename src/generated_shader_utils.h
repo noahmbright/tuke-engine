@@ -2,6 +2,9 @@
 #include "c_reflector_bringup.h"
 
 // TODO need to include vulkan base after generated headers because opengl cruft
+//      Do I even want to include both of these every time? Where can I be smart and
+//      pick only what I'm using?
+//      I also think these APIs are kind of ugly
 #include "opengl_base.h"
 #include "vulkan/vulkan_base.h"
 
