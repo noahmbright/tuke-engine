@@ -15,7 +15,8 @@ def main():
     parser.add_argument("--no-shaders", action="store_true", help="Skip shader compilation")
     parser.add_argument("--force-shaders", action="store_true", help="Force shader compilation")
     parser.add_argument("--no-build", action="store_true", help="Skip building")
-    parser.add_argument("--run", type=str, default="", help="Executable to run from ./build/")
+    parser.add_argument("--target", type=str, default="", help="Make target to build (default: all)")
+    parser.add_argument("--run", type=str, default="", help="Executable to run (builds only that target)")
     args = parser.parse_args()
 
     if not os.path.isdir("build"):
@@ -36,7 +37,12 @@ def main():
             exit(1)
 
     if not args.no_build:
-        subprocess.run(["make", "-C", "build"], check=True)
+        target = args.target or args.run
+        make_cmd = ["make", "-C", "build"]
+        if target:
+            print(f"Building target: {target}")
+            make_cmd.append(target)
+        subprocess.run(make_cmd, check=True)
 
     if args.run != "":
         exe_path = f"./build/{args.run}"
