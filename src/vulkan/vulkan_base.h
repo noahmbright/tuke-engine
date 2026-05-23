@@ -156,11 +156,13 @@ struct ShaderModule {
 };
 
 struct VulkanContext {
-  // needed most often
   VkDevice device;
   VkQueue graphics_queue;
   VkQueue present_queue;
   VkQueue compute_queue;
+
+  // Populated by vkAcquireNextImageKHR so we can get the right framebuffer images.
+  // TODO might want to get this and pass around instead of caching.
   u32 image_index;
 
   VkSwapchainKHR swapchain;
@@ -175,15 +177,15 @@ struct VulkanContext {
   VkFramebuffer framebuffers[NUM_SWAPCHAIN_IMAGES];
 
   FrameSyncObjects frame_sync_objects[MAX_FRAMES_IN_FLIGHT];
-  u64 current_frame;
   u8 current_frame_index;
 
+  // TODO should these be per swapchain image or per frame in flight?
   VkCommandBuffer graphics_command_buffers[NUM_SWAPCHAIN_IMAGES];
   VkCommandBuffer compute_command_buffers[NUM_SWAPCHAIN_IMAGES];
 
   VkPipelineCache pipeline_cache;
 
-  // init
+  // Init
   VkInstance instance;
   VkDebugUtilsMessengerEXT debug_messenger;
   VkSurfaceKHR surface;
@@ -195,6 +197,8 @@ struct VulkanContext {
   VkCommandPool compute_command_pool;
   VkCommandPool present_command_pool;
   VkCommandPool transient_command_pool;
+
+  // These bools stored so we know to destroy the queue differently on teardown.
   bool compute_queue_index_is_different_than_graphics;
   bool present_queue_index_is_different_than_graphics;
 };
@@ -559,3 +563,5 @@ void destroy_color_depth_framebuffer(const VulkanContext *context, ColorDepthFra
 
 void transition_image_layout(VkCommandBuffer command_buffer, VkImage image, VkImageLayout old_layout,
                              VkImageLayout new_layout);
+
+void update_frame_index(VulkanContext *context);

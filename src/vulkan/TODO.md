@@ -10,8 +10,11 @@ manages backend state and calls raw Vulkan — this all needs to move into the b
 - `vkEndCommandBuffer` — raw Vulkan, belongs in the backend
 - `vkCmdSetViewport` / `vkCmdSetScissor` — always called together after begin_render_pass, should fold in
 - `context.framebuffers[context.image_index]` — app manages framebuffer selection
-- `context.current_frame++` / `context.current_frame_index = ...` — app increments backend state
 - `NUM_ATTACHMENTS` — backend constant leaking into test code
+
+**Done:**
+- `context.current_frame++` / `context.current_frame_index = ...` — replaced by `update_frame_index()`
+- `current_frame` removed from `VulkanContext` — now lives in game State
 
 **Target API:**
 ```cpp
@@ -52,6 +55,21 @@ shader_handles_to_graphics_pipeline(&context, render_pass,
 create_pipeline(&context, SHADER_HARDCODED_TRIANGLE, layout);
 ```
 
+**Single-file shader format (additive, not a rewrite).**
+Allow writing vert and frag stages in one `.shader.in` file, separated by a stage marker:
+```glsl
+#stage vertex
+// ... vert source ...
+
+#stage fragment
+// ... frag source ...
+```
+The reflector splits on the marker, processes each stage through the existing `.vert.in` / `.frag.in`
+pipeline, and emits a single program handle. Existing `.vert.in` + `.frag.in` pairs continue to
+work — the single-file format is an extension, not a replacement. Migrate shaders incrementally.
+Primary benefit: one enum instead of two, vert/frag varyings visible in the same file so
+interface mismatches are obvious at a glance.
+
 **Enum names encode filesystem path.**
 `SHADER_HANDLE_COMMON_HARDCODED_TRIANGLE_VERT` — the SHADER_HANDLE_ prefix, COMMON_ directory
 component, and _VERT stage suffix are all noise at the callsite. Drop prefix and stage suffix
@@ -65,6 +83,15 @@ calls should be replaced by generated code.
 **No source path in ShaderSpec.**
 Hot reloading needs the path to the .in file at runtime. Add `const char *source_path` to
 ShaderSpec. Dev builds watch this path and trigger recompilation + pipeline recreation.
+
+**Dev/release shader compilation split.**
+Dev builds should compile shaders from source at startup (subprocess to glslc/glslangValidator,
+same machinery the reflector already uses). Release builds use SPIR-V baked as C arrays by the
+reflector (already emitted). Single `#ifdef TUKE_DEV` branch in `get_shader_spirv(handle)` —
+`VkShaderModule` creation is identical in both paths. This is the low-cost path to hot reload:
+startup recompile first (trivial), file watching later. Pipeline recreation on change requires
+the render loop to hold pipelines by index/pointer so the handle can be swapped; `vkDeviceWaitIdle`
+is acceptable for dev. Double-buffered pipelines needed only for seamless reload without a hitch.
 
 **Push constant parsing is a stub.**
 parse_push_constant_directive() does nothing.
@@ -102,6 +129,10 @@ create_default_graphics_pipeline takes VulkanContext*. Pick one.
 **generated_shader_utils.cpp mixes concerns.**
 Shader module init/teardown belongs there. Pipeline creation (shader_handles_to_graphics_pipeline)
 is a pipeline concern and should move closer to create_graphics_pipeline once program handles exist.
+OpenGL shader linking (`link_gl_program`) has been moved to `opengl_base.h` — Vulkan and OpenGL
+concerns are now separated at the file level. The include of `opengl_base.h` from
+`generated_shader_utils.h` still couples them at compile time; deferred until per-backend
+compilation is addressed.
 
 ---
 
@@ -144,6 +175,29 @@ Deferred pending render pass / dynamic rendering redesign. Issues to revisit:
 - Depth clear value appears in tests that don't use depth
 - Consider VK_KHR_dynamic_rendering to drop render passes entirely
 - Color-only render pass: create_color_render_pass exists but no framebuffer creation helper
+
+---
+
+## Housekeeping
+
+**`state.current_frame` double increment in pong.**
+`render()` does `state->current_frame++` and `main.cpp` does `state.current_frame++` after
+returning from `render`. Frame counter incremented twice per loop; FPS reads double. Remove
+the increment from `render()` — the counter belongs to the loop owner.
+
+**`BUFFER_SIZE` macro define/undef in `opengl_base.h`.**
+`#define BUFFER_SIZE 512` sits at file scope in a header, undef'd after `link_gl_program`.
+Fragile pattern. Replace with `constexpr int` or a plain literal inside the function.
+
+**`vkQueueWaitIdle` in `end_single_use_command_buffer`.**
+Blocks the CPU until the entire graphics queue drains. Correct for init-time uploads (texture
+loading, layout transitions) but unusable for runtime streaming. If runtime texture loading is
+ever needed, replace with a fence-based async path.
+
+**Command buffers sized by `NUM_SWAPCHAIN_IMAGES` instead of `MAX_FRAMES_IN_FLIGHT`.**
+`graphics_command_buffers[NUM_SWAPCHAIN_IMAGES]` — correct count is `MAX_FRAMES_IN_FLIGHT`.
+Currently safe because `NUM_SWAPCHAIN_IMAGES (4) > MAX_FRAMES_IN_FLIGHT (2)`, but semantically
+wrong and fragile if either constant changes.
 
 ---
 

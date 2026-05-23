@@ -21,8 +21,8 @@ void init_buffers(State *state) {
   // big vertex/index buffers
   BufferUploadQueue buffer_upload_queue = create_buffer_upload_queue();
 
-  // const BufferHandle *unit_quad_vertices_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, paddle_vertices);
-  // const BufferHandle *quad_inices_slice = UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
+  UPLOAD_VERTEX_ARRAY(buffer_upload_queue, paddle_vertices);
+  UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
 
   state->buffer_manager = flush_buffers(ctx, &buffer_upload_queue);
 
@@ -118,19 +118,20 @@ void init_paddles_material(State *state) {
       shader_handles_to_graphics_pipeline(&state->context, state->context.render_pass, SHADER_HANDLE_PONG_PADDLE_VERT,
                                           SHADER_HANDLE_PONG_PADDLE_FRAG, state->paddle_material.pipeline_layout);
 
-  mat->render_call.instance_count = InstanceDataUBO_model_array_size;
-  mat->render_call.graphics_pipeline = mat->pipeline;
-  mat->render_call.pipeline_layout = mat->pipeline_layout;
-  mat->render_call.num_descriptor_sets = 2;
-  mat->render_call.descriptor_sets[0] = vp_handle->descriptor_set;
-  mat->render_call.descriptor_sets[1] = paddle_handle->descriptor_set;
-  mat->render_call.num_vertex_buffers = 1;
-  mat->render_call.vertex_buffer_offsets[0] = 0;
-  mat->render_call.vertex_buffers[0] = state->buffer_manager.vertex_buffer.buffer;
-  mat->render_call.index_buffer_offset = 0;
-  mat->render_call.num_indices = 6;
-  mat->render_call.index_buffer = state->buffer_manager.index_buffer.buffer;
-  mat->render_call.is_indexed = true;
+  RenderCall *c = &mat->render_call;
+  c->instance_count = InstanceDataUBO_model_array_size;
+  c->graphics_pipeline = mat->pipeline;
+  c->pipeline_layout = mat->pipeline_layout;
+  c->num_descriptor_sets = 2;
+  c->descriptor_sets[0] = vp_handle->descriptor_set;
+  c->descriptor_sets[1] = paddle_handle->descriptor_set;
+  c->num_vertex_buffers = 1;
+  c->vertex_buffer_offsets[0] = 0;
+  c->vertex_buffers[0] = state->buffer_manager.vertex_buffer.buffer;
+  c->index_buffer_offset = 0;
+  c->num_indices = 6;
+  c->index_buffer = state->buffer_manager.index_buffer.buffer;
+  c->is_indexed = true;
 }
 
 static void init_transforms(State *state) {
@@ -154,6 +155,7 @@ static void init_transforms(State *state) {
 
 State setup_state(const char *title) {
   State state;
+  state.current_frame = 0;
   state.arena_dimensions = arena_dimensions0;
   init_inputs(&state.inputs);
   state.game_mode = GAMEMODE_MAIN_MENU;
@@ -165,6 +167,7 @@ State setup_state(const char *title) {
   VulkanWindowInfo window_info = create_glfw_vulkan_window_info(state.window);
   state.context = create_vulkan_context(title, window_info);
   VulkanContext *ctx = &state.context;
+  init_generated_shader_vk_modules(ctx->device);
 
   VulkanImageData image_datas[NUM_TEXTURES];
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
@@ -283,7 +286,6 @@ void destroy_state(State *state) {
 
   destroy_buffer_manager(&state->buffer_manager);
   destroy_uniform_buffer(ctx, &state->uniform_buffer);
-
   destroy_vulkan_context(ctx);
 }
 
@@ -305,8 +307,8 @@ void render(State *state) {
   VK_CHECK(vkEndCommandBuffer(command_buffer), "Failed to end command buffer");
   submit_and_present(ctx, command_buffer);
 
-  ctx->current_frame++;
-  ctx->current_frame_index = ctx->current_frame % MAX_FRAMES_IN_FLIGHT;
+  state->current_frame++;
+  update_frame_index(ctx);
 }
 
 void process_inputs_paused(State *state) {

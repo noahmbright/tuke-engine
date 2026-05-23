@@ -47,7 +47,11 @@ def main():
     if args.run != "":
         exe_path = f"./build/{args.run}"
         print(f"Running {exe_path}...")
-        subprocess.run([exe_path], check=True)
+        try:
+            subprocess.run([exe_path], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"{exe_path} exited with code {e.returncode}")
+            sys.exit(e.returncode)
 
 if __name__ == "__main__":
     main()

@@ -1,13 +1,9 @@
-#include "camera.h"
 #include "pong.h"
-#include "vulkan/vulkan_base.h"
-#include <vulkan/vulkan_core.h>
 
 int main() {
 
   const char *tuke_pong_string = "Tuke Pong";
   State state = setup_state(tuke_pong_string);
-  // VulkanContext *ctx = &state.context;
   char title[64];
 
   // main loop
@@ -29,8 +25,7 @@ int main() {
     render(&state);
 
     if (second_accumulator > 0.0f) {
-      u64 total_frames = state.context.current_frame;
-      f64 fps = total_frames / total_time;
+      f64 fps = state.current_frame / total_time;
       snprintf(title, sizeof(title), "My Vulkan App - %.1f FPS", fps);
       glfwSetWindowTitle(state.window, title);
     }

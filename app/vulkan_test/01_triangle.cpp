@@ -31,7 +31,7 @@ int main() {
   // Why do framebuffers own render passes?
   // Should I do a slang/wgsl like thing in the reflector where I can just write both shaders
   // in one file?
-  VkPipeline triangle_pipeline =
+  VkPipeline pipeline =
       shader_handles_to_graphics_pipeline(&context, context.render_pass, SHADER_HANDLE_COMMON_HARDCODED_TRIANGLE_VERT,
                                           SHADER_HANDLE_COMMON_HARDCODED_TRIANGLE_FRAG, pipeline_layout);
 
@@ -40,26 +40,36 @@ int main() {
   RenderCall render_call = {
       .num_vertices = 3,
       .instance_count = 1,
-      .graphics_pipeline = triangle_pipeline,
+      .graphics_pipeline = pipeline,
       .pipeline_layout = pipeline_layout,
       .is_indexed = false,
   };
 
   // TODO actual todo - want swapchain recreation and resizeable window in this test.
-  u64 current_frame = 0;
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
 
-    // TODO need this understood better. Need to address why frame start failure
-    // would happen. Need to handle different cases (maybe). Also should I handle this
-    // in the backend?
-    // TODO sync around here.
+    // TODO Need this understood better. Need to address why frame start failure would happen.
+    //      Need to handle different cases (maybe). Also should I handle this in the backend?
+    // TODO sync around here, this whole while loop.
+    // TODO would like this to read a little bit more functionally. Will need a way to keep
+    //      my state tracking robust.
     begin_frame(&context);
 
-    // This loop is too complicated to wire manually. I forget to end render passes
-    // and command buffers in the right order.
-    // All of these are raw vulkan calls that belong in the backend.
+    // TODO do we want to have begin frame return a command buffer for this frame?
+    //      That should all be handled internally. Maybe we need one big function to
+    //      do all drawing, using all data to draw in this frame.
     VkCommandBuffer command_buffer = begin_command_buffer(&context);
+
+    // TODO here would be where we upload uniforms. Next test will consider how to do that.
+    // TODO if we had textures and depth buffers, we'd want to transition their formats here.
+    // TODO Right now, render passes are baked into the context. Would need to rip that out
+    //      to better handle transitions through memory barriers
+    //      https://howtovulkan.com/#record-command-buffer
+
+    // TODO recording commands can be done in another thread. Need to wire that around here.
+    // TODO This loop is too complicated to wire manually. I forget to end render passes and command
+    // buffers in the right order. All of these are raw vulkan calls that belong in the backend.
     begin_render_pass(&context, command_buffer, context.render_pass, context.framebuffers[context.image_index],
                       clear_values, NUM_ATTACHMENTS, viewport_state.scissor.offset);
 
@@ -71,10 +81,20 @@ int main() {
 
     VK_CHECK(vkEndCommandBuffer(command_buffer), "Failed to end command buffer");
     submit_and_present(&context, command_buffer);
-
-    current_frame++;
-    context.current_frame_index = current_frame % MAX_FRAMES_IN_FLIGHT;
+    update_frame_index(&context);
   }
 
+  // TODO need to get this in the backend. Need a queue of all the stuff to destroy, or
+  // have managers for all the different pieces of Vulkan state to destroy.
+  //    PipelineLayouts, Pipelines, Buffers, Descriptor sets, etc.
+  vkDeviceWaitIdle(context.device);
+
+  // TODO Without this free thing, validation layers go crazy here. Maybe I want to
+  // get rid of the all or nothing style and lazily init the ones I need.
+  free_generated_shader_vk_modules(context.device);
+
+  vkDestroyPipelineLayout(context.device, pipeline_layout, NULL);
+  vkDestroyPipeline(context.device, pipeline, NULL);
+  destroy_vulkan_context(&context);
   return 0;
 }

@@ -217,6 +217,8 @@ int main() {
   init_inputs(&inputs);
 
   f32 t0 = glfwGetTime();
+  u64 current_frame = 0;
+  (void)current_frame;
   while (!glfwWindowShouldClose(window)) {
     i32 height, width;
     glfwGetWindowSize(window, &width, &height);
@@ -276,13 +278,11 @@ int main() {
                       clear_values, NUM_ATTACHMENTS, viewport_state.scissor.offset);
     render_mesh(command_buffer, &fullscreen_quad_render_call);
     vkCmdEndRenderPass(command_buffer);
-
     VK_CHECK(vkEndCommandBuffer(command_buffer), "Failed to end command buffer");
 
     submit_and_present(&context, command_buffer);
+    update_frame_index(&context);
 
-    context.current_frame++;
-    context.current_frame_index = context.current_frame % MAX_FRAMES_IN_FLIGHT;
     glm::vec2 movement_direction = inputs_to_direction(&inputs);
     f32 speed = 10.0f;
     camera_move_3d(&camera, dt * speed * movement_direction);

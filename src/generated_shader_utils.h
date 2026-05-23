@@ -8,8 +8,6 @@
 #include "opengl_base.h"
 #include "vulkan/vulkan_base.h"
 
-u32 link_shader_program(const char *vertex_shader_source, const char *fragment_shader_source);
-
 VkPipeline shader_handles_to_graphics_pipeline(const VulkanContext *context, VkRenderPass render_pass,
                                                ShaderHandle vertex_shader_handle, ShaderHandle fragment_shader_handle,
                                                VkPipelineLayout pipeline_layout);
@@ -37,8 +35,8 @@ inline void init_gl_vertex_layout(VertexLayoutID vertex_layout_id, GLuint vao, G
 }
 
 inline u32 shader_handles_to_gl_program(ShaderHandle vertex_shader_handle, ShaderHandle fragment_shader_handle) {
-  return link_shader_program(generated_shader_specs[vertex_shader_handle]->opengl_glsl,
-                             generated_shader_specs[fragment_shader_handle]->opengl_glsl);
+  return link_gl_program(generated_shader_specs[vertex_shader_handle]->opengl_glsl,
+                         generated_shader_specs[fragment_shader_handle]->opengl_glsl);
 }
 
 // TODO deprecate lol

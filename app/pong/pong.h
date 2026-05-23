@@ -156,6 +156,7 @@ struct PowerUp {
 struct State {
   GLFWwindow *window;
   u32 right_score, left_score;
+  u32 current_frame;
 
   glm::vec2 arena_dimensions;
 
