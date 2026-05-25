@@ -19,8 +19,9 @@ int main() {
       create_descriptor_pool(context.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
   init_generated_shader_vk_modules(context.device);
   ViewportState viewport_state = create_viewport_state_xy(context.swapchain_extent, 0, 0);
-  const VkClearValue clear_values[NUM_ATTACHMENTS] = {{.color = {{0.01, 0.01, 0.01, 1.0}}},
-                                                      {.depthStencil = {.depth = 1.0f, .stencil = 0}}};
+  const VkClearValue clear_values[NUM_ATTACHMENTS] = {
+      {.color = {{0.01, 0.01, 0.01, 1.0}}}, {.depthStencil = {.depth = 1.0f, .stencil = 0}}
+  };
 
   STBHandle stbs[NUM_TEXTURES];
   VulkanImageData image_datas[NUM_TEXTURES];
@@ -70,22 +71,31 @@ int main() {
   // for simple.frag.in, x uniform is set/binding 0/0
   DescriptorSetBuilder simple_set_builder = create_descriptor_set_builder(&context);
 
-  add_uniform_buffer_descriptor_set(&simple_set_builder, &global_uniform_buffer, x_handle.offset, x_handle.size, 0, 1,
-                                    VK_SHADER_STAGE_FRAGMENT_BIT, false);
-  add_uniform_buffer_descriptor_set(&simple_set_builder, &global_uniform_buffer, camera_vp_handle.offset,
-                                    camera_vp_handle.size, 1, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
-  add_uniform_buffer_descriptor_set(&simple_set_builder, &global_uniform_buffer, light_position_handle.offset,
-                                    light_position_handle.size, 2, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(
+      &simple_set_builder, &global_uniform_buffer, x_handle.offset, x_handle.size, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
+      false
+  );
+  add_uniform_buffer_descriptor_set(
+      &simple_set_builder, &global_uniform_buffer, camera_vp_handle.offset, camera_vp_handle.size, 1, 1,
+      VK_SHADER_STAGE_VERTEX_BIT, false
+  );
+  add_uniform_buffer_descriptor_set(
+      &simple_set_builder, &global_uniform_buffer, light_position_handle.offset, light_position_handle.size, 2, 1,
+      VK_SHADER_STAGE_VERTEX_BIT, false
+  );
   DescriptorSetHandle simple_descriptor = build_descriptor_set(&simple_set_builder, descriptor_pool);
   VkPipelineLayout x_pipeline_layout =
       create_pipeline_layout(context.device, &simple_descriptor.descriptor_set_layout, 1);
 
   // instanced quad: the mvp uniform is set/binding 0/0, the float is 0/1
   DescriptorSetBuilder mvp_set_builder = create_descriptor_set_builder(&context);
-  add_uniform_buffer_descriptor_set(&mvp_set_builder, &global_uniform_buffer, mvp_handle.offset, mvp_handle.size, 0, 1,
-                                    VK_SHADER_STAGE_VERTEX_BIT, false);
-  add_uniform_buffer_descriptor_set(&mvp_set_builder, &global_uniform_buffer, x_handle.offset, x_handle.size, 1, 1,
-                                    VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(
+      &mvp_set_builder, &global_uniform_buffer, mvp_handle.offset, mvp_handle.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT,
+      false
+  );
+  add_uniform_buffer_descriptor_set(
+      &mvp_set_builder, &global_uniform_buffer, x_handle.offset, x_handle.size, 1, 1, VK_SHADER_STAGE_VERTEX_BIT, false
+  );
   add_image_descriptor_set(&mvp_set_builder, textures[2].image_view, sampler, 2, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
 
   DescriptorSetHandle mvp_descriptor = build_descriptor_set(&mvp_set_builder, descriptor_pool);
@@ -95,12 +105,18 @@ int main() {
 
   // cube descriptor set
   DescriptorSetBuilder cube_set_builder = create_descriptor_set_builder(&context);
-  add_uniform_buffer_descriptor_set(&cube_set_builder, &global_uniform_buffer, cube_model_handle.offset,
-                                    cube_model_handle.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
-  add_uniform_buffer_descriptor_set(&cube_set_builder, &global_uniform_buffer, light_position_handle.offset,
-                                    light_position_handle.size, 1, 1, VK_SHADER_STAGE_FRAGMENT_BIT, false);
-  add_uniform_buffer_descriptor_set(&cube_set_builder, &global_uniform_buffer, camera_vp_handle.offset,
-                                    camera_vp_handle.size, 2, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(
+      &cube_set_builder, &global_uniform_buffer, cube_model_handle.offset, cube_model_handle.size, 0, 1,
+      VK_SHADER_STAGE_VERTEX_BIT, false
+  );
+  add_uniform_buffer_descriptor_set(
+      &cube_set_builder, &global_uniform_buffer, light_position_handle.offset, light_position_handle.size, 1, 1,
+      VK_SHADER_STAGE_FRAGMENT_BIT, false
+  );
+  add_uniform_buffer_descriptor_set(
+      &cube_set_builder, &global_uniform_buffer, camera_vp_handle.offset, camera_vp_handle.size, 2, 1,
+      VK_SHADER_STAGE_VERTEX_BIT, false
+  );
   DescriptorSetHandle cube_descriptor = build_descriptor_set(&cube_set_builder, descriptor_pool);
 
   VkPipelineLayout cube_pipeline_layout =
@@ -108,98 +124,109 @@ int main() {
 
   // fullscreen quad descriptor set
   DescriptorSetBuilder fullscreen_quad_set_builder = create_descriptor_set_builder(&context);
-  add_image_descriptor_set(&fullscreen_quad_set_builder, offscreen_framebuffer.color_image_view, sampler, 0, 1,
-                           VK_SHADER_STAGE_FRAGMENT_BIT);
+  add_image_descriptor_set(
+      &fullscreen_quad_set_builder, offscreen_framebuffer.color_image_view, sampler, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT
+  );
   DescriptorSetHandle fullscreen_quad_descriptor = build_descriptor_set(&fullscreen_quad_set_builder, descriptor_pool);
   assert(fullscreen_quad_set_builder.layout_bindings[0].stageFlags == VK_SHADER_STAGE_FRAGMENT_BIT);
   VkPipelineLayout fullscreen_quad_pipeline_layout =
       create_pipeline_layout(context.device, &fullscreen_quad_descriptor.descriptor_set_layout, 1);
 
   // create pipelines
-  VkPipeline triangle_pipeline =
-      shader_handles_to_graphics_pipeline(&context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT,
-                                          SHADER_HANDLE_COMMON_SIMPLE_FRAG, x_pipeline_layout);
+  VkPipeline triangle_pipeline = shader_handles_to_graphics_pipeline(
+      &context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT, SHADER_HANDLE_COMMON_SIMPLE_FRAG,
+      x_pipeline_layout
+  );
 
-  VkPipeline square_pipeline =
-      shader_handles_to_graphics_pipeline(&context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT,
-                                          SHADER_HANDLE_COMMON_SQUARE_FRAG, x_pipeline_layout);
+  VkPipeline square_pipeline = shader_handles_to_graphics_pipeline(
+      &context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT, SHADER_HANDLE_COMMON_SQUARE_FRAG,
+      x_pipeline_layout
+  );
 
   VkPipeline instanced_quad_pipeline = shader_handles_to_graphics_pipeline(
       &context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_INSTANCED_QUAD_VERT,
-      SHADER_HANDLE_COMMON_INSTANCED_QUAD_FRAG, mvp_pipeline_layout);
+      SHADER_HANDLE_COMMON_INSTANCED_QUAD_FRAG, mvp_pipeline_layout
+  );
 
   PipelineConfig cube_pipeline_config = create_default_graphics_pipeline_config(
       offscreen_framebuffer.render_pass, shader_modules[SHADER_HANDLE_COMMON_CUBE_VERT],
       shader_modules[SHADER_HANDLE_COMMON_CUBE_FRAG],
-      &generated_vulkan_vertex_layouts[common_cube_vert_shader_spec.vertex_layout_id], cube_pipeline_layout);
+      &generated_vulkan_vertex_layouts[common_cube_vert_shader_spec.vertex_layout_id], cube_pipeline_layout
+  );
   cube_pipeline_config.cull_mode = VK_CULL_MODE_FRONT_BIT;
   VkPipeline cube_pipeline = create_graphics_pipeline(context.device, &cube_pipeline_config, context.pipeline_cache);
 
-  VkPipeline fullscreen_quad_pipeline =
-      shader_handles_to_graphics_pipeline(&context, context.render_pass, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT,
-                                          SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG, fullscreen_quad_pipeline_layout);
+  VkPipeline fullscreen_quad_pipeline = shader_handles_to_graphics_pipeline(
+      &context, context.render_pass, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT,
+      SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG, fullscreen_quad_pipeline_layout
+  );
 
-  RenderCall triangle_render_call;
-  triangle_render_call.num_vertices = 3;
-  triangle_render_call.instance_count = 1;
-  triangle_render_call.graphics_pipeline = triangle_pipeline;
-  triangle_render_call.num_vertex_buffers = 1;
-  triangle_render_call.vertex_buffer_offsets[0] = triangle_vertices_slice->offset;
-  triangle_render_call.vertex_buffers[0] = vertex_buffer->buffer;
-  triangle_render_call.pipeline_layout = x_pipeline_layout;
-  triangle_render_call.num_descriptor_sets = 1;
-  triangle_render_call.descriptor_sets[0] = simple_descriptor.descriptor_set;
-  triangle_render_call.is_indexed = false;
+  RenderCall triangle_render_call = {
+      .num_vertices = 3,
+      .instance_count = 1,
+      .graphics_pipeline = triangle_pipeline,
+      .num_vertex_buffers = 1,
+      .vertex_buffer_offsets[0] = triangle_vertices_slice->offset,
+      .vertex_buffers[0] = vertex_buffer->buffer,
+      .pipeline_layout = x_pipeline_layout,
+      .num_descriptor_sets = 1,
+      .descriptor_sets[0] = simple_descriptor.descriptor_set,
+      .is_indexed = false,
+  };
 
-  RenderCall square_render_call;
-  square_render_call.num_vertices = 6;
-  square_render_call.instance_count = 1;
-  square_render_call.graphics_pipeline = square_pipeline;
-  square_render_call.num_vertex_buffers = 1;
-  square_render_call.vertex_buffer_offsets[0] = square_slice->offset;
-  square_render_call.vertex_buffers[0] = vertex_buffer->buffer;
-  square_render_call.pipeline_layout = x_pipeline_layout;
-  square_render_call.num_descriptor_sets = 1;
-  square_render_call.descriptor_sets[0] = simple_descriptor.descriptor_set;
-  square_render_call.is_indexed = false;
+  RenderCall square_render_call = {
+      .num_vertices = 6,
+      .instance_count = 1,
+      .graphics_pipeline = square_pipeline,
+      .num_vertex_buffers = 1,
+      .vertex_buffer_offsets[0] = square_slice->offset,
+      .vertex_buffers[0] = vertex_buffer->buffer,
+      .pipeline_layout = x_pipeline_layout,
+      .num_descriptor_sets = 1,
+      .descriptor_sets[0] = simple_descriptor.descriptor_set,
+      .is_indexed = false,
+  };
 
-  RenderCall cube_render_call;
-  cube_render_call.num_vertices = 36;
-  cube_render_call.instance_count = 1;
-  cube_render_call.graphics_pipeline = cube_pipeline;
-  cube_render_call.num_vertex_buffers = 1;
-  cube_render_call.vertex_buffer_offsets[0] = cube_slice->offset;
-  cube_render_call.vertex_buffers[0] = vertex_buffer->buffer;
-  cube_render_call.pipeline_layout = cube_pipeline_layout;
-  cube_render_call.num_descriptor_sets = 1;
-  cube_render_call.descriptor_sets[0] = cube_descriptor.descriptor_set;
-  cube_render_call.is_indexed = false;
+  RenderCall cube_render_call = {
+      .num_vertices = 36,
+      .instance_count = 1,
+      .graphics_pipeline = cube_pipeline,
+      .num_vertex_buffers = 1,
+      .vertex_buffer_offsets[0] = cube_slice->offset,
+      .vertex_buffers[0] = vertex_buffer->buffer,
+      .pipeline_layout = cube_pipeline_layout,
+      .num_descriptor_sets = 1,
+      .descriptor_sets[0] = cube_descriptor.descriptor_set,
+      .is_indexed = false,
+  };
 
-  RenderCall instanced_render_call;
-  instanced_render_call.num_indices = 6;
-  instanced_render_call.instance_count = instanced_quad_count;
-  instanced_render_call.graphics_pipeline = instanced_quad_pipeline;
-  instanced_render_call.num_vertex_buffers = 2;
-  instanced_render_call.vertex_buffer_offsets[0] = unit_square_position_slice->offset;
-  instanced_render_call.vertex_buffer_offsets[1] = quad_position_slice->offset;
-  instanced_render_call.vertex_buffers[0] = vertex_buffer->buffer;
-  instanced_render_call.vertex_buffers[1] = vertex_buffer->buffer;
-  instanced_render_call.pipeline_layout = mvp_pipeline_layout;
-  instanced_render_call.num_descriptor_sets = 1;
-  instanced_render_call.descriptor_sets[0] = mvp_descriptor.descriptor_set;
-  instanced_render_call.index_buffer = index_buffer->buffer;
-  instanced_render_call.index_buffer_offset = 0;
-  instanced_render_call.is_indexed = true;
+  RenderCall instanced_render_call = {
+      .num_indices = 6,
+      .instance_count = instanced_quad_count,
+      .graphics_pipeline = instanced_quad_pipeline,
+      .num_vertex_buffers = 2,
+      .vertex_buffer_offsets[0] = unit_square_position_slice->offset,
+      .vertex_buffer_offsets[1] = quad_position_slice->offset,
+      .vertex_buffers[0] = vertex_buffer->buffer,
+      .vertex_buffers[1] = vertex_buffer->buffer,
+      .pipeline_layout = mvp_pipeline_layout,
+      .num_descriptor_sets = 1,
+      .descriptor_sets[0] = mvp_descriptor.descriptor_set,
+      .index_buffer = index_buffer->buffer,
+      .index_buffer_offset = 0,
+      .is_indexed = true,
+  };
 
-  RenderCall fullscreen_quad_render_call;
-  fullscreen_quad_render_call.num_vertices = 3;
-  fullscreen_quad_render_call.instance_count = 1;
-  fullscreen_quad_render_call.graphics_pipeline = fullscreen_quad_pipeline;
-  fullscreen_quad_render_call.num_vertex_buffers = 0;
-  fullscreen_quad_render_call.pipeline_layout = fullscreen_quad_pipeline_layout;
-  fullscreen_quad_render_call.num_descriptor_sets = 1;
-  fullscreen_quad_render_call.descriptor_sets[0] = fullscreen_quad_descriptor.descriptor_set;
-  fullscreen_quad_render_call.is_indexed = false;
+  RenderCall fullscreen_quad_render_call = {
+      .num_vertices = 3,
+      .instance_count = 1,
+      .graphics_pipeline = fullscreen_quad_pipeline,
+      .num_vertex_buffers = 0,
+      .pipeline_layout = fullscreen_quad_pipeline_layout,
+      .num_descriptor_sets = 1,
+      .descriptor_sets[0] = fullscreen_quad_descriptor.descriptor_set,
+      .is_indexed = false,
+  };
 
   MVPUniform mvp;
   mvp.projection = glm::mat4(1.0f);
@@ -245,6 +272,7 @@ int main() {
 
     begin_frame(&context);
 
+    // Should have a queue for these, something more automated
     write_to_uniform_buffer(&global_uniform_buffer, &mvp, mvp_handle);
     write_to_uniform_buffer(&global_uniform_buffer, &cube_model, cube_model_handle);
     write_to_uniform_buffer(&global_uniform_buffer, &ubo, x_handle);
@@ -253,16 +281,20 @@ int main() {
 
     VkCommandBuffer command_buffer = begin_command_buffer(&context);
 
+    // TODO do this through pipeline barriers
+    //      Do this per frame? Or just at init?
     // transition to use as render target
-    transition_image_layout(command_buffer, offscreen_framebuffer.color_image, VK_IMAGE_LAYOUT_UNDEFINED,
-                            VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    transition_image_layout(
+        command_buffer, offscreen_framebuffer.color_image, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    );
 
-    begin_render_pass(&context, command_buffer, offscreen_framebuffer.render_pass, offscreen_framebuffer.framebuffer,
-                      clear_values, NUM_ATTACHMENTS, viewport_state.scissor.offset);
+    begin_render_pass(
+        &context, command_buffer, offscreen_framebuffer.render_pass, offscreen_framebuffer.framebuffer, clear_values,
+        NUM_ATTACHMENTS, viewport_state
+    );
 
-    vkCmdSetViewport(command_buffer, 0, 1, &viewport_state.viewport);
-    vkCmdSetScissor(command_buffer, 0, 1, &viewport_state.scissor);
-
+    // Should have a queue for these, something more automated
     render_mesh(command_buffer, &triangle_render_call);
     render_mesh(command_buffer, &square_render_call);
     render_mesh(command_buffer, &instanced_render_call);
@@ -271,11 +303,15 @@ int main() {
     vkCmdEndRenderPass(command_buffer);
 
     // transition to use as sampler
-    transition_image_layout(command_buffer, offscreen_framebuffer.color_image, VK_IMAGE_LAYOUT_UNDEFINED,
-                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    transition_image_layout(
+        command_buffer, offscreen_framebuffer.color_image, VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    );
 
-    begin_render_pass(&context, command_buffer, context.render_pass, context.framebuffers[context.image_index],
-                      clear_values, NUM_ATTACHMENTS, viewport_state.scissor.offset);
+    begin_render_pass(
+        &context, command_buffer, context.render_pass, context.framebuffers[context.image_index], clear_values,
+        NUM_ATTACHMENTS, viewport_state
+    );
     render_mesh(command_buffer, &fullscreen_quad_render_call);
     vkCmdEndRenderPass(command_buffer);
     VK_CHECK(vkEndCommandBuffer(command_buffer), "Failed to end command buffer");

@@ -12,8 +12,10 @@
 #include "vulkan/vulkan_core.h"
 #include "window.h"
 
-static const char *texture_names[NUM_TEXTURES] = {"textures/generic_girl.jpg", "textures/pong/field_background.jpg",
-                                                  "textures/girl_face.jpg", "textures/girl_face_normal_map.jpg"};
+static const char *texture_names[NUM_TEXTURES] = {
+    "textures/generic_girl.jpg", "textures/pong/field_background.jpg", "textures/girl_face.jpg",
+    "textures/girl_face_normal_map.jpg"
+};
 
 void init_buffers(State *state) {
   VulkanContext *ctx = &state->context;
@@ -43,29 +45,35 @@ void init_descriptor_sets(State *state) {
   // global VP
   DescriptorSetBuilder global_vp_builder = create_descriptor_set_builder(ctx);
   // global vp
-  add_uniform_buffer_descriptor_set(&global_vp_builder, &state->uniform_buffer, state->uniform_writes.camera_vp.offset,
-                                    state->uniform_writes.camera_vp.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(
+      &global_vp_builder, &state->uniform_buffer, state->uniform_writes.camera_vp.offset,
+      state->uniform_writes.camera_vp.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false
+  );
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP] =
       build_descriptor_set(&global_vp_builder, state->descriptor_pool);
 
   // TODO background vs arena, in game vs overlay
   DescriptorSetBuilder background_builder = create_descriptor_set_builder(ctx);
   // background model
-  add_uniform_buffer_descriptor_set(&background_builder, &state->uniform_buffer,
-                                    state->uniform_writes.arena_model.offset, state->uniform_writes.arena_model.size, 0,
-                                    1, VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(
+      &background_builder, &state->uniform_buffer, state->uniform_writes.arena_model.offset,
+      state->uniform_writes.arena_model.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false
+  );
 
-  add_image_descriptor_set(&background_builder, state->textures[TEXTURE_FIELD_BACKGROUND].image_view, state->sampler, 1,
-                           1, VK_SHADER_STAGE_FRAGMENT_BIT);
+  add_image_descriptor_set(
+      &background_builder, state->textures[TEXTURE_FIELD_BACKGROUND].image_view, state->sampler, 1, 1,
+      VK_SHADER_STAGE_FRAGMENT_BIT
+  );
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND] =
       build_descriptor_set(&background_builder, state->descriptor_pool);
 
   // paddles and ball
   DescriptorSetBuilder paddle_ball_builder = create_descriptor_set_builder(ctx);
-  add_uniform_buffer_descriptor_set(&paddle_ball_builder, &state->uniform_buffer,
-                                    state->uniform_writes.instance_data.offset,
-                                    state->uniform_writes.instance_data.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false);
+  add_uniform_buffer_descriptor_set(
+      &paddle_ball_builder, &state->uniform_buffer, state->uniform_writes.instance_data.offset,
+      state->uniform_writes.instance_data.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false
+  );
 
   state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL] =
       build_descriptor_set(&paddle_ball_builder, state->descriptor_pool);
@@ -85,7 +93,8 @@ void init_background_material(State *state) {
 
   state->background_material.pipeline = shader_handles_to_graphics_pipeline(
       &state->context, state->context.render_pass, SHADER_HANDLE_PONG_BACKGROUND_VERT,
-      SHADER_HANDLE_PONG_BACKGROUND_FRAG, state->background_material.pipeline_layout);
+      SHADER_HANDLE_PONG_BACKGROUND_FRAG, state->background_material.pipeline_layout
+  );
 
   mat->render_call.instance_count = 1;
   mat->render_call.graphics_pipeline = mat->pipeline;
@@ -114,9 +123,10 @@ void init_paddles_material(State *state) {
 
   state->paddle_material.pipeline_layout = create_pipeline_layout(state->context.device, layouts, 2);
 
-  state->paddle_material.pipeline =
-      shader_handles_to_graphics_pipeline(&state->context, state->context.render_pass, SHADER_HANDLE_PONG_PADDLE_VERT,
-                                          SHADER_HANDLE_PONG_PADDLE_FRAG, state->paddle_material.pipeline_layout);
+  state->paddle_material.pipeline = shader_handles_to_graphics_pipeline(
+      &state->context, state->context.render_pass, SHADER_HANDLE_PONG_PADDLE_VERT, SHADER_HANDLE_PONG_PADDLE_FRAG,
+      state->paddle_material.pipeline_layout
+  );
 
   RenderCall *c = &mat->render_call;
   c->instance_count = InstanceDataUBO_model_array_size;
@@ -227,8 +237,9 @@ State setup_state(const char *title) {
 
   // TODO make camera matrices only on camera movement
   // TODO buffer only on resize
-  const CameraMatrices camera_matrices = create_camera_matrices(&state.camera, state.context.window_framebuffer_width,
-                                                                state.context.window_framebuffer_height);
+  const CameraMatrices camera_matrices = create_camera_matrices(
+      &state.camera, state.context.window_framebuffer_width, state.context.window_framebuffer_height
+  );
   glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
 
   // uniform buffer structure: camera vp, background model, paddle model
@@ -295,8 +306,10 @@ void render(State *state) {
   begin_frame(ctx);
 
   VkCommandBuffer command_buffer = begin_command_buffer(ctx);
-  begin_render_pass(ctx, command_buffer, ctx->render_pass, ctx->framebuffers[ctx->image_index], state->clear_values, 2,
-                    state->viewport_state.scissor.offset);
+  begin_render_pass(
+      ctx, command_buffer, ctx->render_pass, ctx->framebuffers[ctx->image_index], state->clear_values, 2,
+      state->viewport_state
+  );
   vkCmdSetViewport(command_buffer, 0, 1, &state->viewport_state.viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &state->viewport_state.scissor);
 
@@ -474,7 +487,8 @@ void handle_collisions(State *state, const f32 dt) {
   if (state->left_paddle_cooldown <= 0.0f) {
     // ball paddle collisions
     SweptAABBCollisionCheck left_collision_check = swept_aabb_collision(
-        dt, left_paddle_pos, left_paddle_scale, left_paddle_velocity, ball_pos, ball_scale, ball_velocity);
+        dt, left_paddle_pos, left_paddle_scale, left_paddle_velocity, ball_pos, ball_scale, ball_velocity
+    );
 
     if (left_collision_check.did_collide) {
       state->left_paddle_cooldown = 1.0f;

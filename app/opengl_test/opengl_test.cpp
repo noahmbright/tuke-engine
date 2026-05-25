@@ -2,7 +2,6 @@
 #include "c_reflector_bringup.h"
 #include "generated_shader_utils.h"
 #include "glm/ext/matrix_transform.hpp"
-#include "glm/glm.hpp"
 #include "opengl_base.h"
 #include "utils.h"
 #include "window.h"

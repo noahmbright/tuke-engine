@@ -100,10 +100,12 @@ void destroy_vulkan_context(VulkanContext *context) {
 
 // TODO Enable debug messenger extension, add macros for disabling in release
 // mode
-VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-                                              VkDebugUtilsMessageTypeFlagsEXT message_type,
-                                              const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
-                                              void *user_data) {
+VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+    VkDebugUtilsMessageTypeFlagsEXT message_type,
+    const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
+    void *user_data
+) {
 
   (void)message_type;
   (void)callback_data;
@@ -168,8 +170,10 @@ VkInstance create_instance(const char *name, VulkanWindowInfo window_info) {
   const u32 MAX_EXTENSIONS = 16;
   const u32 total_extension_count = extra_extension_count + window_info.extension_count;
   if (total_extension_count > MAX_EXTENSIONS) {
-    fprintf(stderr, "%s(): MAX_EXTENSIONS is %d, but total_extension_count is %d\n", __func__, MAX_EXTENSIONS,
-            total_extension_count);
+    fprintf(
+        stderr, "%s(): MAX_EXTENSIONS is %d, but total_extension_count is %d\n", __func__, MAX_EXTENSIONS,
+        total_extension_count
+    );
     exit(1);
   }
 
@@ -233,8 +237,10 @@ u32 get_physical_devices(VkInstance instance, VkPhysicalDevice *physical_devices
   }
 
   if (device_count > MAX_PHYSICAL_DEVICES) {
-    printf("%s(): Found more physical devices (%u) than MAX_PHYSICAL_DEVICES (%u)\n", __func__, device_count,
-           MAX_PHYSICAL_DEVICES);
+    printf(
+        "%s(): Found more physical devices (%u) than MAX_PHYSICAL_DEVICES (%u)\n", __func__, device_count,
+        MAX_PHYSICAL_DEVICES
+    );
     device_count = MAX_PHYSICAL_DEVICES;
   }
 
@@ -255,8 +261,10 @@ QueueFamilyIndices get_queue_family_indices(VkPhysicalDevice physical_device, Vk
   i32 compute_family = -1;
 
   if (queue_family_count > MAX_QUEUE_FAMILIES) {
-    printf("%s(): MAX_QUEUE_FAMILIES is %d but queue_family_count is %d\n", __func__, MAX_QUEUE_FAMILIES,
-           queue_family_count);
+    printf(
+        "%s(): MAX_QUEUE_FAMILIES is %d but queue_family_count is %d\n", __func__, MAX_QUEUE_FAMILIES,
+        queue_family_count
+    );
     queue_family_count = MAX_QUEUE_FAMILIES;
   }
 
@@ -295,8 +303,8 @@ bool is_valid_queue_family_indices(QueueFamilyIndices indices) {
   return !is_invalid;
 }
 
-VkPhysicalDevice pick_physical_device(VkInstance instance, VkSurfaceKHR surface,
-                                      QueueFamilyIndices *queue_family_indices) {
+VkPhysicalDevice
+pick_physical_device(VkInstance instance, VkSurfaceKHR surface, QueueFamilyIndices *queue_family_indices) {
 
   VkPhysicalDevice physical_devices[MAX_PHYSICAL_DEVICES];
   u32 num_physical_devices = get_physical_devices(instance, physical_devices);
@@ -333,8 +341,10 @@ VkPhysicalDevice pick_physical_device(VkInstance instance, VkSurfaceKHR surface,
   vkGetPhysicalDeviceProperties2(res, &device_properties);
   VkPhysicalDeviceProperties *p = &device_properties.properties;
   printf("%s(): Selected device:      %s\n", __func__, p->deviceName);
-  printf("%s(): Vulkan API version:   %u.%u.%u\n", __func__, VK_API_VERSION_MAJOR(p->apiVersion),
-         VK_API_VERSION_MINOR(p->apiVersion), VK_API_VERSION_PATCH(p->apiVersion));
+  printf(
+      "%s(): Vulkan API version:   %u.%u.%u\n", __func__, VK_API_VERSION_MAJOR(p->apiVersion),
+      VK_API_VERSION_MINOR(p->apiVersion), VK_API_VERSION_PATCH(p->apiVersion)
+  );
   printf("%s(): Driver:               %s (%s)\n", __func__, driver_props.driverName, driver_props.driverInfo);
 
   return res;
@@ -456,8 +466,10 @@ VkSurfaceFormatKHR get_surface_format(VkPhysicalDevice physical_device, VkSurfac
 
   const u32 MAX_FORMAT_COUNT = 128;
   if (format_count > MAX_FORMAT_COUNT) {
-    printf("%s(): found more formats than expected. Max is %d, found %d. Clamping.\n", __func__, MAX_FORMAT_COUNT,
-           format_count);
+    printf(
+        "%s(): found more formats than expected. Max is %d, found %d. Clamping.\n", __func__, MAX_FORMAT_COUNT,
+        format_count
+    );
     format_count = MAX_FORMAT_COUNT;
   }
   VkSurfaceFormatKHR formats[MAX_FORMAT_COUNT];
@@ -494,9 +506,15 @@ VkSurfaceCapabilitiesKHR get_surface_capabilities(VkPhysicalDevice physical_devi
   return surface_capabilities;
 }
 
-VkSwapchainKHR create_swapchain(VkDevice device, VkPhysicalDevice physical_device, VkSurfaceKHR surface,
-                                QueueFamilyIndices queue_family_indices, VkSurfaceFormatKHR surface_format,
-                                VkSurfaceCapabilitiesKHR surface_capabilities, VkExtent2D swapchain_extent) {
+VkSwapchainKHR create_swapchain(
+    VkDevice device,
+    VkPhysicalDevice physical_device,
+    VkSurfaceKHR surface,
+    QueueFamilyIndices queue_family_indices,
+    VkSurfaceFormatKHR surface_format,
+    VkSurfaceCapabilitiesKHR surface_capabilities,
+    VkExtent2D swapchain_extent
+) {
   // TODO why am I adding 1 here?
   u32 image_count = surface_capabilities.minImageCount + 1;
   if (surface_capabilities.maxImageCount > 0 && image_count > surface_capabilities.maxImageCount) {
@@ -568,8 +586,9 @@ VkSwapchainKHR create_swapchain(VkDevice device, VkPhysicalDevice physical_devic
   return swapchain;
 }
 
-void transition_image_layout(VkCommandBuffer command_buffer, VkImage image, VkImageLayout old_layout,
-                             VkImageLayout new_layout) {
+void transition_image_layout(
+    VkCommandBuffer command_buffer, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout
+) {
   VkImageMemoryBarrier image_memory_barrier{
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       .pNext = NULL,
@@ -671,8 +690,9 @@ void transition_image_layout(VkCommandBuffer command_buffer, VkImage image, VkIm
   vkCmdPipelineBarrier(command_buffer, src_stage, dst_stage, 0, 0, NULL, 0, NULL, 1, &image_memory_barrier);
 }
 
-VkImageView create_default_image_view(const VulkanContext *context, VkImage image, VkFormat format,
-                                      VkImageAspectFlags aspect_flags) {
+VkImageView create_default_image_view(
+    const VulkanContext *context, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags
+) {
   // TODO allow for depth and stencil attachments
   VkImageViewCreateInfo image_view_create_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -699,8 +719,8 @@ VkImageView create_default_image_view(const VulkanContext *context, VkImage imag
   return image_view;
 }
 
-VkImage create_default_image(const VulkanContext *context, u32 width, u32 height, VkImageUsageFlags usage,
-                             VkFormat format) {
+VkImage
+create_default_image(const VulkanContext *context, u32 width, u32 height, VkImageUsageFlags usage, VkFormat format) {
   // TODO Better understand all these fields
   //      When do I need more samples? Need mipmap support
   //      Don't understand queue families
@@ -741,8 +761,9 @@ VkDeviceMemory allocate_and_bind_image_memory(const VulkanContext *context, VkIm
   memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   memory_allocate_info.pNext = 0;
   memory_allocate_info.allocationSize = memory_requirements.size;
-  memory_allocate_info.memoryTypeIndex = find_memory_type(context->physical_device, memory_requirements.memoryTypeBits,
-                                                          VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+  memory_allocate_info.memoryTypeIndex = find_memory_type(
+      context->physical_device, memory_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+  );
 
   VkDeviceMemory device_memory;
   VkResult result = vkAllocateMemory(context->device, &memory_allocate_info, NULL, &device_memory);
@@ -869,10 +890,15 @@ VkAttachmentDescription make_depth_attachment(VkFormat format) {
   return depth_attachment;
 }
 
-VkRenderPass create_render_pass(VkDevice device, u32 num_attachment_descriptions,
-                                const VkAttachmentDescription *attachment_descriptions, u32 num_subpass_descriptions,
-                                const VkSubpassDescription *subpass_descriptions, u32 num_dependencies,
-                                const VkSubpassDependency *dependencies) {
+VkRenderPass create_render_pass(
+    VkDevice device,
+    u32 num_attachment_descriptions,
+    const VkAttachmentDescription *attachment_descriptions,
+    u32 num_subpass_descriptions,
+    const VkSubpassDescription *subpass_descriptions,
+    u32 num_dependencies,
+    const VkSubpassDependency *dependencies
+) {
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkRenderPassCreateInfo.html
   VkRenderPassCreateInfo render_pass_create_info = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
@@ -895,7 +921,6 @@ VkRenderPass create_render_pass(VkDevice device, u32 num_attachment_descriptions
 VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat color_format, VkFormat depth_format) {
   VkAttachmentDescription color_attachment = make_color_attachment(color_format);
   VkAttachmentDescription depth_attachment = make_depth_attachment(depth_format);
-
   VkAttachmentDescription attachment_descriptions[NUM_ATTACHMENTS] = {color_attachment, depth_attachment};
 
   VkAttachmentReference color_attachment_ref = {
@@ -973,8 +998,13 @@ VkRenderPass create_color_render_pass(VkDevice device, VkFormat format) {
   return create_render_pass(device, num_attachments, attachment_descriptions, 1, &subpass, 1, &dependency);
 }
 
-VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass render_pass, u32 num_attachments,
-                                 VkImageView *image_view_attachments, VkExtent2D extent) {
+VkFramebuffer create_framebuffer(
+    VkDevice device,
+    VkRenderPass render_pass,
+    u32 num_attachments,
+    VkImageView *image_view_attachments,
+    VkExtent2D extent
+) {
 
   VkFramebufferCreateInfo framebuffer_create_info = {
       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -994,17 +1024,16 @@ VkFramebuffer create_framebuffer(VkDevice device, VkRenderPass render_pass, u32 
   return framebuffer;
 }
 
-void init_framebuffers(VulkanContext *context) {
-  for (u32 i = 0; i < context->swapchain_storage.image_count; i++) {
+void init_framebuffers(VulkanContext *ctx) {
+  for (u32 i = 0; i < ctx->swapchain_storage.image_count; i++) {
 
-    VkImageView color_view = context->swapchain_storage.use_static
-                                 ? context->swapchain_storage.as.static_storage.image_views[i]
-                                 : context->swapchain_storage.as.dynamic_storage.image_views[i];
+    const SwapchainStorage *storage = &ctx->swapchain_storage;
+    VkImageView color_view =
+        storage->use_static ? storage->as.static_storage.image_views[i] : storage->as.dynamic_storage.image_views[i];
 
-    VkImageView views[] = {color_view, context->swapchain_storage.depth_buffers[i].image_view};
-
-    context->framebuffers[i] =
-        create_framebuffer(context->device, context->render_pass, NUM_ATTACHMENTS, views, context->swapchain_extent);
+    VkImageView views[] = {color_view, ctx->swapchain_storage.depth_buffers[i].image_view};
+    ctx->framebuffers[i] =
+        create_framebuffer(ctx->device, ctx->render_pass, NUM_ATTACHMENTS, views, ctx->swapchain_extent);
   }
 }
 
@@ -1012,17 +1041,22 @@ void recreate_swapchain(VulkanContext *context) {
   vkDeviceWaitIdle(context->device);
   destroy_swapchain(context);
 
-  // TODO Passing every single parameter here by a context deref is ugly lol
-  //      Also, does this just take too many parameters?
   VkSurfaceCapabilitiesKHR surface_capabilities = get_surface_capabilities(context->physical_device, context->surface);
   context->swapchain_extent = get_swapchain_extent(0, 0, surface_capabilities);
-  context->swapchain =
-      create_swapchain(context->device, context->physical_device, context->surface, context->queue_family_indices,
-                       context->surface_format, surface_capabilities, context->swapchain_extent);
+
+  // TODO Passing every single parameter here by a context deref is ugly lol
+  //      Also, does this just take too many parameters?
+  context->swapchain = create_swapchain(
+      context->device, context->physical_device, context->surface, context->queue_family_indices,
+      context->surface_format, surface_capabilities, context->swapchain_extent
+  );
 
   VkFormat format = find_depth_format(context->physical_device);
-  create_swapchain_storage(context, format); // Why am I not assigning the result of this?
-                                             // Why am I doing it after creating the swapchain?
+
+  // Why am I not assigning the result of this?
+  // Why am I doing it after creating the swapchain?
+  create_swapchain_storage(context, format);
+
   init_framebuffers(context);
 }
 
@@ -1079,8 +1113,9 @@ VkCommandPool create_command_pool(VkDevice device, u32 queue_family_index, bool 
   return command_pool;
 }
 
-void allocate_command_buffers(VkDevice device, VkCommandPool command_pool, u32 command_buffer_count,
-                              VkCommandBuffer *command_buffers) {
+void allocate_command_buffers(
+    VkDevice device, VkCommandPool command_pool, u32 command_buffer_count, VkCommandBuffer *command_buffers
+) {
   VkCommandBufferAllocateInfo allocate_info{
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
       .pNext = 0,
@@ -1127,8 +1162,8 @@ VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u
   return description;
 }
 
-VkVertexInputAttributeDescription create_vertex_attribute_description(u32 location, u32 binding, VkFormat format,
-                                                                      u32 offset) {
+VkVertexInputAttributeDescription
+create_vertex_attribute_description(u32 location, u32 binding, VkFormat format, u32 offset) {
   VkVertexInputAttributeDescription description = {
       .location = location,
       .binding = binding,
@@ -1138,8 +1173,8 @@ VkVertexInputAttributeDescription create_vertex_attribute_description(u32 locati
   return description;
 }
 
-VkPipelineShaderStageCreateInfo create_shader_stage_info(VkShaderModule module, VkShaderStageFlagBits stage,
-                                                         const char *entry_point) {
+VkPipelineShaderStageCreateInfo
+create_shader_stage_info(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point) {
   VkPipelineShaderStageCreateInfo shader_stage_create_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
       .pNext = NULL,
@@ -1153,10 +1188,13 @@ VkPipelineShaderStageCreateInfo create_shader_stage_info(VkShaderModule module, 
 }
 
 // TODO not a fan of these default APIs.
-PipelineConfig create_default_graphics_pipeline_config(VkRenderPass render_pass, VkShaderModule vertex_shader,
-                                                       VkShaderModule fragment_shader,
-                                                       const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
-                                                       VkPipelineLayout pipeline_layout) {
+PipelineConfig create_default_graphics_pipeline_config(
+    VkRenderPass render_pass,
+    VkShaderModule vertex_shader,
+    VkShaderModule fragment_shader,
+    const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
+    VkPipelineLayout pipeline_layout
+) {
 
   VkPipelineShaderStageCreateInfo pipeline_shader_create_info_vertex =
       create_shader_stage_info(vertex_shader, VK_SHADER_STAGE_VERTEX_BIT, "main");
@@ -1228,9 +1266,10 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
   // allocated because depth buffer creation requires an image transition
   VkSurfaceCapabilitiesKHR surface_capabilities = get_surface_capabilities(context.physical_device, context.surface);
   context.swapchain_extent = get_swapchain_extent(window_info.width, window_info.height, surface_capabilities);
-  context.swapchain =
-      create_swapchain(context.device, context.physical_device, context.surface, context.queue_family_indices,
-                       context.surface_format, surface_capabilities, context.swapchain_extent);
+  context.swapchain = create_swapchain(
+      context.device, context.physical_device, context.surface, context.queue_family_indices, context.surface_format,
+      surface_capabilities, context.swapchain_extent
+  );
 
   vkGetDeviceQueue(context.device, indices.graphics_family, 0, &context.graphics_queue);
   vkGetDeviceQueue(context.device, indices.present_family, 0, &context.present_queue);
@@ -1241,20 +1280,24 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
   // TODO sync this with init_framebuffers()
   // don't need a depth attachment here
   context.render_pass = create_color_depth_render_pass(context.device, context.surface_format.format, depth_format);
-
   init_framebuffers(&context);
 
   // Regular command buffers need to be created after the swapchain, which depends on the transient command buffers.
-  allocate_command_buffers(context.device, context.graphics_command_pool, context.swapchain_storage.image_count,
-                           context.graphics_command_buffers);
+  allocate_command_buffers(
+      context.device, context.graphics_command_pool, context.swapchain_storage.image_count,
+      context.graphics_command_buffers
+  );
 
-  allocate_command_buffers(context.device, context.compute_command_pool, context.swapchain_storage.image_count,
-                           context.compute_command_buffers);
+  allocate_command_buffers(
+      context.device, context.compute_command_pool, context.swapchain_storage.image_count,
+      context.compute_command_buffers
+  );
 
   context.pipeline_cache = create_pipeline_cache(context.device);
 
   VkResult result = vkWaitForFences(
-      context.device, 1, &context.frame_sync_objects[context.current_frame_index].in_flight_fence, VK_TRUE, UINT64_MAX);
+      context.device, 1, &context.frame_sync_objects[context.current_frame_index].in_flight_fence, VK_TRUE, UINT64_MAX
+  );
   VK_CHECK(result, "Failed to wait for fences");
 
   return context;
@@ -1274,8 +1317,9 @@ u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemory
   exit(1);
 }
 
-VulkanBuffer create_buffer_explicit(const VulkanContext *context, VkBufferUsageFlags usage, VkDeviceSize size,
-                                    VkMemoryPropertyFlags properties) {
+VulkanBuffer create_buffer_explicit(
+    const VulkanContext *context, VkBufferUsageFlags usage, VkDeviceSize size, VkMemoryPropertyFlags properties
+) {
   assert(size > 0);
   VulkanBuffer vulkan_buffer;
 
@@ -1362,16 +1406,18 @@ VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type,
     VkBufferUsageFlags readonly_storage_buffer_usage =
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     VkMemoryPropertyFlags readonly_storage_buffer_memory_properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    return create_buffer_explicit(context, readonly_storage_buffer_usage, size,
-                                  readonly_storage_buffer_memory_properties);
+    return create_buffer_explicit(
+        context, readonly_storage_buffer_usage, size, readonly_storage_buffer_memory_properties
+    );
   }
 
   case BUFFER_TYPE_READ_WRITE_STORAGE: {
     VkBufferUsageFlags read_write_storage_buffer_usage =
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     VkMemoryPropertyFlags read_write_storage_buffer_memory_properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    return create_buffer_explicit(context, read_write_storage_buffer_usage, size,
-                                  read_write_storage_buffer_memory_properties);
+    return create_buffer_explicit(
+        context, read_write_storage_buffer_usage, size, read_write_storage_buffer_memory_properties
+    );
   }
 
   default:
@@ -1379,11 +1425,18 @@ VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type,
   }
 }
 
-void write_to_vulkan_buffer(const VulkanContext *context, const void *src_data, VkDeviceSize size, VkDeviceSize offset,
-                            VulkanBuffer vulkan_buffer) {
+void write_to_vulkan_buffer(
+    const VulkanContext *context,
+    const void *src_data,
+    VkDeviceSize size,
+    VkDeviceSize offset,
+    VulkanBuffer vulkan_buffer
+) {
   if (!(vulkan_buffer.memory_property_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
-    fprintf(stderr, "write_to_vulkan_buffer: attempting to write to host "
-                    "invisible memory\n");
+    fprintf(
+        stderr, "write_to_vulkan_buffer: attempting to write to host "
+                "invisible memory\n"
+    );
     exit(1);
   }
 
@@ -1516,8 +1569,8 @@ ViewportState create_viewport_state_xy(VkExtent2D swapchain_extent, u32 x, u32 y
 // TODO Will need some updates here when I want to do shadow mapping
 //      Set depthClampEnable = VK_TRUE for shadow support
 //      Understand how depthBias* is used for shadow mapping
-VkPipelineRasterizationStateCreateInfo create_rasterization_state(VkPolygonMode polygon_mode, VkCullModeFlags cull_mode,
-                                                                  VkFrontFace front_face) {
+VkPipelineRasterizationStateCreateInfo
+create_rasterization_state(VkPolygonMode polygon_mode, VkCullModeFlags cull_mode, VkFrontFace front_face) {
   VkPipelineRasterizationStateCreateInfo rasterization_state_ci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
       .pNext = NULL,
@@ -1607,10 +1660,13 @@ VkPipelineColorBlendAttachmentState create_color_blend_attachment_state(BlendMod
 
 // TODO Validate shader stages if you want strict pipeline guarantees
 // TODO Print/log pipeline cache usage for debugging
+// TODO Need flexibility for dynamic rendering vs render passes. More architecture to do.
 VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *config, VkPipelineCache pipeline_cache) {
   assert(config->stage_count <= MAX_SHADER_STAGE_COUNT);
-  assert(config->vertex_input_state_create_info && "create_graphics_pipeline: vertex_input_state_create_info is NULL. "
-                                                   "Did you mean to fill out this structure manually?");
+  assert(
+      config->vertex_input_state_create_info && "create_graphics_pipeline: vertex_input_state_create_info is NULL. Did "
+                                                "you mean to fill out this structure manually?"
+  );
 
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkPipelineInputAssemblyStateCreateInfo.html
   VkPipelineInputAssemblyStateCreateInfo input_assembly_state = {
@@ -1624,7 +1680,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
   VkOffset2D offset = {.x = 0, .y = 0};
   ViewportState viewport_state = create_viewport_state_offset(config->swapchain_extent, offset);
 
-  VkPipelineViewportStateCreateInfo viewport_state_create_info = {
+  VkPipelineViewportStateCreateInfo viewport_state_ci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
@@ -1664,6 +1720,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .pDynamicStates = dynamic_states,
   };
 
+  // https://docs.vulkan.org/refpages/latest/refpages/source/VkGraphicsPipelineCreateInfo.html
   VkGraphicsPipelineCreateInfo pipeline_ci = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .pNext = 0,
@@ -1673,7 +1730,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .pVertexInputState = config->vertex_input_state_create_info,
       .pInputAssemblyState = &input_assembly_state,
       .pTessellationState = NULL, // TOOD?
-      .pViewportState = &viewport_state_create_info,
+      .pViewportState = &viewport_state_ci,
       .pRasterizationState = &rasterization_state,
       .pMultisampleState = &multisample_state_ci,
       .pDepthStencilState = &depth_stencil_state_ci,
@@ -1694,13 +1751,18 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
 }
 
 // TODO want to pull out these defaulted cases because it's not obvious what is and is not default.
-VkPipeline create_default_graphics_pipeline(const VulkanContext *context, VkRenderPass render_pass,
-                                            VkShaderModule vertex_shader, VkShaderModule fragment_shader,
-                                            const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
-                                            VkPipelineLayout pipeline_layout) {
+VkPipeline create_default_graphics_pipeline(
+    const VulkanContext *context,
+    VkRenderPass render_pass,
+    VkShaderModule vertex_shader,
+    VkShaderModule fragment_shader,
+    const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
+    VkPipelineLayout pipeline_layout
+) {
 
-  PipelineConfig config = create_default_graphics_pipeline_config(render_pass, vertex_shader, fragment_shader,
-                                                                  vertex_input_state, pipeline_layout);
+  PipelineConfig config = create_default_graphics_pipeline_config(
+      render_pass, vertex_shader, fragment_shader, vertex_input_state, pipeline_layout
+  );
   return create_graphics_pipeline(context->device, &config, context->pipeline_cache);
 }
 
@@ -1754,28 +1816,41 @@ VkCommandBuffer begin_command_buffer(const VulkanContext *context) {
   return command_buffer;
 }
 
-void begin_render_pass(const VulkanContext *context, VkCommandBuffer command_buffer, VkRenderPass render_pass,
-                       VkFramebuffer framebuffer, const VkClearValue *clear_value, u32 clear_value_count,
-                       VkOffset2D offset) {
+void begin_render_pass(
+    const VulkanContext *context,
+    VkCommandBuffer cmd,
+    VkRenderPass render_pass,
+    VkFramebuffer framebuffer,
+    const VkClearValue *clear_value,
+    u32 clear_value_count,
+    ViewportState viewport_state
+) {
   VkRenderPassBeginInfo render_pass_begin_info = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .pNext = NULL,
       .renderPass = render_pass,
       .framebuffer = framebuffer,
-      .renderArea.offset = offset,
+      .renderArea.offset = viewport_state.scissor.offset,
       .renderArea.extent = context->swapchain_extent,
       .clearValueCount = clear_value_count,
       .pClearValues = clear_value,
   };
 
-  vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdBeginRenderPass(cmd, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdSetViewport(cmd, 0, 1, &viewport_state.viewport);
+  vkCmdSetScissor(cmd, 0, 1, &viewport_state.scissor);
 }
 
-void end_frame() {}
+// Assuming a model where a frame's drawing commands can all be issued through a single command buffer.
+void end_frame(VulkanContext *ctx, VkCommandBuffer cmd) {
+  VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end command buffer");
+  submit_and_present(ctx, cmd);
+  update_frame_index(ctx);
+}
 
 // TODO May want to pass the raw vulkan primitives here instead of the context
-void submit_and_present(const VulkanContext *context, VkCommandBuffer command_buffer) {
-  const FrameSyncObjects *fso = &context->frame_sync_objects[context->current_frame_index];
+void submit_and_present(const VulkanContext *ctx, VkCommandBuffer cmd) {
+  const FrameSyncObjects *fso = &ctx->frame_sync_objects[ctx->current_frame_index];
 
   VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   VkSubmitInfo submit_info = {
@@ -1785,12 +1860,12 @@ void submit_and_present(const VulkanContext *context, VkCommandBuffer command_bu
       .pWaitSemaphores = &fso->image_available_semaphore,
       .pWaitDstStageMask = &wait_stage,
       .commandBufferCount = 1,
-      .pCommandBuffers = &command_buffer,
+      .pCommandBuffers = &cmd,
       .signalSemaphoreCount = 1,
       .pSignalSemaphores = &fso->render_finished_semaphore,
   };
 
-  VkResult result = vkQueueSubmit(context->graphics_queue, 1, &submit_info, fso->in_flight_fence);
+  VkResult result = vkQueueSubmit(ctx->graphics_queue, 1, &submit_info, fso->in_flight_fence);
   VK_CHECK(result, "Failed to submit queue");
 
   VkPresentInfoKHR present_info = {
@@ -1799,20 +1874,22 @@ void submit_and_present(const VulkanContext *context, VkCommandBuffer command_bu
       .waitSemaphoreCount = 1,
       .pWaitSemaphores = &fso->render_finished_semaphore,
       .swapchainCount = 1,
-      .pSwapchains = &context->swapchain,
-      .pImageIndices = &context->image_index,
+      .pSwapchains = &ctx->swapchain,
+      .pImageIndices = &ctx->image_index,
       .pResults = NULL,
   };
 
   // TODO handle swapchain recreation here if need be
-  result = vkQueuePresentKHR(context->graphics_queue, &present_info);
+  result = vkQueuePresentKHR(ctx->graphics_queue, &present_info);
   VK_CHECK(result, "Failed to present queue");
 }
 
-VkPipelineVertexInputStateCreateInfo
-create_vertex_input_state(u32 binding_description_count, const VkVertexInputBindingDescription *binding_descriptions,
-                          u32 attribute_description_count,
-                          const VkVertexInputAttributeDescription *attribute_descriptions) {
+VkPipelineVertexInputStateCreateInfo create_vertex_input_state(
+    u32 binding_description_count,
+    const VkVertexInputBindingDescription *binding_descriptions,
+    u32 attribute_description_count,
+    const VkVertexInputAttributeDescription *attribute_descriptions
+) {
 
   VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -1827,8 +1904,8 @@ create_vertex_input_state(u32 binding_description_count, const VkVertexInputBind
   return vertex_input_state_create_info;
 }
 
-VkPipelineLayout create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts,
-                                        u32 set_layout_count) {
+VkPipelineLayout
+create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts, u32 set_layout_count) {
 
   VkPipelineLayoutCreateInfo pipeline_layout_ci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -1847,8 +1924,9 @@ VkPipelineLayout create_pipeline_layout(VkDevice device, const VkDescriptorSetLa
 }
 
 // TODO VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
-VkDescriptorPool create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count,
-                                        u32 max_sets) {
+VkDescriptorPool
+create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets) {
+
   VkDescriptorPoolCreateInfo descriptor_pool_ci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       .pNext = NULL,
@@ -1864,8 +1942,8 @@ VkDescriptorPool create_descriptor_pool(VkDevice device, const VkDescriptorPoolS
   return descriptor_pool;
 }
 
-VkDescriptorSet create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool,
-                                      VkDescriptorSetLayout *descriptor_set_layout) {
+VkDescriptorSet
+create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool, VkDescriptorSetLayout *descriptor_set_layout) {
 
   VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -1882,8 +1960,8 @@ VkDescriptorSet create_descriptor_set(VkDevice device, VkDescriptorPool descript
 }
 
 // TODO VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR
-VkDescriptorSetLayout create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings,
-                                                   u32 binding_count) {
+VkDescriptorSetLayout
+create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count) {
 
   VkDescriptorSetLayoutCreateInfo descriptor_set_layout_ci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -1915,8 +1993,9 @@ StagingArena create_staging_arena(const VulkanContext *context, u32 total_size) 
 // TODO An explicit API to get rid of
 // written_data_offset is the offset of the staged data in *data, i.e. the
 // src_offset when the staging buffer is the src
-u32 stage_data_explicit(const VulkanContext *context, StagingArena *arena, const void *data, u32 size,
-                        VkBuffer destination, u32 dst_offset) {
+u32 stage_data_explicit(
+    const VulkanContext *context, StagingArena *arena, const void *data, u32 size, VkBuffer destination, u32 dst_offset
+) {
 
   assert(arena->offset + size <= arena->total_size);
   assert(arena->num_copy_regions < MAX_COPY_REGIONS);
@@ -1938,8 +2017,9 @@ u32 stage_data_explicit(const VulkanContext *context, StagingArena *arena, const
   return written_data_offset;
 }
 
-u32 stage_data_auto(const VulkanContext *context, StagingArena *arena, const void *data, u32 size,
-                    VkBuffer destination) {
+u32 stage_data_auto(
+    const VulkanContext *context, StagingArena *arena, const void *data, u32 size, VkBuffer destination
+) {
   return stage_data_explicit(context, arena, data, size, destination, arena->offset);
 }
 
@@ -1959,15 +2039,19 @@ void flush_staging_arena(const VulkanContext *context, StagingArena *arena) {
       continue;
     }
 
-    vkCmdCopyBuffer(command_buffer, arena->buffer.buffer, current_destination, i - current_batch_start,
-                    arena->copy_regions + current_batch_start);
+    vkCmdCopyBuffer(
+        command_buffer, arena->buffer.buffer, current_destination, i - current_batch_start,
+        arena->copy_regions + current_batch_start
+    );
 
     current_destination = arena->destination_buffers[i];
     current_batch_start = i;
   }
 
-  vkCmdCopyBuffer(command_buffer, arena->buffer.buffer, current_destination,
-                  arena->num_copy_regions - current_batch_start, arena->copy_regions + current_batch_start);
+  vkCmdCopyBuffer(
+      command_buffer, arena->buffer.buffer, current_destination, arena->num_copy_regions - current_batch_start,
+      arena->copy_regions + current_batch_start
+  );
 
   end_single_use_command_buffer(context, command_buffer);
 }
@@ -1986,9 +2070,9 @@ ShaderModule create_shader_stage(VkShaderModule module, VkShaderStageFlagBits st
 // descriptor_type: flags for uniform, sampler, storage, etc
 // descriptor_count: if the shader allocates an array, the array size
 // TODO immutable samplers?
-VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(u32 binding, VkShaderStageFlags stage_flags,
-                                                                  VkDescriptorType descriptor_type,
-                                                                  u32 descriptor_count) {
+VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(
+    u32 binding, VkShaderStageFlags stage_flags, VkDescriptorType descriptor_type, u32 descriptor_count
+) {
   VkDescriptorSetLayoutBinding layout_binding = {
       .binding = binding,
       .descriptorType = descriptor_type,
@@ -2006,8 +2090,9 @@ UniformBuffer create_uniform_buffer(const VulkanContext *context, u32 buffer_siz
       .size = buffer_size,
   };
 
-  VkResult result = vkMapMemory(context->device, uniform_buffer.vulkan_buffer.memory, 0, buffer_size, 0,
-                                (void **)&uniform_buffer.mapped);
+  VkResult result = vkMapMemory(
+      context->device, uniform_buffer.vulkan_buffer.memory, 0, buffer_size, 0, (void **)&uniform_buffer.mapped
+  );
   VK_CHECK(result, "Failed to map uniform buffer memory");
 
   return uniform_buffer;
@@ -2027,8 +2112,10 @@ ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *contex
       .size = buffer_size,
   };
 
-  VkResult result = vkMapMemory(context->device, readonly_storage_buffer.vulkan_buffer.memory, 0, buffer_size, 0,
-                                (void **)&readonly_storage_buffer.mapped);
+  VkResult result = vkMapMemory(
+      context->device, readonly_storage_buffer.vulkan_buffer.memory, 0, buffer_size, 0,
+      (void **)&readonly_storage_buffer.mapped
+  );
   VK_CHECK(result, "Failed to map storage buffer memory");
 
   return readonly_storage_buffer;
@@ -2040,8 +2127,9 @@ ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *contex
 // current idea: anticipate loading several textures at once, read from files,
 // pick one with max size, allocate staging buffer with that size, and
 // stream the textures in one by one after that
-VulkanTexture create_vulkan_texture(VulkanContext *context, VulkanImageData image_data, VulkanBuffer staging_buffer,
-                                    void *ptr_to_mapped_memory) {
+VulkanTexture create_vulkan_texture(
+    VulkanContext *context, VulkanImageData image_data, VulkanBuffer staging_buffer, void *ptr_to_mapped_memory
+) {
   VulkanTexture vulkan_texture = {
       .width = image_data.width,
       .height = image_data.height,
@@ -2086,8 +2174,9 @@ VulkanTexture create_vulkan_texture(VulkanContext *context, VulkanImageData imag
 
   VkImageLayout image_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
   u32 region_count = 1;
-  vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, vulkan_texture.image, image_layout, region_count,
-                         &buffer_image_copy);
+  vkCmdCopyBufferToImage(
+      cmd, staging_buffer.buffer, vulkan_texture.image, image_layout, region_count, &buffer_image_copy
+  );
 
   // second transition
   old_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -2106,8 +2195,9 @@ VulkanTexture create_vulkan_texture(VulkanContext *context, VulkanImageData imag
 // want to be able to refer to textures by name?
 // I could pass an array of structs containing a VulkanTexture and a path
 // Also could do hashing
-void load_vulkan_textures(VulkanContext *context, const VulkanImageData *image_datas, u32 num_images,
-                          VulkanTexture *out_textures) {
+void load_vulkan_textures(
+    VulkanContext *context, const VulkanImageData *image_datas, u32 num_images, VulkanTexture *out_textures
+) {
 
   u32 max_size = 0;
   for (u32 i = 0; i < num_images; i++) {
@@ -2197,9 +2287,16 @@ void merge_descriptor_set_layouts() {
 
 // this binding handle would describe which binding, array of uniform
 // size, and what shader stage the uniform is used in
-void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder, const UniformBuffer *uniform_buffer, u32 offset,
-                                       u32 range, u32 binding, u32 descriptor_count, VkShaderStageFlags stage_flags,
-                                       bool dynamic) {
+void add_uniform_buffer_descriptor_set(
+    DescriptorSetBuilder *builder,
+    const UniformBuffer *uniform_buffer,
+    u32 offset,
+    u32 range,
+    u32 binding,
+    u32 descriptor_count,
+    VkShaderStageFlags stage_flags,
+    bool dynamic
+) {
   assert(builder->write_descriptor_count < MAX_DESCRIPTOR_WRITES);
   assert(builder->buffer_info_count < MAX_DESCRIPTOR_BUFFER_INFOS);
   assert(builder->binding_count < MAX_LAYOUT_BINDINGS);
@@ -2234,8 +2331,14 @@ void add_uniform_buffer_descriptor_set(DescriptorSetBuilder *builder, const Unif
 
 // TODO check for proper transitions - still don't understand transitions
 // TODO check how to pass immutable samplers through here
-void add_image_descriptor_set(DescriptorSetBuilder *builder, VkImageView image_view, VkSampler sampler, u32 binding,
-                              u32 descriptor_count, VkShaderStageFlags stage_flags) {
+void add_image_descriptor_set(
+    DescriptorSetBuilder *builder,
+    VkImageView image_view,
+    VkSampler sampler,
+    u32 binding,
+    u32 descriptor_count,
+    VkShaderStageFlags stage_flags
+) {
   assert(builder->write_descriptor_count < MAX_DESCRIPTOR_WRITES);
   assert(builder->image_info_count < MAX_DESCRIPTOR_IMAGE_INFOS);
   assert(builder->binding_count < MAX_LAYOUT_BINDINGS);
@@ -2281,8 +2384,10 @@ DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescri
     builder->descriptor_writes[i].dstSet = handle.descriptor_set;
   }
 
-  vkUpdateDescriptorSets(builder->device, builder->write_descriptor_count, builder->descriptor_writes,
-                         builder->copy_descriptor_count, builder->descriptor_copies);
+  vkUpdateDescriptorSets(
+      builder->device, builder->write_descriptor_count, builder->descriptor_writes, builder->copy_descriptor_count,
+      builder->descriptor_copies
+  );
 
   return handle;
 }
@@ -2298,15 +2403,18 @@ void render_mesh(VkCommandBuffer command_buffer, RenderCall *call) {
   // TODO engine: try to move branching to render call init
   u32 first_binding = 0;
   if (call->num_vertex_buffers > 0) {
-    vkCmdBindVertexBuffers(command_buffer, first_binding, call->num_vertex_buffers, call->vertex_buffers,
-                           call->vertex_buffer_offsets);
+    vkCmdBindVertexBuffers(
+        command_buffer, first_binding, call->num_vertex_buffers, call->vertex_buffers, call->vertex_buffer_offsets
+    );
   }
 
   if (call->num_descriptor_sets > 0) {
     u32 first_set = 0;
     u32 dynamic_offset_count = 0;
-    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, call->pipeline_layout, first_set,
-                            call->num_descriptor_sets, call->descriptor_sets, dynamic_offset_count, NULL);
+    vkCmdBindDescriptorSets(
+        command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, call->pipeline_layout, first_set, call->num_descriptor_sets,
+        call->descriptor_sets, dynamic_offset_count, NULL
+    );
   }
 
   u32 first_instance = 0; // TODO understand when this would be non zero
@@ -2314,8 +2422,9 @@ void render_mesh(VkCommandBuffer command_buffer, RenderCall *call) {
   if (call->is_indexed) {
     vkCmdBindIndexBuffer(command_buffer, call->index_buffer, call->index_buffer_offset, VK_INDEX_TYPE_UINT16);
     u32 first_index = 0;
-    vkCmdDrawIndexed(command_buffer, call->num_indices, call->instance_count, first_index, vertex_offset,
-                     first_instance);
+    vkCmdDrawIndexed(
+        command_buffer, call->num_indices, call->instance_count, first_index, vertex_offset, first_instance
+    );
   } else {
     u32 first_vertex = 0;
     vkCmdDraw(command_buffer, call->num_vertices, call->instance_count, first_vertex, first_instance);
@@ -2420,8 +2529,9 @@ CoherentStreamingBuffer create_coherent_streaming_buffer(const VulkanContext *ct
 
   coherent_streaming_buffer.vulkan_buffer = create_buffer(ctx, BUFFER_TYPE_COHERENT_STREAMING, size);
 
-  vkMapMemory(ctx->device, coherent_streaming_buffer.vulkan_buffer.memory, 0, size, 0,
-              (void **)&coherent_streaming_buffer.data);
+  vkMapMemory(
+      ctx->device, coherent_streaming_buffer.vulkan_buffer.memory, 0, size, 0, (void **)&coherent_streaming_buffer.data
+  );
 
   coherent_streaming_buffer.size = size;
   coherent_streaming_buffer.head = 0;
@@ -2445,8 +2555,9 @@ void write_to_streaming_buffer(CoherentStreamingBuffer *coherent_streaming_buffe
   coherent_streaming_buffer->head = overflowed ? size : offset + size;
 }
 
-ColorDepthFramebuffer create_color_depth_framebuffer(const VulkanContext *context, VkExtent2D extent,
-                                                     VkFormat color_format, VkFormat depth_format) {
+ColorDepthFramebuffer create_color_depth_framebuffer(
+    const VulkanContext *context, VkExtent2D extent, VkFormat color_format, VkFormat depth_format
+) {
   ColorDepthFramebuffer fb;
   fb.render_pass = create_color_depth_render_pass(context->device, color_format, depth_format);
 
