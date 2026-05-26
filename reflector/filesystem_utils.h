@@ -2,10 +2,10 @@
 
 #include "reflector.h"
 
-#define MAX_NUM_SUBDIRECTORIES 32
-#define MAX_NUM_SHADERS 128
-#define SUBDIRECTORY_PATH_BUFFER_LENGTH 512
 #define FULL_PATH_BUFFER_LENGTH 4096
+#define MAX_NUM_SHADERS 128
+#define MAX_NUM_SUBDIRECTORIES 32
+#define SUBDIRECTORY_PATH_BUFFER_LENGTH 512
 
 struct SubdirectoryList {
   u32 num_subdirectories;
@@ -27,7 +27,8 @@ struct ShaderToCompileList {
   bool needs_recompiled;
 };
 
+void validate_in_path(const char *raw_path, char *out_path);
 void free_shader_to_compile_list(ShaderToCompileList *shader_to_compile_list);
 void push_subdirectory(SubdirectoryList *subdirectory_list, const char *s);
 void walk_dirs(const char *path, SubdirectoryList *subdirectory_list);
-ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirectory_list);
+ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirectory_list, const char *shaders_root, const char *output_path);

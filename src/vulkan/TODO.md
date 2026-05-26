@@ -158,6 +158,29 @@ into a larger slot it reads past the variable. Add data_size parameter, assert d
 
 ---
 
+## Material Setup (Deferred — needs more drawn worlds first)
+
+Adding a new drawable currently requires 7 touch points: a new `DescriptorHandleID` enum entry,
+a new `UniformWrite` field, a `push_uniform` call, a descriptor set builder block, a new
+`init_X_material` function (~30 lines of pipeline layout + pipeline + RenderCall population),
+a `render_mesh` call in the render loop, and a destroy call. Seen clearly in pong.
+
+The right abstraction here is not obvious yet. A `create_material` helper that collapses
+pipeline layout + pipeline + RenderCall into one call is plausible, but the shape of a material
+system — how descriptors are owned, how programs map to pipelines, what varies per-instance vs.
+per-material — needs to be developed from experience drawing many simple meshes and worlds.
+Do not draft a material system. Draw things first. Let the abstraction emerge.
+
+Specific rough edges to revisit once the pattern is clear:
+- `Material` does not own all its descriptors — `init_background_material` takes external
+  handles and manually assembles the layout array.
+- `UniformWrites` struct in pong manually mirrors the `push_uniform` call sequence; adding
+  a uniform requires touching both in sync.
+- `DescriptorHandleID` enum grows by one per drawable regardless of whether descriptors are
+  actually distinct.
+
+---
+
 ## Depth Buffer
 
 **Image view missing stencil aspect bit.**

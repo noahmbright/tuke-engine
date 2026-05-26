@@ -1,12 +1,59 @@
 #include "filesystem_utils.h"
 #include "reflector.h"
 
+#include <cstring>
 #include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+
+// Sanitize input dir.
+// If the path ends in shaders/, then use the path as is.
+// If not, check if a subdirectory called shaders exists.
+void validate_in_path(const char *raw_path, char *out_path) {
+  struct stat s;
+  if (stat(raw_path, &s) != 0) {
+    fprintf(stderr, "%s: %s\n", raw_path, strerror(errno));
+    exit(1);
+  }
+
+  if (!S_ISDIR(s.st_mode)) {
+    fprintf(stderr, "%s is not a directory\n", raw_path);
+    exit(1);
+  }
+
+  size_t len = strlen(raw_path);
+  size_t shaders_len = strlen("shaders");
+  if (len >= shaders_len && strcmp(raw_path + len - shaders_len, "shaders") == 0) {
+    int n = snprintf(out_path, FULL_PATH_BUFFER_LENGTH, "%s", raw_path);
+    if (n < 0 || n >= FULL_PATH_BUFFER_LENGTH) {
+      fprintf(stderr, "validate_in_path: path too long: %s\n", raw_path);
+      exit(1);
+    }
+    return;
+  }
+
+  char shaders_path[FULL_PATH_BUFFER_LENGTH];
+  int shaders_path_n = snprintf(shaders_path, sizeof(shaders_path), "%s/shaders", raw_path);
+  if (shaders_path_n < 0 || shaders_path_n >= FULL_PATH_BUFFER_LENGTH) {
+    fprintf(stderr, "validate_in_path: path too long: %s/shaders\n", raw_path);
+    exit(1);
+  }
+
+  struct stat shaders_stat;
+  if (stat(shaders_path, &shaders_stat) != 0 || !S_ISDIR(shaders_stat.st_mode)) {
+    fprintf(stderr, "%s: no shaders/ subdirectory\n", raw_path);
+    exit(1);
+  }
+
+  int out_n = snprintf(out_path, FULL_PATH_BUFFER_LENGTH, "%s", shaders_path);
+  if (out_n < 0 || out_n >= FULL_PATH_BUFFER_LENGTH) {
+    fprintf(stderr, "validate_in_path: path too long: %s\n", shaders_path);
+    exit(1);
+  }
+}
 
 void free_shader_to_compile_list(ShaderToCompileList *shader_to_compile_list) {
   for (u32 i = 0; i < shader_to_compile_list->num_shaders; i++) {
@@ -19,16 +66,15 @@ void free_shader_to_compile_list(ShaderToCompileList *shader_to_compile_list) {
   }
 }
 
-void push_subdirectory(SubdirectoryList *subdirectory_list, const char *s) {
-  if (subdirectory_list->num_subdirectories >= MAX_NUM_SUBDIRECTORIES) {
+void push_subdirectory(SubdirectoryList *subdir_list, const char *s) {
+  if (subdir_list->num_subdirectories >= MAX_NUM_SUBDIRECTORIES) {
     fprintf(stderr, "push_subdirectory: subdirectory_list exceed maximum capacity\n");
     exit(1);
   }
 
-  snprintf(subdirectory_list->subdirectories[subdirectory_list->num_subdirectories], SUBDIRECTORY_PATH_BUFFER_LENGTH,
-           "%s", s);
-
-  subdirectory_list->num_subdirectories++;
+  char *subdir = subdir_list->subdirectories[subdir_list->num_subdirectories];
+  snprintf(subdir, SUBDIRECTORY_PATH_BUFFER_LENGTH, "%s", s);
+  subdir_list->num_subdirectories++;
 }
 
 void walk_dirs(const char *path, SubdirectoryList *subdirectory_list) {
@@ -104,67 +150,69 @@ const char *read_file(const char *path, u64 *out_size) {
   return buffer;
 }
 
-ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirectory_list) {
-  ShaderToCompileList shader_to_compile_list;
-  memset(&shader_to_compile_list, 0, sizeof(shader_to_compile_list));
+static const char *scan_token(const char *src, char *out, u32 out_size, char delim) {
+  u32 i = 0;
+  while (*src != '\0' && *src != delim && i < out_size - 1)
+    out[i++] = *src++;
+  out[i] = '\0';
+  return src;
+}
+
+ShaderToCompileList collect_shaders_to_compile(
+    const SubdirectoryList *subdirectory_list, const char *shaders_root, const char *output_path
+) {
+  ShaderToCompileList shader_list;
+  memset(&shader_list, 0, sizeof(shader_list));
   bool found_newer_shader = false;
 
   struct stat out_header_stat;
-  if (stat(REFLECTOR_OUTPUT_FILE_PATH, &out_header_stat) != 0) {
+  memset(&out_header_stat, 0, sizeof(out_header_stat));
+  if (stat(output_path, &out_header_stat) != 0) {
     if (errno == ENOENT) {
-      printf("%s does not exist, will recompile shaders.\n", REFLECTOR_OUTPUT_FILE_PATH);
-      shader_to_compile_list.needs_recompiled = true;
+      printf("%s does not exist: Compiling shaders.\n", output_path);
+      shader_list.needs_recompiled = true;
     }
   }
 
-  for (u32 subdirectory_index = 0; subdirectory_index < subdirectory_list->num_subdirectories; subdirectory_index++) {
+  for (u32 subdir_index = 0; subdir_index < subdirectory_list->num_subdirectories; subdir_index++) {
+    const char *subdir_path = subdirectory_list->subdirectories[subdir_index];
 
-    const char *subdirectory_path = subdirectory_list->subdirectories[subdirectory_index];
-
-    // will probably remove gen subdirectories, but enforce skipping for now
-    // this loop moves cursor one past the end to the null terminator
-    const char *cursor = subdirectory_path;
-    while (*cursor != '\0' && (cursor - subdirectory_path) < SUBDIRECTORY_PATH_BUFFER_LENGTH) {
-      cursor++;
-    }
-
-    if (cursor - subdirectory_path >= 3 && strncmp(cursor - 3, "gen", 3) == 0) {
-      // printf("collect_shaders_to_compile: skipping gen directory %s\n", subdirectory_path);
+    // Skip gen output directories
+    const char *last_slash = strrchr(subdir_path, '/');
+    const char *last_component = last_slash ? last_slash + 1 : subdir_path;
+    if (strcmp(last_component, "gen") == 0) {
       continue;
     }
 
-    // skipped gen, iterate over regular files
-    DIR *subdirectory = opendir(subdirectory_path);
+    // Iterate over regular files
+    DIR *subdirectory = opendir(subdir_path);
     if (!subdirectory) {
-      fprintf(stderr, "collect_shaders_to_compile: Failed to open %s: %s", subdirectory_path, strerror(errno));
+      fprintf(stderr, "%s(): Failed to open %s: %s", __func__, subdir_path, strerror(errno));
       continue;
     }
 
     struct dirent *directory_entry;
     while ((directory_entry = readdir(subdirectory))) {
-
+      // Skip . and ..
       if (strcmp(directory_entry->d_name, ".") == 0 || strcmp(directory_entry->d_name, "..") == 0) {
         continue;
       }
 
-      if (shader_to_compile_list.num_shaders >= MAX_NUM_SHADERS) {
-        printf("collect_shaders_to_compile: Exceeded MAX_NUM_SHADERS\n");
+      if (shader_list.num_shaders >= MAX_NUM_SHADERS) {
+        printf("%s(): Exceeded MAX_NUM_SHADERS\n", __func__);
         break;
       }
-      ShaderToCompile *shader_to_compile = &shader_to_compile_list.shaders[shader_to_compile_list.num_shaders];
 
-      // full path is e.g. shaders/common/quad.vert.in
-      // sticks together subdirectory path (shaders/common/) and name
-      // (name.stage.in)
+      // Full path is e.g. shaders/common/quad.vert.in
+      // Sticks together subdirectory path (shaders/common/) and name (name.stage.in)
       char full_path[FULL_PATH_BUFFER_LENGTH];
-      int characters_to_copy =
-          snprintf(full_path, sizeof(full_path), "%s/%s", subdirectory_path, directory_entry->d_name);
+      int characters_to_copy = snprintf(full_path, sizeof(full_path), "%s/%s", subdir_path, directory_entry->d_name);
       if (characters_to_copy < 0) {
-        fprintf(stderr, "collect_shaders_to_compile: encoding error in snprintf'\n");
+        fprintf(stderr, "%s(): encoding error in snprintf'\n", __func__);
         continue;
       }
       if (characters_to_copy >= FULL_PATH_BUFFER_LENGTH) {
-        fprintf(stderr, "collect_shaders_to_compile: snprintf truncated path %s'\n", full_path);
+        fprintf(stderr, "%s(): snprintf truncated path %s'\n", __func__, full_path);
         continue;
       }
 
@@ -180,23 +228,14 @@ ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirect
 
       if (shader_stat.st_mtime > out_header_stat.st_mtime) {
         found_newer_shader = true;
-        shader_to_compile_list.needs_recompiled = true;
+        shader_list.needs_recompiled = true;
       }
 
-      // points into my stack buffer here, can be safe
-      const char *shaders_prefix_trimmed_path = full_path;
-      if (strncmp(full_path, "shaders/", strlen("shaders/")) != 0) {
-        fprintf(stderr, "collect_shaders_to_compile: Not parsing a "
-                        "project_root/shaders directory, exiting\n");
-        closedir(subdirectory);
-        exit(1);
-      }
-
-      // skip shaders prefix
-      shaders_prefix_trimmed_path += strlen("shaders/");
+      const char *shaders_prefix_trimmed_path = full_path + strlen(shaders_root) + 1;
 
       // get filename - check for windows backslash vs forward slash
-      cursor = shaders_prefix_trimmed_path;
+      const char *cursor = shaders_prefix_trimmed_path;
+
       // last slash and cursor now point into full_path stack buffer
       const char *last_slash_location = shaders_prefix_trimmed_path;
       while ((cursor - full_path) < FULL_PATH_BUFFER_LENGTH - 1 && *cursor != '\0') {
@@ -206,86 +245,52 @@ ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirect
         cursor++;
       }
 
-      const u32 shader_name_buffer_size = 128;
-      const u32 shader_stage_buffer_size = 8;
-      const u32 shader_extension_buffer_size = 8;
-      char shader_name_buffer[shader_name_buffer_size];
-      char shader_stage_buffer[shader_stage_buffer_size];
-      char shader_extension_buffer[shader_extension_buffer_size];
-      memset(shader_name_buffer, 0, sizeof(shader_name_buffer));
-      memset(shader_stage_buffer, 0, sizeof(shader_stage_buffer));
-      memset(shader_extension_buffer, 0, sizeof(shader_extension_buffer));
+      const u32 BUFFER_SIZE = 128;
+      char token[BUFFER_SIZE];
       cursor = last_slash_location + 1;
 
-      for (u32 i = 0; i < shader_name_buffer_size; i++) {
-        if (*cursor == '.' || *cursor == '\0' || cursor - full_path >= FULL_PATH_BUFFER_LENGTH - 1) {
-          break;
-        }
-
-        shader_name_buffer[i] = *cursor;
-        cursor++;
-      }
+      cursor = scan_token(cursor, token, BUFFER_SIZE, '.');
       if (*cursor == '\0') {
-        fprintf(stderr,
-                "collect_shaders_to_compile: shader filename %s ended after name, stil needed stage and extension\n",
-                full_path);
-        continue;
-      } else {
-        cursor++;
-      }
-      // printf("shadername : %s\n", shader_name_buffer);
-
-      for (u32 i = 0; i < shader_stage_buffer_size; i++) {
-        if (*cursor == '.' || *cursor == '\0' || cursor - full_path >= FULL_PATH_BUFFER_LENGTH - 1) {
-          break;
-        }
-
-        shader_stage_buffer[i] = *cursor;
-        cursor++;
-      }
-      if (*cursor == '\0') {
-        fprintf(stderr, "collect_shaders_to_compile: shader filename %s ended after stage, still needed extension\n",
-                full_path);
-        continue;
-      } else {
-        cursor++;
-      }
-      // printf("shader stage : %s\n", shader_stage_buffer);
-
-      for (u32 i = 0; i < shader_extension_buffer_size; i++) {
-        if (*cursor == '.' || *cursor == '\0' || cursor - full_path >= FULL_PATH_BUFFER_LENGTH - 1) {
-          break;
-        }
-
-        shader_extension_buffer[i] = *cursor;
-        cursor++;
-      }
-      if (*cursor != '\0') {
-        fprintf(stderr, "collect_shaders_to_compile: shader filename %s not finished after extension\n", full_path);
+        fprintf(stderr, "%s: shader filename %s ended after name: need stage and extension\n", __func__, full_path);
         continue;
       }
-      // printf("shader stage : %s\n", shader_extension_buffer);
-      if (strcmp(shader_extension_buffer, "in") != 0) {
-        fprintf(stderr, "collect_shaders_to_compile: shader filename %s has invalid extension\n", full_path);
-        continue;
-      }
+      cursor++;
 
+      cursor = scan_token(cursor, token, BUFFER_SIZE, '.');
       ShaderStage shader_stage;
-      if (strcmp(shader_stage_buffer, "vert") == 0) {
+      if (strcmp(token, "vert") == 0) {
         shader_stage = SHADER_STAGE_VERTEX;
-      } else if (strcmp(shader_stage_buffer, "frag") == 0) {
+      } else if (strcmp(token, "frag") == 0) {
         shader_stage = SHADER_STAGE_FRAGMENT;
-      } else if (strcmp(shader_stage_buffer, "comp") == 0) {
+      } else if (strcmp(token, "comp") == 0) {
         shader_stage = SHADER_STAGE_COMPUTE;
+      } else if (strcmp(token, "shader") == 0) {
+        shader_stage = SHADER_STAGE_COMBINED;
       } else {
-        fprintf(stderr, "collect_shaders_to_compile: got an invalid shader stage %s\n", shader_stage_buffer);
+        fprintf(stderr, "%s(): got an invalid shader stage %s\n", __func__, token);
+        continue;
+      }
+      if (*cursor == '\0') {
+        fprintf(stderr, "%s(): shader filename %s ended after stage: still need extension\n", __func__, full_path);
+        continue;
+      }
+      cursor++;
+
+      cursor = scan_token(cursor, token, BUFFER_SIZE, '.');
+      if (*cursor != '\0') {
+        fprintf(stderr, "%s(): shader filename %s not finished after extension\n", __func__, full_path);
+        continue;
+      }
+      if (strcmp(token, "in") != 0) {
+        fprintf(stderr, "%s(): shader filename %s has invalid extension\n", __func__, full_path);
         continue;
       }
 
-      const char *shader_source = read_file(full_path, &shader_to_compile->source_length);
+      u64 source_length;
+      const char *shader_source = read_file(full_path, &source_length);
 
       if (shader_source == NULL) {
-        fprintf(stderr, "collect_shaders_to_compile: Failed to get source for %s\n", full_path);
+        fprintf(stderr, "%s(): Failed to get source for %s\n", __func__, full_path);
         continue;
       }
 
@@ -306,18 +311,21 @@ ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirect
       }
       shader_name[shader_name_length] = '\0';
 
-      shader_to_compile->source = shader_source;
-      shader_to_compile->stage = shader_stage;
-      shader_to_compile->name = shader_name;
-      shader_to_compile->name_length = shader_name_length;
-      shader_to_compile_list.num_shaders++;
+      shader_list.shaders[shader_list.num_shaders] = {
+          .stage = shader_stage,
+          .source = shader_source,
+          .source_length = source_length,
+          .name = shader_name,
+          .name_length = shader_name_length,
+      };
+      shader_list.num_shaders++;
     } // nested loop over files in subdir
     closedir(subdirectory);
   } // main loop over subdirectories
 
   if (!found_newer_shader) {
-    printf("Found no shaders newer than %s.\n", REFLECTOR_OUTPUT_FILE_PATH);
+    printf("Found no shaders newer than %s.\n", output_path);
   }
 
-  return shader_to_compile_list;
+  return shader_list;
 }
