@@ -1,6 +1,7 @@
 #include <glad/gl.h>
 
 #include "stb_image.h"
+#include "stb_truetype.h"
 #include "utils.h"
 
 const char *read_file(const char *path, unsigned long *size) {
@@ -28,8 +29,9 @@ const char *read_file(const char *path, unsigned long *size) {
   buffer[bytes_read] = '\0';
   fclose(fp);
 
-  if (size)
+  if (size) {
     *size = bytes_read;
+  }
   return buffer;
 }
 
@@ -83,4 +85,27 @@ unsigned load_texture_opengl(const char *path) {
   free_stb_handle(&handle);
 
   return texture;
+}
+
+// Can use this to upload a texture directly to the GPU using a temporary buffer
+// allocated inside this function.
+// /System/Library/Fonts/Helvetica.ttc
+void stb_fonts(const char *path) {
+  unsigned long size;
+  u8 *data = (u8 *)read_file(path, &size);
+  // Passing 0 for offset
+  float pixel_height = 32.0f;
+  int buffer_pixels_h = 512;
+  int buffer_pixels_w = 512;
+  unsigned char buffer_to_fill[512 * 512];
+  int first_char = 'A';
+  stbtt_bakedchar cdata[96]; // ASCII 32..126 is 95 glyphs
+  int num_chars = 96;
+  stbtt_BakeFontBitmap(
+      data, 0, pixel_height, buffer_to_fill, buffer_pixels_w, buffer_pixels_h, first_char, num_chars, cdata
+  );
+  free(data);
+  // upload to GPU? Backend API dependent
+  // upload logic...
+  // free stbtt_bakedchar here if heap allocated
 }
