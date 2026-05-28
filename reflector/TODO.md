@@ -1,21 +1,6 @@
 # Reflector TODO
 
-## Highest Priority: Per-App Shader Organization
-
-**Move shaders into app subdirectories.**
-Currently all shaders live under `shaders/<subdirectory>/`. Move them to `app/<appname>/shaders/`.
-Audit shows `shaders/common/` is mostly bringup — the only shader genuinely shared across two apps
-is `fullscreen_quad` (vulkan_test + top_down). Duplication of that one shader is cheaper than the
-namespace problems the current layout causes.
-
-**Per-app reflector invocation → per-app generated header.**
-Run the reflector once per app, fed that app's `shaders/` dir. Emit `app/<appname>/gen/shaders.h`
-instead of the current monolith `gen/c_reflector_bringup.h`. `BUFFER_LABEL` namespace becomes
-app-local, eliminating cross-app label conflicts.
-
----
-
-## Descriptor Generation (High Priority)
+## Next Up: Descriptor Generation
 
 **`generate_vulkan_descriptor_set_layout_binding_lists` is a stub.**
 The function in `codegen.cpp` has an empty loop body. This is where per-program descriptor setup
@@ -46,24 +31,11 @@ already handled correctly by the per-field `alignas` the reflector emits.
 
 ---
 
-## Parser Code Quality
+## Parser
 
-**Replace advance+check+error with `expect_token` helper.**
-Every directive parser repeats:
-```c
-current_token = parser_advance_and_get_next_token(parser);
-if (current_token.type != TOKEN_TYPE_X) {
-    report_parser_error(parser, current_token.start, RECOVERY, "Expected X after Y, got %s",
-                        token_type_to_string[current_token.type]);
-    return ...;
-}
-```
-An `expect_token(parser, type, recovery_type, fmt, ...)` helper that advances, checks, and
-errors would cut the parser roughly in half.
-
-**StringView for C string handling.**
-`strncmp` + length pairs appear throughout parser and IR code. A small `StringView` struct with
-an equality helper would reduce noise and eliminate the risk of length/pointer mismatches.
+**Error reporting is the main pain point.**
+The advance+check+error pattern repeated ~20 times is verbose but functional. The specific issue
+is error message quality. An `expect_token` helper would fix both if it ever becomes worth it.
 
 ---
 
@@ -86,6 +58,17 @@ See `src/vulkan/TODO.md` for the target API.
 **Single-file shader format.**
 Allow vert and frag in one `.shader.in` file split by a `#stage vertex` / `#stage fragment`
 marker. Additive — existing `.vert.in` / `.frag.in` pairs continue to work. See `src/vulkan/TODO.md`.
+
+---
+
+## Further Learning Resources
+
+- *Computer Architecture: A Quantitative Approach* (Hennessy/Patterson) — GPU architecture chapters
+- NVIDIA Turing/Ampere/Ada architecture whitepapers (free PDFs) — actual silicon internals
+- *GPU Gems* series (free online) — GPU algorithm patterns
+- *Programming Massively Parallel Processors* (Kirk/Hwu) — standard CUDA text, first half is GPU architecture and API-agnostic
+- Vulkan compute shaders + subgroup operations (`subgroupAdd`, `subgroupBallot`) — warp-level hardware concepts without CUDA
+- Xcode Metal debugger/profiler — primary GPU profiling tool on M1
 
 ---
 

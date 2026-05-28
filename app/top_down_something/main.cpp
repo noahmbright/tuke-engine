@@ -5,7 +5,6 @@
 #include "scene_manager.h"
 #include "tilemap.h"
 #include "tuke_engine.h"
-#include "utils.h"
 #include <OpenGL/OpenGL.h>
 #include <stdio.h>
 
@@ -40,17 +39,20 @@ int main() {
 
   u32 player_program = shader_handles_to_gl_program(SHADER_HANDLE_COMMON_PLAYER_VERT, SHADER_HANDLE_COMMON_PLAYER_FRAG);
 
-  u32 fullscreen_quad_program = shader_handles_to_gl_program(SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT,
-                                                             SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG);
+  u32 fullscreen_quad_program = shader_handles_to_gl_program(
+      SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG
+  );
 
-  u32 overworld_overlay_program = shader_handles_to_gl_program(SHADER_HANDLE_TOPDOWN_OVERWORLD_OVERLAY_VERT,
-                                                               SHADER_HANDLE_TOPDOWN_OVERWORLD_OVERLAY_FRAG);
+  u32 overworld_overlay_program = shader_handles_to_gl_program(
+      SHADER_HANDLE_TOPDOWN_OVERWORLD_OVERLAY_VERT, SHADER_HANDLE_TOPDOWN_OVERWORLD_OVERLAY_FRAG
+  );
 
   u32 glyphs_program =
       shader_handles_to_gl_program(SHADER_HANDLE_COMMON_ASCII16X16_VERT, SHADER_HANDLE_COMMON_ASCII16X16_FRAG);
 
-  u32 vision_cone_program = shader_handles_to_gl_program(SHADER_HANDLE_TOPDOWN_OVERWORLD_VISION_CONE_VERT,
-                                                         SHADER_HANDLE_TOPDOWN_OVERWORLD_VISION_CONE_FRAG);
+  u32 vision_cone_program = shader_handles_to_gl_program(
+      SHADER_HANDLE_TOPDOWN_OVERWORLD_VISION_CONE_VERT, SHADER_HANDLE_TOPDOWN_OVERWORLD_VISION_CONE_FRAG
+  );
 
   gl_renderer_push_program(&global_state.renderer, SHADER_ID_TILEMAP, tilemap_program);
   gl_renderer_push_program(&global_state.renderer, SHADER_ID_PLAYER, player_program);
@@ -60,16 +62,19 @@ int main() {
   gl_renderer_push_program(&global_state.renderer, SHADER_ID_VISION_CONE, vision_cone_program);
 
   // Meshes
-  GLMesh tilemap_mesh =
-      create_gl_mesh_with_vertex_layout((f32 *)tilemap_vertices, tilemap_vertices_sizes_bytes, num_vertices,
-                                        VERTEX_LAYOUT_BINDING0VERTEX_VEC2_VEC3_UINT, GL_STATIC_DRAW);
+  GLMesh tilemap_mesh = create_gl_mesh_with_vertex_layout(
+      (f32 *)tilemap_vertices, tilemap_vertices_sizes_bytes, num_vertices, VERTEX_LAYOUT_BINDING0VERTEX_VEC2_VEC3_UINT,
+      GL_STATIC_DRAW
+  );
 
-  GLMesh tilemap1_mesh =
-      create_gl_mesh_with_vertex_layout((f32 *)tilemap1_vertices, tilemap_vertices_sizes_bytes1, num_vertices1,
-                                        VERTEX_LAYOUT_BINDING0VERTEX_VEC2_VEC3_UINT, GL_STATIC_DRAW);
+  GLMesh tilemap1_mesh = create_gl_mesh_with_vertex_layout(
+      (f32 *)tilemap1_vertices, tilemap_vertices_sizes_bytes1, num_vertices1,
+      VERTEX_LAYOUT_BINDING0VERTEX_VEC2_VEC3_UINT, GL_STATIC_DRAW
+  );
 
-  GLMesh player_mesh = create_gl_mesh_with_vertex_layout(player_vertices, sizeof(player_vertices), 6,
-                                                         VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
+  GLMesh player_mesh = create_gl_mesh_with_vertex_layout(
+      player_vertices, sizeof(player_vertices), 6, VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW
+  );
 
   GLMesh fullscreen_quad_mesh = create_gl_mesh_with_vertex_layout(NULL, 0, 3, VERTEX_LAYOUT_NULL, GL_STATIC_DRAW);
 
@@ -86,8 +91,9 @@ int main() {
 
   GLMaterial player_material = create_gl_material(player_program);
   u32 player_model_ubo = create_gl_ubo(sizeof(PlayerModel), GL_DYNAMIC_DRAW);
-  gl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_OVERWORLD_PLAYER_MODEL,
-                          "PlayerModel");
+  gl_material_add_uniform(
+      &player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_OVERWORLD_PLAYER_MODEL, "PlayerModel"
+  );
   gl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
   GLTexture arrow_texture = create_gl_texture_from_image("textures/right_arrow.jpg");

@@ -11,6 +11,8 @@ find_package(Vulkan REQUIRED)
 # To ship: add SDL as a git submodule at third_party/sdl, then:
 #   cmake -DSDL_STATIC_LINK=ON ...
 # and link against SDL3::SDL3-static instead.
+# TODO SDL_STATIC_LINK needs separated into two options:
+#      One for using SDL vs GLFW. One for static vs. dynamic linking.
 option(SDL_STATIC_LINK "Link SDL3 statically for shipping" OFF)
 if(SDL_STATIC_LINK)
     add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/sdl)

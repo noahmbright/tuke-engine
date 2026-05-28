@@ -196,28 +196,29 @@ GLSLSource replace_string_slices(const ParsedShader *sliced_shader, GraphicsBack
 
   compiled_source[compiled_source_length] = '\0';
 
-  GLSLSource glsl_source;
-  glsl_source.length = compiled_source_length;
-  glsl_source.string = compiled_source;
+  GLSLSource glsl_source = {
+      .length = compiled_source_length,
+      .string = compiled_source,
+  };
   return glsl_source;
 }
 
-inline void codegen_compiled_shader_header(FILE *destination) {
-  fprintf(destination, "// Generated shader header, do not edit\n");
-  fprintf(destination, "#pragma once\n");
-  fprintf(destination, "#include \"glad/gl.h\"\n");
-  fprintf(destination, "#include <assert.h>\n");
-  fprintf(destination, "#include <stddef.h>\n");
-  fprintf(destination, "#include <stdint.h>\n");
-  fprintf(destination, "#include <stdio.h>\n");
-  fprintf(destination, "#include <vulkan/vulkan.h>\n");
-  fprintf(destination, "#include <glm/glm.hpp>\n");
+inline void codegen_compiled_shader_header(FILE *dst) {
+  fprintf(dst, "// Generated shader header, do not edit\n");
+  fprintf(dst, "#pragma once\n");
+  fprintf(dst, "#include \"glad/gl.h\"\n");
+  fprintf(dst, "#include <assert.h>\n");
+  fprintf(dst, "#include <stddef.h>\n");
+  fprintf(dst, "#include <stdint.h>\n");
+  fprintf(dst, "#include <stdio.h>\n");
+  fprintf(dst, "#include <vulkan/vulkan.h>\n");
+  fprintf(dst, "#include <glm/glm.hpp>\n");
 
-  fprintf(destination, "enum ShaderStage {\n");
-  fprintf(destination, "  SHADER_STAGE_VERTEX,\n");
-  fprintf(destination, "  SHADER_STAGE_FRAGMENT,\n");
-  fprintf(destination, "  SHADER_STAGE_COMPUTE,\n");
-  fprintf(destination, "};\n\n");
+  fprintf(dst, "enum ShaderStage {\n");
+  fprintf(dst, "  SHADER_STAGE_VERTEX,\n");
+  fprintf(dst, "  SHADER_STAGE_FRAGMENT,\n");
+  fprintf(dst, "  SHADER_STAGE_COMPUTE,\n");
+  fprintf(dst, "};\n\n");
 }
 
 inline char ascii_to_upper(char c) {
@@ -228,15 +229,15 @@ inline char ascii_to_upper(char c) {
   return c & ~(is_lower << 5);
 }
 
-inline void print_name_in_caps(FILE *destination, const char *name) {
+inline void print_name_in_caps(FILE *dst, const char *name) {
   for (const char *s = name; *s; s++) {
-    fputc(ascii_to_upper(*s), destination);
+    fputc(ascii_to_upper(*s), dst);
   }
 }
 
-inline void print_name_in_caps_n(FILE *destination, const char *s, u32 n) {
+inline void print_name_in_caps_n(FILE *dst, const char *s, u32 n) {
   for (u32 i = 0; i < n; i++) {
-    fputc(ascii_to_upper(s[i]), destination);
+    fputc(ascii_to_upper(s[i]), dst);
   }
 }
 
@@ -259,12 +260,12 @@ const char *glsl_type_to_vulkan_format(GLSLType type) {
 
   case GLSL_TYPE_NULL:
   default:
-    fprintf(stderr, "glsl_type_to_vulkan_format got an invalid rate enum.\n");
+    fprintf(stderr, "glsl_type_to_vulkan_format got an invalid GLSLType enum.\n");
     return NULL;
   }
 }
 
-void generate_vulkan_vertex_layout_array(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
+void generate_vulkan_vertex_layout_array(FILE *dst, const ParsedShadersIR *parsed_shaders_ir) {
   // static arrays, needed bc initializing VkPipelineVertexInputStateCreateInfo as const requires pointing arrays
   for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
     const VertexLayout *vertex_layout = &parsed_shaders_ir->vertex_layouts[i];
@@ -273,15 +274,17 @@ void generate_vulkan_vertex_layout_array(FILE *destination, const ParsedShadersI
     }
 
     // bindings
-    fprintf(destination, "const VkVertexInputBindingDescription vertex_bindings_%s[] = {\n", vertex_layout->name);
+    fprintf(dst, "const VkVertexInputBindingDescription vertex_bindings_%s[] = {\n", vertex_layout->name);
     for (u32 i = 0; i < MAX_NUM_VERTEX_BINDINGS; i++) {
       bool has_stride = (vertex_layout->binding_strides[i] > 0);
       bool has_rate = (vertex_layout->binding_rates[i] != VERTEX_ATTRIBUTE_RATE_NULL);
       if (has_stride != has_rate) {
-        fprintf(stderr,
-                "Generating binding code for vertex layout %s, but rate and stride are not both present for binding "
-                "%u.\n",
-                vertex_layout->name, i);
+        fprintf(
+            stderr,
+            "Generating binding code for vertex layout %s, but rate and stride are not both present for binding "
+            "%u.\n",
+            vertex_layout->name, i
+        );
         if (!has_stride) {
           fprintf(stderr, "  stride is missing.\n");
         } else if (!has_rate) {
@@ -296,66 +299,72 @@ void generate_vulkan_vertex_layout_array(FILE *destination, const ParsedShadersI
         continue;
       }
 
-      fprintf(destination, "{ .binding = %u, ", i);
-      fprintf(destination, ".stride = %u, ", vertex_layout->binding_strides[i]);
-      fprintf(destination, ".inputRate = %s },\n",
-              vertex_attribute_rate_to_vulkan_enum_string(vertex_layout->binding_rates[i]));
+      fprintf(dst, "{ .binding = %u, ", i);
+      fprintf(dst, ".stride = %u, ", vertex_layout->binding_strides[i]);
+      fprintf(
+          dst, ".inputRate = %s },\n", vertex_attribute_rate_to_vulkan_enum_string(vertex_layout->binding_rates[i])
+      );
     }
-    fprintf(destination, "};\n\n"); // close array of bindings
+    fprintf(dst, "};\n\n"); // close array of bindings
 
     // attributes
-    fprintf(destination, "const VkVertexInputAttributeDescription vertex_attributes_%s[] = {\n", vertex_layout->name);
+    fprintf(dst, "const VkVertexInputAttributeDescription vertex_attributes_%s[] = {\n", vertex_layout->name);
     for (u32 i = 0; i < vertex_layout->attribute_count; i++) {
-      fprintf(destination, "  {  .location = %u, ", vertex_layout->attributes[i].location);
-      fprintf(destination, ".binding = %u, ", vertex_layout->attributes[i].binding);
-      fprintf(destination, ".format = %s,", glsl_type_to_vulkan_format(vertex_layout->attributes[i].glsl_type));
-      fprintf(destination, ".offset = %u, }\n,", vertex_layout->attributes[i].offset);
+      fprintf(dst, "  {  .location = %u, ", vertex_layout->attributes[i].location);
+      fprintf(dst, ".binding = %u, ", vertex_layout->attributes[i].binding);
+      fprintf(dst, ".format = %s,", glsl_type_to_vulkan_format(vertex_layout->attributes[i].glsl_type));
+      fprintf(dst, ".offset = %u, }\n,", vertex_layout->attributes[i].offset);
     }
-    fprintf(destination, "};\n\n"); // close attributes
+    fprintf(dst, "};\n\n"); // close attributes
   }
 
   // array init
-  fprintf(destination,
-          "const VkPipelineVertexInputStateCreateInfo generated_vulkan_vertex_layouts[NUM_VERTEX_LAYOUT_IDS] = {\n");
+  fprintf(
+      dst, "const VkPipelineVertexInputStateCreateInfo generated_vulkan_vertex_layouts[NUM_VERTEX_LAYOUT_IDS] = {\n"
+  );
   for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
     const VertexLayout *vertex_layout = &parsed_shaders_ir->vertex_layouts[i];
 
     if (vertex_layout->attribute_count > max_num_vertex_attributes) {
-      fprintf(stderr, "Vertex Layout %s has %u attributes, exceeding the max of %u.\n", vertex_layout->name,
-              vertex_layout->attribute_count, max_num_vertex_attributes);
+      fprintf(
+          stderr, "Vertex Layout %s has %u attributes, exceeding the max of %u.\n", vertex_layout->name,
+          vertex_layout->attribute_count, max_num_vertex_attributes
+      );
       continue;
     }
     if (vertex_layout->binding_count > max_num_vertex_bindings) {
-      fprintf(stderr, "Vertex Layout %s has %u bindings, exceeding the max of %u.\n", vertex_layout->name,
-              vertex_layout->binding_count, max_num_vertex_bindings);
+      fprintf(
+          stderr, "Vertex Layout %s has %u bindings, exceeding the max of %u.\n", vertex_layout->name,
+          vertex_layout->binding_count, max_num_vertex_bindings
+      );
       continue;
     }
 
-    fprintf(destination, "  [%s] = {\n", vertex_layout->name);
+    fprintf(dst, "  [%s] = {\n", vertex_layout->name);
     // boilerplate
-    fprintf(destination, "    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,\n");
-    fprintf(destination, "    .pNext = NULL,\n");
-    fprintf(destination, "    .flags = 0,\n");
+    fprintf(dst, "    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,\n");
+    fprintf(dst, "    .pNext = NULL,\n");
+    fprintf(dst, "    .flags = 0,\n");
 
     // bindings
-    fprintf(destination, "    .vertexBindingDescriptionCount  = %u,\n", vertex_layout->binding_count);
+    fprintf(dst, "    .vertexBindingDescriptionCount  = %u,\n", vertex_layout->binding_count);
     if (vertex_layout->binding_count != 0) {
-      fprintf(destination, "    .pVertexBindingDescriptions  = vertex_bindings_%s,\n", vertex_layout->name);
+      fprintf(dst, "    .pVertexBindingDescriptions  = vertex_bindings_%s,\n", vertex_layout->name);
     } else {
-      fprintf(destination, "    .pVertexBindingDescriptions  = NULL,\n");
+      fprintf(dst, "    .pVertexBindingDescriptions  = NULL,\n");
     }
 
     // attributes
-    fprintf(destination, "    .vertexAttributeDescriptionCount  = %u,\n", vertex_layout->attribute_count);
+    fprintf(dst, "    .vertexAttributeDescriptionCount  = %u,\n", vertex_layout->attribute_count);
     if (vertex_layout->attribute_count != 0) {
-      fprintf(destination, "    .pVertexAttributeDescriptions  = vertex_attributes_%s,\n", vertex_layout->name);
+      fprintf(dst, "    .pVertexAttributeDescriptions  = vertex_attributes_%s,\n", vertex_layout->name);
     } else {
-      fprintf(destination, "    .pVertexAttributeDescriptions  = NULL,\n");
+      fprintf(dst, "    .pVertexAttributeDescriptions  = NULL,\n");
     }
 
-    fprintf(destination, "  },\n"); // close this vertex layout
+    fprintf(dst, "  },\n"); // close this vertex layout
   }
-  fprintf(destination, "};\n\n"); // close entire vulkan vertex layout array init
+  fprintf(dst, "};\n\n"); // close entire vulkan vertex layout array init
 }
 
 static u32 glsl_type_to_number_of_floats(GLSLType type) {
@@ -388,7 +397,7 @@ static u32 glsl_type_to_number_of_floats(GLSLType type) {
   }
 }
 
-void generate_opengl_vertex_layout_array(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
+void generate_opengl_vertex_layout_array(FILE *dst, const ParsedShadersIR *parsed_shaders_ir) {
   const char *parameter_list = "GLuint vao, GLuint* vbos, uint32_t num_vbos, GLuint ebo";
 
   for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
@@ -398,14 +407,16 @@ void generate_opengl_vertex_layout_array(FILE *destination, const ParsedShadersI
     }
 
     // emit init function definition
-    fprintf(destination, "inline void init_vertex_layout%s(%s){\n", vertex_layout->name, parameter_list);
-    fprintf(destination,
-            "  if(num_vbos != %u){\n    fprintf(stderr, \"opengl %s vertex layout got wrong number of bindings\");\n"
-            "  return;\n  }\n\n",
-            vertex_layout->binding_count, vertex_layout->name);
+    fprintf(dst, "inline void init_vertex_layout%s(%s){\n", vertex_layout->name, parameter_list);
+    fprintf(
+        dst,
+        "  if(num_vbos != %u){\n    fprintf(stderr, \"opengl %s vertex layout got wrong number of bindings\");\n"
+        "  return;\n  }\n\n",
+        vertex_layout->binding_count, vertex_layout->name
+    );
 
-    fprintf(destination, "  glBindVertexArray(vao);\n");
-    fprintf(destination, "  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);\n\n");
+    fprintf(dst, "  glBindVertexArray(vao);\n");
+    fprintf(dst, "  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);\n\n");
 
     // emit attributes
     u32 current_binding = -1; // impossible sentinel value, hopefully
@@ -414,71 +425,77 @@ void generate_opengl_vertex_layout_array(FILE *destination, const ParsedShadersI
       u32 binding_stride = vertex_layout->binding_strides[attribute->binding];
 
       if (attribute->binding != current_binding) {
-        fprintf(destination, "  glBindBuffer(GL_ARRAY_BUFFER, vbos[%u]);\n", attribute->binding);
+        fprintf(dst, "  glBindBuffer(GL_ARRAY_BUFFER, vbos[%u]);\n", attribute->binding);
         current_binding = attribute->binding;
       }
-      fprintf(destination, "  glEnableVertexAttribArray(%u);\n", attribute->location);
+      fprintf(dst, "  glEnableVertexAttribArray(%u);\n", attribute->location);
 
       // supporting GL_FLOAT and GL_UNSIGNED_INT for now
       // only konw that in uint takes glVertexAttribIPointer(n, m, GL_UNSIGNED_INT,.. ) for now
       if (attribute->glsl_type == GLSL_TYPE_UINT) {
-        fprintf(destination, "  glVertexAttribIPointer(%u, %u, GL_UNSIGNED_INT, %u, (void*)%u);\n", attribute->location,
-                glsl_type_to_number_of_floats(attribute->glsl_type), binding_stride, attribute->offset);
+        fprintf(
+            dst, "  glVertexAttribIPointer(%u, %u, GL_UNSIGNED_INT, %u, (void*)%u);\n", attribute->location,
+            glsl_type_to_number_of_floats(attribute->glsl_type), binding_stride, attribute->offset
+        );
       } else {
-        fprintf(destination, "  glVertexAttribPointer(%u, %u, GL_FLOAT, GL_FALSE, %u, (void*)%u);\n",
-                attribute->location, glsl_type_to_number_of_floats(attribute->glsl_type), binding_stride,
-                attribute->offset);
+        fprintf(
+            dst, "  glVertexAttribPointer(%u, %u, GL_FLOAT, GL_FALSE, %u, (void*)%u);\n", attribute->location,
+            glsl_type_to_number_of_floats(attribute->glsl_type), binding_stride, attribute->offset
+        );
       }
 
       if (attribute->rate == VERTEX_ATTRIBUTE_RATE_INSTANCE) {
-        fprintf(destination, "  glVertexAttribDivisor(%u, 1);\n", attribute->location);
+        fprintf(dst, "  glVertexAttribDivisor(%u, 1);\n", attribute->location);
       } else {
-        fprintf(destination, "\n");
+        fprintf(dst, "\n");
       }
     }
 
-    fprintf(destination, "\n  glBindVertexArray(0);\n");
-    fprintf(destination, "  glBindBuffer(GL_ARRAY_BUFFER, 0);\n");
-    fprintf(destination, "  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);\n");
-    fprintf(destination, "}\n\n");
+    fprintf(dst, "\n  glBindVertexArray(0);\n");
+    fprintf(dst, "  glBindBuffer(GL_ARRAY_BUFFER, 0);\n");
+    fprintf(dst, "  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);\n");
+    fprintf(dst, "}\n\n");
   }
 
   // populate function pointer array
-  fprintf(destination, "typedef void (*VertexLayoutInitFn)(%s);\n", parameter_list);
-  fprintf(destination,
-          "const VertexLayoutInitFn generated_opengl_vertex_array_initializers[NUM_VERTEX_LAYOUT_IDS] = {\n");
+  fprintf(dst, "typedef void (*VertexLayoutInitFn)(%s);\n", parameter_list);
+  fprintf(dst, "const VertexLayoutInitFn generated_opengl_vertex_array_initializers[NUM_VERTEX_LAYOUT_IDS] = {\n");
   for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
     const VertexLayout *vertex_layout = &parsed_shaders_ir->vertex_layouts[i];
     if (vertex_layout->attribute_count == 0 && vertex_layout->binding_count == 0) {
-      fprintf(destination, "  [%s] = NULL,\n", vertex_layout->name);
+      fprintf(dst, "  [%s] = NULL,\n", vertex_layout->name);
     } else {
-      fprintf(destination, "  [%s] = init_vertex_layout%s,\n", vertex_layout->name, vertex_layout->name);
+      fprintf(dst, "  [%s] = init_vertex_layout%s,\n", vertex_layout->name, vertex_layout->name);
     }
   }
-  fprintf(destination, "};\n\n");
+  fprintf(dst, "};\n\n");
 }
 
-void generate_vulkan_descriptor_pool_size_array(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
+void generate_vulkan_descriptor_pool_size_array(FILE *dst, const ParsedShadersIR *parsed_shaders_ir) {
   u32 max_sets = 0;
   for (u32 i = 0; i < NUM_DESCRIPTOR_TYPES; i++) {
     u32 num_sets = parsed_shaders_ir->descriptor_binding_types[i];
     max_sets = (max_sets > num_sets) ? max_sets : num_sets;
   }
 
-  fprintf(destination, "const uint32_t pool_size_count = %u;\n", NUM_DESCRIPTOR_TYPES);
-  fprintf(destination, "const uint32_t max_descriptor_sets = %u;\n", max_sets);
-  fprintf(destination, "const VkDescriptorPoolSize generated_pool_sizes[%u] = {\n", NUM_DESCRIPTOR_TYPES);
+  fprintf(dst, "const uint32_t pool_size_count = %u;\n", NUM_DESCRIPTOR_TYPES);
+  fprintf(dst, "const uint32_t max_descriptor_sets = %u;\n", max_sets);
+  fprintf(dst, "const VkDescriptorPoolSize generated_pool_sizes[%u] = {\n", NUM_DESCRIPTOR_TYPES);
 
-  fprintf(destination, "  { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = %u },\n",
-          parsed_shaders_ir->descriptor_binding_types[DESCRIPTOR_TYPE_UNIFORM]);
+  fprintf(
+      dst, "  { .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = %u },\n",
+      parsed_shaders_ir->descriptor_binding_types[DESCRIPTOR_TYPE_UNIFORM]
+  );
 
-  fprintf(destination, "  { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = %u },\n",
-          parsed_shaders_ir->descriptor_binding_types[DESCRIPTOR_TYPE_SAMPLER2D]);
-  fprintf(destination, "};\n\n");
+  fprintf(
+      dst, "  { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = %u },\n",
+      parsed_shaders_ir->descriptor_binding_types[DESCRIPTOR_TYPE_SAMPLER2D]
+  );
+  fprintf(dst, "};\n\n");
 }
 
-void generate_vulkan_descriptor_set_layout_binding_lists(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
-  (void)destination;
+void generate_vulkan_descriptor_set_layout_binding_lists(FILE *dst, const ParsedShadersIR *parsed_shaders_ir) {
+  (void)dst;
 
   for (u32 i = 0; i < parsed_shaders_ir->num_descriptor_set_layouts; i++) {
     const DescriptorSetLayout *layout = &parsed_shaders_ir->descriptor_set_layouts[i];
@@ -487,20 +504,20 @@ void generate_vulkan_descriptor_set_layout_binding_lists(FILE *destination, cons
   }
 }
 
-inline void codegen_shader_spec_definition(FILE *destination) {
-  fprintf(destination, "struct ShaderSpec {\n");
-  fprintf(destination, "  const char* name;\n");
-  fprintf(destination, "  const char* opengl_glsl;\n");
-  fprintf(destination, "  const uint32_t* spv;\n");
-  fprintf(destination, "  const uint32_t spv_size;\n");
-  fprintf(destination, "  VertexLayoutID vertex_layout_id;\n");
-  fprintf(destination, "  ShaderStage stage;\n");
-  fprintf(destination, "};\n\n");
+inline void codegen_shader_spec_definition(FILE *dst) {
+  fprintf(dst, "struct ShaderSpec {\n");
+  fprintf(dst, "  const char* name;\n");
+  fprintf(dst, "  const char* opengl_glsl;\n");
+  fprintf(dst, "  const uint32_t* spv;\n");
+  fprintf(dst, "  const uint32_t spv_size;\n");
+  fprintf(dst, "  VertexLayoutID vertex_layout_id;\n");
+  fprintf(dst, "  ShaderStage stage;\n");
+  fprintf(dst, "};\n\n");
 }
 
 static u32 align_up(u32 offset, u32 alignment) { return (offset + alignment - 1) & ~(alignment - 1); }
 
-static void codegen_struct_defintions(FILE *destination, const GLSLStruct *glsl_structs, u32 num_glsl_structs) {
+static void codegen_struct_defintions(FILE *dst, const GLSLStruct *glsl_structs, u32 num_glsl_structs) {
   for (u32 i = 0; i < num_glsl_structs; i++) {
     const GLSLStruct *glsl_struct = &glsl_structs[i];
 
@@ -510,8 +527,10 @@ static void codegen_struct_defintions(FILE *destination, const GLSLStruct *glsl_
     for (u32 j = 0; j < glsl_struct->member_list.num_members; j++) {
       const GLSLStructMember *member = &glsl_struct->member_list.members[j];
       if (member->array_length > 1) {
-        fprintf(destination, "const uint32_t %.*s_%.*s_array_size = %u;\n", glsl_struct->type_name_length,
-                glsl_struct->type_name, member->identifier_length, member->identifier, member->array_length);
+        fprintf(
+            dst, "const uint32_t %.*s_%.*s_array_size = %u;\n", glsl_struct->type_name_length, glsl_struct->type_name,
+            member->identifier_length, member->identifier, member->array_length
+        );
       }
 
       u32 alignment = glsl_type_to_alignment[member->type];
@@ -523,105 +542,114 @@ static void codegen_struct_defintions(FILE *destination, const GLSLStruct *glsl_
 
     // codegen
     // All structs must be aligned to 16 bytes, I think.
-    fprintf(destination, "typedef struct alignas(16) {\n");
+    fprintf(dst, "typedef struct alignas(16) {\n");
     for (u32 j = 0; j < glsl_struct->member_list.num_members; j++) {
       const GLSLStructMember *member = &glsl_struct->member_list.members[j];
-      fprintf(destination, "  alignas(%u) %s %.*s", glsl_type_to_alignment[member->type],
-              glsl_type_to_c_type[member->type], member->identifier_length, member->identifier);
+      fprintf(
+          dst, "  alignas(%u) %s %.*s", glsl_type_to_alignment[member->type], glsl_type_to_c_type[member->type],
+          member->identifier_length, member->identifier
+      );
       if (member->array_length > 1) {
-        fprintf(destination, "[%u];\n", member->array_length);
+        fprintf(dst, "[%u];\n", member->array_length);
       } else {
-        fprintf(destination, ";\n");
+        fprintf(dst, ";\n");
       }
     }
 
     u32 final_aligned_size = align_up(struct_size, max_alignment);
     u32 struct_alignment_size_difference = final_aligned_size - struct_size;
     if (struct_alignment_size_difference > 0) {
-      fprintf(destination, "  unsigned char _padding[%u];\n", struct_alignment_size_difference);
+      fprintf(dst, "  unsigned char _padding[%u];\n", struct_alignment_size_difference);
     }
 
-    fprintf(destination, "} %.*s;\n\n", glsl_struct->type_name_length, glsl_struct->type_name);
+    fprintf(dst, "} %.*s;\n\n", glsl_struct->type_name_length, glsl_struct->type_name);
   }
 }
 
-inline void codegen_shader_spec(FILE *destination, const ParsedShader *parsed_shader,
-                                const GLSLSource *opengl_glsl_source, const SpirVBytesArray *spirv_bytes_array) {
+inline void codegen_shader_spec(
+    FILE *dst,
+    const ParsedShader *parsed_shader,
+    const GLSLSource *opengl_glsl_source,
+    const SpirVBytesArray *spirv_bytes_array
+) {
   // bytes
-  fprintf(destination, "const uint32_t %s_spv[] = {\n", parsed_shader->name);
-  print_bytes_array(destination, spirv_bytes_array);
-  fprintf(destination, "};\n\n");
+  fprintf(dst, "const uint32_t %s_spv[] = {\n", parsed_shader->name);
+  print_bytes_array(dst, spirv_bytes_array);
+  fprintf(dst, "};\n\n");
 
   // opengl glsl
-  fprintf(destination, "static const char* %s_opengl_glsl = \"", parsed_shader->name);
-  print_c_string_with_newlines(destination, opengl_glsl_source[GRAPHICS_BACKEND_OPENGL].string);
-  fprintf(destination, "\";\n\n");
+  fprintf(dst, "static const char* %s_opengl_glsl = \"", parsed_shader->name);
+  print_c_string_with_newlines(dst, opengl_glsl_source[GRAPHICS_BACKEND_OPENGL].string);
+  fprintf(dst, "\";\n\n");
 
   // vulkan glsl
-  fprintf(destination, "static const char* %s_vulkan_glsl = \"", parsed_shader->name);
-  print_c_string_with_newlines(destination, opengl_glsl_source[GRAPHICS_BACKEND_VULKAN].string);
-  fprintf(destination, "\";\n\n");
+  fprintf(dst, "static const char* %s_vulkan_glsl = \"", parsed_shader->name);
+  print_c_string_with_newlines(dst, opengl_glsl_source[GRAPHICS_BACKEND_VULKAN].string);
+  fprintf(dst, "\";\n\n");
 
   // struct definition
-  fprintf(destination, "const ShaderSpec %s_shader_spec = {\n", parsed_shader->name);
-  fprintf(destination, "  .name = \"%s\",\n", parsed_shader->name);
-  fprintf(destination, "  .opengl_glsl = %s_opengl_glsl,\n", parsed_shader->name);
-  fprintf(destination, "  .spv = %s_spv,\n", parsed_shader->name);
-  fprintf(destination, "  .spv_size = sizeof(%s_spv),\n", parsed_shader->name);
+  fprintf(dst, "const ShaderSpec %s_shader_spec = {\n", parsed_shader->name);
+  fprintf(dst, "  .name = \"%s\",\n", parsed_shader->name);
+  fprintf(dst, "  .opengl_glsl = %s_opengl_glsl,\n", parsed_shader->name);
+  fprintf(dst, "  .spv = %s_spv,\n", parsed_shader->name);
+  fprintf(dst, "  .spv_size = sizeof(%s_spv),\n", parsed_shader->name);
 
   const char *vertex_layout_name = parsed_shader->vertex_layout->name;
   if (parsed_shader->stage != SHADER_STAGE_VERTEX) {
     vertex_layout_name = vertex_layout_null_string;
   }
-  fprintf(destination, "  .vertex_layout_id = %s,\n", vertex_layout_name);
+  fprintf(dst, "  .vertex_layout_id = %s,\n", vertex_layout_name);
 
-  fprintf(destination, "  .stage = %s,\n", shader_stage_to_enum_string[parsed_shader->stage]);
-  fprintf(destination, "};\n\n");
+  fprintf(dst, "  .stage = %s,\n", shader_stage_to_enum_string[parsed_shader->stage]);
+  fprintf(dst, "};\n\n");
 }
 
-void codegen_vulkan_shader_module_creation(FILE *destination) {
-  fprintf(destination, "inline void init_generated_shader_vk_modules(VkDevice device){\n");
-  fprintf(destination, "  for(uint32_t i = 0; i < NUM_SHADER_HANDLES; i++) {\n");
-  fprintf(destination, "    VkShaderModuleCreateInfo shader_module_create_info;\n");
-  fprintf(destination, "    shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;\n");
-  fprintf(destination, "    shader_module_create_info.pNext = NULL;\n");
-  fprintf(destination, "    shader_module_create_info.flags = 0;\n");
-  fprintf(destination, "    shader_module_create_info.codeSize = generated_shader_specs[i]->spv_size;\n");
-  fprintf(destination, "    shader_module_create_info.pCode = generated_shader_specs[i]->spv;\n\n");
+void codegen_vulkan_shader_module_creation(FILE *dst) {
+  fprintf(dst, "inline void init_generated_shader_vk_modules(VkDevice device){\n");
+  fprintf(dst, "  for(uint32_t i = 0; i < NUM_SHADER_HANDLES; i++) {\n");
+  fprintf(dst, "    VkShaderModuleCreateInfo shader_module_create_info;\n");
+  fprintf(dst, "    shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;\n");
+  fprintf(dst, "    shader_module_create_info.pNext = NULL;\n");
+  fprintf(dst, "    shader_module_create_info.flags = 0;\n");
+  fprintf(dst, "    shader_module_create_info.codeSize = generated_shader_specs[i]->spv_size;\n");
+  fprintf(dst, "    shader_module_create_info.pCode = generated_shader_specs[i]->spv;\n\n");
   fprintf(
-      destination,
-      "    VkResult result = vkCreateShaderModule(device, &shader_module_create_info, NULL, &shader_modules[i]);\n");
-  fprintf(destination, "    if (result != VK_SUCCESS) {\n");
-  fprintf(destination, "      fprintf(stderr, \"Creating shader module for generated shader %%s failed.\\n\", "
-                       "generated_shader_specs[i]->name);\n");
-  fprintf(destination, "    }\n");
-  fprintf(destination, "  }\n");
-  fprintf(destination, "}\n\n");
+      dst, "    VkResult result = vkCreateShaderModule(device, &shader_module_create_info, NULL, &shader_modules[i]);\n"
+  );
+  fprintf(dst, "    if (result != VK_SUCCESS) {\n");
+  fprintf(
+      dst, "      fprintf(stderr, \"Creating shader module for generated shader %%s failed.\\n\", "
+           "generated_shader_specs[i]->name);\n"
+  );
+  fprintf(dst, "    }\n");
+  fprintf(dst, "  }\n");
+  fprintf(dst, "}\n\n");
 }
 
-void codegen_footer(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
-  fprintf(destination, "const uint32_t num_generated_specs = %u;\n", parsed_shaders_ir->num_parsed_shaders);
+void codegen_footer(FILE *dst, const ParsedShadersIR *parsed_shaders_ir) {
+  fprintf(dst, "const uint32_t num_generated_specs = %u;\n", parsed_shaders_ir->num_parsed_shaders);
 
-  fprintf(destination, "static const ShaderSpec* generated_shader_specs[] = {\n");
+  fprintf(dst, "static const ShaderSpec* generated_shader_specs[] = {\n");
   for (u32 i = 0; i < parsed_shaders_ir->num_parsed_shaders; i++) {
-    fprintf(destination, "  &%s_shader_spec,\n", parsed_shaders_ir->parsed_shaders[i].name);
+    fprintf(dst, "  &%s_shader_spec,\n", parsed_shaders_ir->parsed_shaders[i].name);
   }
-  fprintf(destination, "};\n\n");
+  fprintf(dst, "};\n\n");
 
-  fprintf(destination, "extern VkShaderModule shader_modules[NUM_SHADER_HANDLES];\n");
-  // codegen_vulkan_shader_module_creation(destination);
+  fprintf(dst, "extern VkShaderModule shader_modules[NUM_SHADER_HANDLES];\n");
+  // codegen_vulkan_shader_module_creation(dst);
 }
 
-void codegen_buffer_labels(FILE *destination, const ParsedShadersIR *parsed_shaders_ir) {
-  fprintf(destination, "enum UniformBufferLabel {\n");
+void codegen_buffer_labels(FILE *dst, const ParsedShadersIR *parsed_shaders_ir) {
+  fprintf(dst, "enum UniformBufferLabel {\n");
   for (u32 i = 0; i < parsed_shaders_ir->num_buffer_labels; i++) {
-    fprintf(destination, "  UNIFORM_BUFFER_LABEL_");
-    print_name_in_caps_n(destination, parsed_shaders_ir->uniform_buffer_labels[i].name,
-                         parsed_shaders_ir->uniform_buffer_labels[i].name_length);
-    fprintf(destination, ",\n");
+    fprintf(dst, "  UNIFORM_BUFFER_LABEL_");
+    print_name_in_caps_n(
+        dst, parsed_shaders_ir->uniform_buffer_labels[i].name, parsed_shaders_ir->uniform_buffer_labels[i].name_length
+    );
+    fprintf(dst, ",\n");
   }
-  fprintf(destination, "\n  NUM_UNIFORM_BUFFER_LABELS\n");
-  fprintf(destination, "};\n\n");
+  fprintf(dst, "\n  NUM_UNIFORM_BUFFER_LABELS\n");
+  fprintf(dst, "};\n\n");
 }
 
 // The real deal!
@@ -647,7 +675,8 @@ bool codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_
 
     // Compile GLSL to spirv
     spirv_bytes_arrays[shaders_index] = compile_vulkan_source_to_spirv(
-        glsl_sources[shaders_index][GRAPHICS_BACKEND_VULKAN], current_parsed_shader->stage);
+        glsl_sources[shaders_index][GRAPHICS_BACKEND_VULKAN], current_parsed_shader->stage
+    );
     if (spirv_bytes_arrays[shaders_index].bytes == NULL) {
       printf("Compilation for %s failed.\n", current_parsed_shader->name);
       should_codegen = false;
@@ -659,55 +688,55 @@ bool codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_
     return false;
   }
 
-  FILE *destination = fopen(output_filepath, "w");
+  FILE *dst = fopen(output_filepath, "w");
 
-  codegen_compiled_shader_header(destination);
+  codegen_compiled_shader_header(dst);
 
   // replace string slices, compile vulkan glsl to spirv, and emit the enum with shader IDs
-  fprintf(destination, "enum ShaderHandle {\n");
+  fprintf(dst, "enum ShaderHandle {\n");
 
   for (u32 shaders_index = 0; shaders_index < parsed_shaders_ir->num_parsed_shaders; shaders_index++) {
-    fputs("  SHADER_HANDLE_", destination);
-    print_name_in_caps(destination, parsed_shaders_ir->parsed_shaders[shaders_index].name);
-    fputs(",\n", destination);
+    fputs("  SHADER_HANDLE_", dst);
+    print_name_in_caps(dst, parsed_shaders_ir->parsed_shaders[shaders_index].name);
+    fputs(",\n", dst);
   }
-  fprintf(destination, "\n  NUM_SHADER_HANDLES\n};\n\n");
+  fprintf(dst, "\n  NUM_SHADER_HANDLES\n};\n\n");
 
   // codegen for vertex layouts
   // struct definition
-  fprintf(destination, "#define MAX_NUM_VERTEX_BINDINGS %u\n", max_num_vertex_bindings);
-  fprintf(destination, "#define MAX_NUM_VERTEX_ATTRIBUTES %u\n", max_num_vertex_attributes);
+  fprintf(dst, "#define MAX_NUM_VERTEX_BINDINGS %u\n", max_num_vertex_bindings);
+  fprintf(dst, "#define MAX_NUM_VERTEX_ATTRIBUTES %u\n", max_num_vertex_attributes);
   // enum
-  fprintf(destination, "enum VertexLayoutID{\n");
+  fprintf(dst, "enum VertexLayoutID{\n");
   for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
-    fprintf(destination, "  %s,\n", parsed_shaders_ir->vertex_layouts[i].name);
+    fprintf(dst, "  %s,\n", parsed_shaders_ir->vertex_layouts[i].name);
   }
-  fprintf(destination, "\n  NUM_VERTEX_LAYOUT_IDS\n};\n\n");
+  fprintf(dst, "\n  NUM_VERTEX_LAYOUT_IDS\n};\n\n");
 
-  fprintf(destination, "//////////////////// VULKAN VERTEX LAYOUTS ///////////////\n");
-  generate_vulkan_vertex_layout_array(destination, parsed_shaders_ir);
-  fprintf(destination, "//////////////////// OPENGL VERTEX LAYOUTS ///////////////\n");
-  generate_opengl_vertex_layout_array(destination, parsed_shaders_ir);
+  fprintf(dst, "//////////////////// VULKAN VERTEX LAYOUTS ///////////////\n");
+  generate_vulkan_vertex_layout_array(dst, parsed_shaders_ir);
+  fprintf(dst, "//////////////////// OPENGL VERTEX LAYOUTS ///////////////\n");
+  generate_opengl_vertex_layout_array(dst, parsed_shaders_ir);
 
   // descriptor sets
   // enum
-  fprintf(destination, "enum DescriptorSetLayoutIDs{\n");
+  fprintf(dst, "enum DescriptorSetLayoutIDs{\n");
   for (u32 i = 0; i < parsed_shaders_ir->num_descriptor_set_layouts; i++) {
-    fprintf(destination, "  %s,\n", parsed_shaders_ir->descriptor_set_layouts[i].name);
+    fprintf(dst, "  %s,\n", parsed_shaders_ir->descriptor_set_layouts[i].name);
   }
-  fprintf(destination, "\n  NUM_DESCRIPTOR_SET_LAYOUTS\n};\n\n");
-  generate_vulkan_descriptor_pool_size_array(destination, parsed_shaders_ir);
-  generate_vulkan_descriptor_set_layout_binding_lists(destination, parsed_shaders_ir);
-  codegen_struct_defintions(destination, parsed_shaders_ir->glsl_structs, parsed_shaders_ir->num_glsl_structs);
+  fprintf(dst, "\n  NUM_DESCRIPTOR_SET_LAYOUTS\n};\n\n");
+  generate_vulkan_descriptor_pool_size_array(dst, parsed_shaders_ir);
+  generate_vulkan_descriptor_set_layout_binding_lists(dst, parsed_shaders_ir);
+  codegen_struct_defintions(dst, parsed_shaders_ir->glsl_structs, parsed_shaders_ir->num_glsl_structs);
 
   // for individual shaders, the spirv bytes, the opengl glsl
-  codegen_shader_spec_definition(destination);
+  codegen_shader_spec_definition(dst);
   for (u32 i = 0; i < parsed_shaders_ir->num_parsed_shaders; i++) {
-    codegen_shader_spec(destination, &parsed_shaders_ir->parsed_shaders[i], glsl_sources[i], &spirv_bytes_arrays[i]);
+    codegen_shader_spec(dst, &parsed_shaders_ir->parsed_shaders[i], glsl_sources[i], &spirv_bytes_arrays[i]);
   }
 
-  codegen_buffer_labels(destination, parsed_shaders_ir);
+  codegen_buffer_labels(dst, parsed_shaders_ir);
 
-  codegen_footer(destination, parsed_shaders_ir);
+  codegen_footer(dst, parsed_shaders_ir);
   return true;
 }

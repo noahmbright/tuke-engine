@@ -13,6 +13,7 @@ file(GLOB_RECURSE ENGINE_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/physics.cpp
     ${CMAKE_SOURCE_DIR}/src/statistics.cpp
     ${CMAKE_SOURCE_DIR}/src/generated_shader_utils.cpp
+    ${CMAKE_SOURCE_DIR}/src/stb_truetype.cpp
 )
 
 add_library(engine STATIC ${ENGINE_SOURCE_FILES})

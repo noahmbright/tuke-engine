@@ -336,6 +336,4 @@ struct StructSearchResult {
   bool found_mismatch;
 };
 
-TokenVector lex_string(const char *string, u32 string_length);
-ParsedShader parse_shader(ShaderToCompile shader_to_compile);
 ParsedShadersIR parse_all_shaders_and_populate_global_tables(const ShaderToCompileList *shader_to_compile_list);

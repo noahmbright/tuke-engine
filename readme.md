@@ -56,6 +56,7 @@ TODO:
 * Aspect ratio
 * Textures/sprite/how to make sprites/atlas
 * Automate vertex uploads with generated code
+* Consider vertex attribute packing: normals/tangents → snorm8, UVs → f16, positions stay f32. Some attributes may need manual octahedral encoding and shader unpacking.
 
 From GPT
 # Vulkan Backend TODOs

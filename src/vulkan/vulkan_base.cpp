@@ -1884,29 +1884,8 @@ void submit_and_present(const VulkanContext *ctx, VkCommandBuffer cmd) {
   VK_CHECK(result, "Failed to present queue");
 }
 
-VkPipelineVertexInputStateCreateInfo create_vertex_input_state(
-    u32 binding_description_count,
-    const VkVertexInputBindingDescription *binding_descriptions,
-    u32 attribute_description_count,
-    const VkVertexInputAttributeDescription *attribute_descriptions
-) {
-
-  VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .vertexBindingDescriptionCount = binding_description_count,
-      .pVertexBindingDescriptions = binding_descriptions,
-      .vertexAttributeDescriptionCount = attribute_description_count,
-      .pVertexAttributeDescriptions = attribute_descriptions,
-  };
-
-  return vertex_input_state_create_info;
-}
-
 VkPipelineLayout
 create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts, u32 set_layout_count) {
-
   VkPipelineLayoutCreateInfo pipeline_layout_ci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .pNext = NULL,
@@ -1924,6 +1903,7 @@ create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_
 }
 
 // TODO VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
+//      ^ What does this mean?
 VkDescriptorPool
 create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets) {
 
@@ -1940,42 +1920,6 @@ create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, 
   VkResult result = vkCreateDescriptorPool(device, &descriptor_pool_ci, NULL, &descriptor_pool);
   VK_CHECK(result, "Failed to create descriptor pool");
   return descriptor_pool;
-}
-
-VkDescriptorSet
-create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool, VkDescriptorSetLayout *descriptor_set_layout) {
-
-  VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .pNext = NULL,
-      .descriptorPool = descriptor_pool,
-      .descriptorSetCount = 1,
-      .pSetLayouts = descriptor_set_layout,
-  };
-
-  VkDescriptorSet descriptor_set;
-  VkResult result = vkAllocateDescriptorSets(device, &descriptor_set_allocate_info, &descriptor_set);
-  VK_CHECK(result, "Failed to allocate descriptor set");
-  return descriptor_set;
-}
-
-// TODO VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR
-VkDescriptorSetLayout
-create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count) {
-
-  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_ci = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .bindingCount = binding_count,
-      .pBindings = bindings,
-  };
-
-  VkDescriptorSetLayout descriptor_set_layout;
-  VkResult result = vkCreateDescriptorSetLayout(device, &descriptor_set_layout_ci, NULL, &descriptor_set_layout);
-  VK_CHECK(result, "Failed to create descriptor set layout");
-
-  return descriptor_set_layout;
 }
 
 StagingArena create_staging_arena(const VulkanContext *context, u32 total_size) {
@@ -2130,17 +2074,17 @@ ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *contex
 VulkanTexture create_vulkan_texture(
     VulkanContext *context, VulkanImageData image_data, VulkanBuffer staging_buffer, void *ptr_to_mapped_memory
 ) {
-  VulkanTexture vulkan_texture = {
+  VulkanTexture texture = {
       .width = image_data.width,
       .height = image_data.height,
   };
 
   VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
   VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-  vulkan_texture.image = create_default_image(context, image_data.width, image_data.height, usage, format);
+  texture.image = create_default_image(context, image_data.width, image_data.height, usage, format);
 
   // Allocating device memory must come after image creation.
-  vulkan_texture.device_memory = allocate_and_bind_image_memory(context, vulkan_texture.image);
+  texture.device_memory = allocate_and_bind_image_memory(context, texture.image);
 
   // map memory
   assert(image_data.data);
@@ -2153,7 +2097,7 @@ VulkanTexture create_vulkan_texture(
   VkCommandBuffer cmd = begin_single_use_command_buffer(context);
   VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
   VkImageLayout new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  transition_image_layout(cmd, vulkan_texture.image, old_layout, new_layout);
+  transition_image_layout(cmd, texture.image, old_layout, new_layout);
 
   // copy buffer to image
   VkBufferImageCopy buffer_image_copy = {
@@ -2174,21 +2118,19 @@ VulkanTexture create_vulkan_texture(
 
   VkImageLayout image_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
   u32 region_count = 1;
-  vkCmdCopyBufferToImage(
-      cmd, staging_buffer.buffer, vulkan_texture.image, image_layout, region_count, &buffer_image_copy
-  );
+  vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, texture.image, image_layout, region_count, &buffer_image_copy);
 
   // second transition
   old_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
   new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  transition_image_layout(cmd, vulkan_texture.image, old_layout, new_layout);
+  transition_image_layout(cmd, texture.image, old_layout, new_layout);
   end_single_use_command_buffer(context, cmd);
 
   VkImageAspectFlags aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT;
   format = VK_FORMAT_R8G8B8A8_SRGB;
-  vulkan_texture.image_view = create_default_image_view(context, vulkan_texture.image, format, aspect_flags);
+  texture.image_view = create_default_image_view(context, texture.image, format, aspect_flags);
 
-  return vulkan_texture;
+  return texture;
 }
 
 // TODO return type - would I prefer to return an array of textures, or do I
@@ -2202,6 +2144,7 @@ void load_vulkan_textures(
   u32 max_size = 0;
   for (u32 i = 0; i < num_images; i++) {
     // TODO need to fix this 4 issue
+    //      Could also think of other better-for-GPU formats to use in preprocessing
     const VulkanImageData *data = &image_datas[i];
     u32 texture_size = data->width * data->height * data->n_channels;
     max_size = (texture_size > max_size) ? texture_size : max_size;
@@ -2230,7 +2173,6 @@ void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture) {
 
 // https://docs.vulkan.org/spec/latest/chapters/textures.html
 // TODO give this any modularity at all
-//      I honestly have no idea what samplers do.
 VkSampler create_sampler(VkDevice device) {
   VkSamplerCreateInfo sampler_create_info = {
       .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -2260,30 +2202,11 @@ VkSampler create_sampler(VkDevice device) {
 }
 
 DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {
-
   DescriptorSetBuilder builder;
+  memset(&builder, 0, sizeof(builder));
   builder.device = context->device;
-
-  builder.binding_count = 0;
-  memset(builder.layout_bindings, 0, sizeof(builder.layout_bindings));
-
-  builder.write_descriptor_count = 0;
-  memset(builder.descriptor_writes, 0, sizeof(builder.descriptor_writes));
-  builder.copy_descriptor_count = 0;
-  memset(builder.descriptor_copies, 0, sizeof(builder.descriptor_copies));
-
-  builder.buffer_info_count = 0;
-  memset(builder.descriptor_buffer_infos, 0, sizeof(builder.descriptor_buffer_infos));
-  builder.image_info_count = 0;
-  memset(builder.descriptor_image_infos, 0, sizeof(builder.descriptor_image_infos));
-
   return builder;
 };
-
-void merge_descriptor_set_layouts() {
-  // asdf
-  // asdf
-}
 
 // this binding handle would describe which binding, array of uniform
 // size, and what shader stage the uniform is used in
@@ -2305,30 +2228,31 @@ void add_uniform_buffer_descriptor_set(
   VkDescriptorType descriptor_type =
       dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 
-  builder->layout_bindings[builder->binding_count] =
+  builder->layout_bindings[builder->binding_count++] =
       create_descriptor_set_layout_binding(binding, stage_flags, descriptor_type, descriptor_count);
-  builder->binding_count++;
 
-  VkDescriptorBufferInfo *descriptor_buffer_info = &builder->descriptor_buffer_infos[builder->buffer_info_count];
-  descriptor_buffer_info->buffer = uniform_buffer->vulkan_buffer.buffer;
-  descriptor_buffer_info->offset = offset;
-  descriptor_buffer_info->range = range;
-  builder->buffer_info_count++;
+  VkDescriptorBufferInfo *descriptor_buffer_info = &builder->descriptor_buffer_infos[builder->buffer_info_count++];
+  *descriptor_buffer_info = {
+      .buffer = uniform_buffer->vulkan_buffer.buffer,
+      .offset = offset,
+      .range = range,
+  };
 
-  VkWriteDescriptorSet *descriptor_write_info = &builder->descriptor_writes[builder->write_descriptor_count];
-  descriptor_write_info->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  descriptor_write_info->pNext = NULL;
-  descriptor_write_info->dstSet = VK_NULL_HANDLE;
-  descriptor_write_info->dstBinding = binding;
-  descriptor_write_info->dstArrayElement = 0;
-  descriptor_write_info->descriptorCount = 1;
-  descriptor_write_info->descriptorType = descriptor_type;
-  descriptor_write_info->pImageInfo = NULL;
-  descriptor_write_info->pBufferInfo = descriptor_buffer_info;
-  descriptor_write_info->pTexelBufferView = NULL;
-  builder->write_descriptor_count++;
+  builder->descriptor_writes[builder->write_descriptor_count++] = {
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .pNext = NULL,
+      .dstSet = VK_NULL_HANDLE,
+      .dstBinding = binding,
+      .dstArrayElement = 0,
+      .descriptorCount = descriptor_count,
+      .descriptorType = descriptor_type,
+      .pImageInfo = NULL,
+      .pBufferInfo = descriptor_buffer_info,
+      .pTexelBufferView = NULL,
+  };
 }
 
+// TODO why did I put these TODOs here? As in this location? Not sure what they have to do with image descriptor sets.
 // TODO check for proper transitions - still don't understand transitions
 // TODO check how to pass immutable samplers through here
 void add_image_descriptor_set(
@@ -2345,40 +2269,66 @@ void add_image_descriptor_set(
 
   // TODO handle separate textures and samplers
   VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  builder->layout_bindings[builder->binding_count] =
+  builder->layout_bindings[builder->binding_count++] =
       create_descriptor_set_layout_binding(binding, stage_flags, descriptor_type, descriptor_count);
-  builder->binding_count++;
 
   VkDescriptorImageInfo *descriptor_image_info = &builder->descriptor_image_infos[builder->image_info_count];
-  descriptor_image_info->sampler = sampler;
-  descriptor_image_info->imageView = image_view;
-  descriptor_image_info->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  *descriptor_image_info = {
+      .sampler = sampler,
+      .imageView = image_view,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
   builder->image_info_count++;
 
-  VkWriteDescriptorSet *descriptor_write_info = &builder->descriptor_writes[builder->write_descriptor_count];
-  descriptor_write_info->sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-  descriptor_write_info->pNext = NULL;
-  descriptor_write_info->dstSet = VK_NULL_HANDLE;
-  descriptor_write_info->dstBinding = binding;
-  descriptor_write_info->dstArrayElement = 0;
-  descriptor_write_info->descriptorCount = descriptor_count;
-  descriptor_write_info->descriptorType = descriptor_type;
-  descriptor_write_info->pImageInfo = descriptor_image_info;
-  descriptor_write_info->pBufferInfo = NULL;
-  descriptor_write_info->pTexelBufferView = NULL;
-  builder->write_descriptor_count++;
+  builder->descriptor_writes[builder->write_descriptor_count++] = {
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .pNext = NULL,
+      .dstSet = VK_NULL_HANDLE,
+      .dstBinding = binding,
+      .dstArrayElement = 0,
+      .descriptorCount = descriptor_count,
+      .descriptorType = descriptor_type,
+      .pImageInfo = descriptor_image_info,
+      .pBufferInfo = NULL,
+      .pTexelBufferView = NULL,
+  };
 }
 
 // TODO decouple layouts from descriptor sets
 // I make a layout for every descriptor set, but I should be able to
 // create sets from mixtures of layouts
 DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescriptorPool descriptor_pool) {
-  DescriptorSetHandle handle;
+  // Layout
+  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_ci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .bindingCount = builder->binding_count,
+      .pBindings = builder->layout_bindings,
+  };
 
-  handle.descriptor_set_layout =
-      create_descriptor_set_layout(builder->device, builder->layout_bindings, builder->binding_count);
+  VkDescriptorSetLayout descriptor_set_layout;
+  VkResult result =
+      vkCreateDescriptorSetLayout(builder->device, &descriptor_set_layout_ci, NULL, &descriptor_set_layout);
+  VK_CHECK(result, "Failed to create descriptor set layout");
 
-  handle.descriptor_set = create_descriptor_set(builder->device, descriptor_pool, &handle.descriptor_set_layout);
+  // Descriptor set
+  VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .pNext = NULL,
+      .descriptorPool = descriptor_pool,
+      .descriptorSetCount = 1,
+      .pSetLayouts = &descriptor_set_layout,
+  };
+
+  VkDescriptorSet descriptor_set;
+  result = vkAllocateDescriptorSets(builder->device, &descriptor_set_allocate_info, &descriptor_set);
+  VK_CHECK(result, "Failed to allocate descriptor set");
+
+  DescriptorSetHandle handle = {
+      .descriptor_set_layout = descriptor_set_layout,
+      .descriptor_set = descriptor_set,
+  };
 
   for (u32 i = 0; i < builder->write_descriptor_count; i++) {
     builder->descriptor_writes[i].dstSet = handle.descriptor_set;

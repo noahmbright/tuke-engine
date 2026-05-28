@@ -306,29 +306,37 @@ struct StagingArena {
   u32 offset;
 };
 
-struct VulkanVertexLayout {
-  u32 binding_count;
-  VkVertexInputBindingDescription bindings[MAX_VERTEX_BINDINGS];
-
-  u32 attribute_count;
-  VkVertexInputAttributeDescription attributes[MAX_VERTEX_ATTRIBUTES];
-
-  // vertex_input_state is the finalized state, used in pipeline creation
-  VkPipelineVertexInputStateCreateInfo vertex_input_state;
-};
-
+// Final vulkan API used with this struct is vkUpdateDescriptorSets
+// vkUpdateDescriptorSets acts on arrays of descriptor writes and copies.
+// Before calling vkUpdateDescriptorSets, the set's layout and the set itself
+// are created with vkCreateDescriptorSetLayout and vkAllocateDescriptorSets.
+// TODO why are set layout creation and allocation separated? Layouts can be
+// reused in different allocations, I guess?
+// This struct manages the write/copy arrays. It also manages the bindings
+// that are used to create the layouts.
 struct DescriptorSetBuilder {
   VkDevice device;
+
+  // Layout bindings: The shape of the descriptor.
+  //    binding ID, num descriptors, which stages, immutable samplers (?),
+  //    and descriptor type (sampler, uniform, storage buffer, etc.)
   VkDescriptorSetLayoutBinding layout_bindings[MAX_LAYOUT_BINDINGS];
   u32 binding_count;
 
+  // Writes: how to write specific resources to the descriptor.
+  //    Takes pointers to image/buffer infos + buffer views.
   u32 write_descriptor_count;
   VkWriteDescriptorSet descriptor_writes[MAX_DESCRIPTOR_WRITES];
+
+  // I never use these
   u32 copy_descriptor_count;
   VkCopyDescriptorSet descriptor_copies[MAX_DESCRIPTOR_COPIES];
 
+  // Info about particular buffers/images.
+  // Which buffer, offset, range.
   u32 buffer_info_count;
   VkDescriptorBufferInfo descriptor_buffer_infos[MAX_DESCRIPTOR_BUFFER_INFOS];
+  // Sampler, image view, and image layout.
   u32 image_info_count;
   VkDescriptorImageInfo descriptor_image_infos[MAX_DESCRIPTOR_IMAGE_INFOS];
 };
@@ -338,7 +346,7 @@ struct DescriptorSetHandle {
   VkDescriptorSetLayout descriptor_set_layout;
 };
 
-// TODO don't like how this is redefined for my personal engine, STB, and Vulkan
+// TODO don't like how this is redefined for my personal engine, STB, and here again for Vulkan
 struct VulkanImageData {
   u32 width;
   u32 height;
@@ -462,24 +470,11 @@ void begin_render_pass(
     ViewportState viewport_state
 );
 
-VkPipelineVertexInputStateCreateInfo create_vertex_input_state(
-    u32 binding_description_count,
-    const VkVertexInputBindingDescription *binding_descriptions,
-    u32 attribute_description_count,
-    const VkVertexInputAttributeDescription *attribute_descriptions
-);
-
 VkPipelineLayout
 create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts, u32 set_layout_count);
 
 VkDescriptorPool
 create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets);
-
-VkDescriptorSet
-create_descriptor_set(VkDevice device, VkDescriptorPool descriptor_pool, VkDescriptorSetLayout *descriptor_set_layout);
-
-VkDescriptorSetLayout
-create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count);
 
 StagingArena create_staging_arena(const VulkanContext *context, u32 total_size);
 u32 stage_data_explicit(
