@@ -96,9 +96,11 @@ inline void log_vertex_attribute(VertexAttribute vertex_attribute) {
   } else {
     rate_string = "invalid";
   }
-  printf("Vertex Attribute is\n\tlocation: %u, binding: %u, offset: %u, rate: %s, glsl type %s\n",
-         vertex_attribute.location, vertex_attribute.binding, vertex_attribute.offset, rate_string,
-         glsl_type_to_string[vertex_attribute.glsl_type]);
+  printf(
+      "Vertex Attribute is\n\tlocation: %u, binding: %u, offset: %u, rate: %s, glsl type %s\n",
+      vertex_attribute.location, vertex_attribute.binding, vertex_attribute.offset, rate_string,
+      glsl_type_to_string[vertex_attribute.glsl_type]
+  );
 }
 
 // the vertex layout is the collection of all the attributes
@@ -223,12 +225,16 @@ inline bool glsl_struct_member_list_equals(const GLSLStructMemberList *left, con
 }
 
 inline void log_glsl_struct(FILE *destination, const GLSLStruct *glsl_struct) {
-  fprintf(destination, "Logging GLSLStruct with %u members %.*s:\n", glsl_struct->member_list.num_members,
-          glsl_struct->type_name_length, glsl_struct->type_name);
+  fprintf(
+      destination, "Logging GLSLStruct with %u members %.*s:\n", glsl_struct->member_list.num_members,
+      glsl_struct->type_name_length, glsl_struct->type_name
+  );
   for (u32 i = 0; i < glsl_struct->member_list.num_members; i++) {
     GLSLStructMember current_member = glsl_struct->member_list.members[i];
-    fprintf(destination, "\t%s %.*s\n", glsl_type_to_string[current_member.type], (int)current_member.identifier_length,
-            current_member.identifier);
+    fprintf(
+        destination, "\t%s %.*s\n", glsl_type_to_string[current_member.type], (int)current_member.identifier_length,
+        current_member.identifier
+    );
   }
 }
 
@@ -240,7 +246,7 @@ inline void log_glsl_struct(FILE *destination, const GLSLStruct *glsl_struct) {
 // if a vertex shader and fragment shader are linked, I enforce that if they explictly
 // use the same set, that set must have the same list of bindings
 enum DescriptorType {
-  DESCRIPTOR_TYPE_INVALID = -1,
+  DESCRIPTOR_TYPE_INVALID,
   DESCRIPTOR_TYPE_UNIFORM,
   DESCRIPTOR_TYPE_SAMPLER2D,
 

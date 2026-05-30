@@ -2009,24 +2009,6 @@ ShaderModule create_shader_stage(VkShaderModule module, VkShaderStageFlagBits st
   return shader_stage;
 }
 
-// binding: the binding stipulated in the shader
-// stage_flags: the flags indicating what shader stages use this layout binding
-// descriptor_type: flags for uniform, sampler, storage, etc
-// descriptor_count: if the shader allocates an array, the array size
-// TODO immutable samplers?
-VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(
-    u32 binding, VkShaderStageFlags stage_flags, VkDescriptorType descriptor_type, u32 descriptor_count
-) {
-  VkDescriptorSetLayoutBinding layout_binding = {
-      .binding = binding,
-      .descriptorType = descriptor_type,
-      .descriptorCount = descriptor_count,
-      .stageFlags = stage_flags,
-      .pImmutableSamplers = NULL,
-  };
-  return layout_binding;
-}
-
 UniformBuffer create_uniform_buffer(const VulkanContext *context, u32 buffer_size) {
 
   UniformBuffer uniform_buffer = {
@@ -2228,8 +2210,13 @@ void add_uniform_buffer_descriptor_set(
   VkDescriptorType descriptor_type =
       dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 
-  builder->layout_bindings[builder->binding_count++] =
-      create_descriptor_set_layout_binding(binding, stage_flags, descriptor_type, descriptor_count);
+  builder->layout_bindings[builder->binding_count++] = {
+      .binding = binding,
+      .descriptorType = descriptor_type,
+      .descriptorCount = descriptor_count,
+      .stageFlags = stage_flags,
+      .pImmutableSamplers = NULL,
+  };
 
   VkDescriptorBufferInfo *descriptor_buffer_info = &builder->descriptor_buffer_infos[builder->buffer_info_count++];
   *descriptor_buffer_info = {
@@ -2269,8 +2256,13 @@ void add_image_descriptor_set(
 
   // TODO handle separate textures and samplers
   VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  builder->layout_bindings[builder->binding_count++] =
-      create_descriptor_set_layout_binding(binding, stage_flags, descriptor_type, descriptor_count);
+  builder->layout_bindings[builder->binding_count++] = {
+      .binding = binding,
+      .descriptorType = descriptor_type,
+      .descriptorCount = descriptor_count,
+      .stageFlags = stage_flags,
+      .pImmutableSamplers = NULL, // TODO maybe
+  };
 
   VkDescriptorImageInfo *descriptor_image_info = &builder->descriptor_image_infos[builder->image_info_count];
   *descriptor_image_info = {

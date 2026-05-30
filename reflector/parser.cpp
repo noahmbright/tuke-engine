@@ -533,10 +533,10 @@ u32 parse_integer_token(Parser *parser, Token token) {
 // {{ LOCATION 0 }} - for fragment and compute shaders, or
 LocationDirectiveParse
 parse_location_directive(Parser *parser, ShaderStage shader_stage, TemplateStringSlice *template_string_slice) {
-  Token current_token = parser_get_current_token(parser);
+  Token cur_tok = parser_get_current_token(parser);
   assert(current_token.type == TOKEN_TYPE_DIRECTIVE_LOCATION);
 
-  LocationDirectiveParse location_directive_parse = {
+  LocationDirectiveParse location_parse = {
       .next_glsl_source_start = NULL,
       .found_repeat_attribute = false,
       .vertex_attribute.location = 0,
@@ -549,189 +549,189 @@ parse_location_directive(Parser *parser, ShaderStage shader_stage, TemplateStrin
   };
   bool is_tightly_packed = false;
 
-  current_token = parser_advance_and_get_next_token(parser);
-  if (current_token.type != TOKEN_TYPE_NUMBER) {
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_NUMBER) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
-        "Expected numeric literal after LOCATION in location directive, got %s",
-        token_type_to_string[current_token.type]
+        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+        "Expected numeric literal after LOCATION in location directive, got %s", token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
-  u32 location = parse_integer_token(parser, current_token);
+  u32 location = parse_integer_token(parser, cur_tok);
   template_string_slice->location = location;
 
   // either BINDING or the end for outs/fragment/compute
-  current_token = parser_advance_and_get_next_token(parser);
+  cur_tok = parser_advance_and_get_next_token(parser);
   if (shader_stage != SHADER_STAGE_VERTEX) {
-    if (current_token.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
+    if (cur_tok.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
       report_parser_error(
-          parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+          parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
           "Expected DOUBLE_R_BRACE after location in location directive "
           "for a non-vertex shader, got %s",
-          token_type_to_string[current_token.type]
+          token_type_to_string[cur_tok.type]
       );
-      return location_directive_parse;
+      return location_parse;
     }
 
     // move past double r brace and mark one past the end of this slice
-    current_token = parser_advance_and_get_next_token(parser);
-    location_directive_parse.next_glsl_source_start = current_token.start;
-    template_string_slice->end = current_token.start;
-    return location_directive_parse;
+    cur_tok = parser_advance_and_get_next_token(parser);
+    location_parse.next_glsl_source_start = cur_tok.start;
+    template_string_slice->end = cur_tok.start;
+    return location_parse;
   }
 
   // in a vertex shader, can have either out or BINDING + the rest of the binding
   // check for double r brace and out
-  if (current_token.type == TOKEN_TYPE_DOUBLE_R_BRACE) {
-    current_token = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type == TOKEN_TYPE_DOUBLE_R_BRACE) {
+    cur_tok = parser_advance_and_get_next_token(parser);
 
-    if (current_token.type != TOKEN_TYPE_OUT) {
+    if (cur_tok.type != TOKEN_TYPE_OUT) {
       report_parser_error(
-          parser, current_token.start, TOKEN_TYPE_OUT,
+          parser, cur_tok.start, TOKEN_TYPE_OUT,
           "Numeric location in LOCATION directive followed by DOUBLE_R_BRACE, expected out but got %s",
-          token_type_to_string[current_token.type]
+          token_type_to_string[cur_tok.type]
       );
     }
 
     // move past double r brace and mark one past the end of this slice
-    template_string_slice->end = current_token.start;
-    location_directive_parse.next_glsl_source_start = current_token.start;
-    return location_directive_parse;
+    template_string_slice->end = cur_tok.start;
+    location_parse.next_glsl_source_start = cur_tok.start;
+    return location_parse;
   }
 
   // BINDING
-  if (current_token.type != TOKEN_TYPE_BINDING) {
+  if (cur_tok.type != TOKEN_TYPE_BINDING) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
-        "Expected BINDING after location in location directive, got %s", token_type_to_string[current_token.type]
+        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+        "Expected BINDING after location in location directive, got %s", token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
 
-  current_token = parser_advance_and_get_next_token(parser);
-  if (current_token.type != TOKEN_TYPE_NUMBER) {
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_NUMBER) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
-        "Expected numeric literal after BINDING in location directive, got %s", token_type_to_string[current_token.type]
+        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+        "Expected numeric literal after BINDING in location directive, got %s", token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
-  u32 binding = parse_integer_token(parser, current_token);
+  u32 binding = parse_integer_token(parser, cur_tok);
 
   // rate
-  current_token = parser_advance_and_get_next_token(parser);
-  bool is_rate = (current_token.type == TOKEN_TYPE_RATE_VERTEX) || (current_token.type == TOKEN_TYPE_RATE_INSTANCE);
+  cur_tok = parser_advance_and_get_next_token(parser);
+  bool is_rate = (cur_tok.type == TOKEN_TYPE_RATE_VERTEX) || (cur_tok.type == TOKEN_TYPE_RATE_INSTANCE);
   if (!is_rate) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
         "Expected rate (vertex/instance) after binding in "
         "location directive, got %s",
-        token_type_to_string[current_token.type]
+        token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
-  VertexAttributeRate vertex_attribute_rate = token_type_to_vertex_attribute_rate(current_token.type);
+  VertexAttributeRate vertex_attribute_rate = token_type_to_vertex_attribute_rate(cur_tok.type);
 
   // offset
-  current_token = parser_advance_and_get_next_token(parser);
-  if (current_token.type != TOKEN_TYPE_OFFSET) {
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_OFFSET) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
-        "Expected OFFSET after rate in location directive, got %s", token_type_to_string[current_token.type]
+        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE, "Expected OFFSET after rate in location directive, got %s",
+        token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
 
-  current_token = parser_advance_and_get_next_token(parser);
-  bool is_offset = (current_token.type == TOKEN_TYPE_NUMBER) || (current_token.type == TOKEN_TYPE_TIGHTLY_PACKED);
+  cur_tok = parser_advance_and_get_next_token(parser);
+  bool is_offset = (cur_tok.type == TOKEN_TYPE_NUMBER) || (cur_tok.type == TOKEN_TYPE_TIGHTLY_PACKED);
   if (!is_offset) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
         "Expected rate offset or TIGHTlY_PACKED after OFFSET in "
         "location directive, got %s",
-        token_type_to_string[current_token.type]
+        token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
   u32 offset = 0;
-  if (current_token.type == TOKEN_TYPE_NUMBER) {
-    offset = parse_integer_token(parser, current_token);
+  if (cur_tok.type == TOKEN_TYPE_NUMBER) {
+    offset = parse_integer_token(parser, cur_tok);
   } else {
     is_tightly_packed = true;
   }
 
   // double r brace
-  current_token = parser_advance_and_get_next_token(parser);
-  if (current_token.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
-        "Expected DOUBLE_R_BRACE after offset in location directive, got %s", token_type_to_string[current_token.type]
+        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+        "Expected DOUBLE_R_BRACE after offset in location directive, got %s", token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
 
   template_string_slice->location = location;
   template_string_slice->binding = binding;
-  template_string_slice->end = current_token.start;
+  template_string_slice->end = cur_tok.start;
 
   // in
-  current_token = parser_advance_and_get_next_token(parser);
-  if (current_token.type != TOKEN_TYPE_IN) {
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_IN) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_SEMICOLON,
+        parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
         "Expected in (glsl keyword) after DOUBLE_R_BRACE ending location directive, got %s",
-        token_type_to_string[current_token.type]
+        token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
-  location_directive_parse.next_glsl_source_start = current_token.start;
+  location_parse.next_glsl_source_start = cur_tok.start;
 
   // type
-  current_token = parser_advance_and_get_next_token(parser);
-  GLSLType glsl_type = token_type_to_glsl_type(current_token.type);
+  cur_tok = parser_advance_and_get_next_token(parser);
+  GLSLType glsl_type = token_type_to_glsl_type(cur_tok.type);
   if (glsl_type == GLSL_TYPE_NULL) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_SEMICOLON,
-        "Expected glsl type after in (glsl keyword) in location directive, got %s",
-        token_type_to_string[current_token.type]
+        parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
+        "Expected glsl type after in (glsl keyword) in location directive, got %s", token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
 
   // identifier
-  current_token = parser_advance_and_get_next_token(parser);
-  if (current_token.type != TOKEN_TYPE_TEXT) {
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_TEXT) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_SEMICOLON,
-        "Expected identifier after glsl type in location directive, got %s", token_type_to_string[current_token.type]
+        parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
+        "Expected identifier after glsl type in location directive, got %s", token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
 
   // ;
-  current_token = parser_advance_and_get_next_token(parser);
-  if (current_token.type != TOKEN_TYPE_SEMICOLON) {
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_SEMICOLON) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_SEMICOLON, "Expected ; after identifier in location directive, got %s",
-        token_type_to_string[current_token.type]
+        parser, cur_tok.start, TOKEN_TYPE_SEMICOLON, "Expected ; after identifier in location directive, got %s",
+        token_type_to_string[cur_tok.type]
     );
-    return location_directive_parse;
+    return location_parse;
   }
 
   if (glsl_type != GLSL_TYPE_NULL) {
     assert(shader_stage == SHADER_STAGE_VERTEX);
-    location_directive_parse.vertex_attribute.location = location;
-    location_directive_parse.vertex_attribute.binding = binding;
-    location_directive_parse.vertex_attribute.rate = vertex_attribute_rate;
-    location_directive_parse.vertex_attribute.glsl_type = glsl_type;
-    location_directive_parse.vertex_attribute.offset = offset;
-    location_directive_parse.vertex_attribute.is_valid = true;
-    location_directive_parse.vertex_attribute.is_tightly_packed = is_tightly_packed;
+    location_parse.vertex_attribute = {
+        .location = (u8)location,
+        .binding = (u8)binding,
+        .rate = vertex_attribute_rate,
+        .glsl_type = glsl_type,
+        .offset = offset,
+        .is_valid = true,
+        .is_tightly_packed = is_tightly_packed,
+    };
   }
 
-  current_token = parser_advance_and_get_next_token(parser);
-  return location_directive_parse;
+  cur_tok = parser_advance_and_get_next_token(parser);
+  return location_parse;
 }
 
 bool token_type_is_glsl_type(TokenType type) {
@@ -939,13 +939,14 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     }
 
     parser_advance(parser);
-    directive_parse.was_successful = true;
-    directive_parse.descriptor_binding.type = descriptor_type;
-    directive_parse.descriptor_binding.name = NULL;
-    directive_parse.descriptor_binding.name_length = 0;
-    directive_parse.descriptor_binding.descriptor_count = descriptor_count;
-    directive_parse.descriptor_binding.glsl_struct = NULL;
-    directive_parse.descriptor_binding.is_valid = true;
+    directive_parse.descriptor_binding = {
+        .type = descriptor_type,
+        .name = NULL,
+        .name_length = 0,
+        .descriptor_count = descriptor_count,
+        .glsl_struct = NULL,
+        .is_valid = true,
+    };
     directive_parse.was_successful = true;
     directive_parse.set = set;
     directive_parse.binding = binding;
@@ -977,7 +978,6 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     return directive_parse;
   }
   Token buffer_label_token = cur_tok;
-  (void)buffer_label_token; // currently unused
 
   cur_tok = parser_advance_and_get_next_token(parser);
   if (cur_tok.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
@@ -1013,9 +1013,10 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     return directive_parse;
   }
 
-  GLSLStruct glsl_struct;
-  glsl_struct.type_name = cur_tok.start;
-  glsl_struct.type_name_length = cur_tok.text_length;
+  GLSLStruct glsl_struct = {
+      .type_name = cur_tok.start,
+      .type_name_length = cur_tok.text_length,
+  };
 
   // opening brace
   cur_tok = parser_advance_and_get_next_token(parser);
@@ -1214,17 +1215,19 @@ static inline void populate_vertex_layout_name(VertexLayout *vertex_layout) {
   vertex_layout->name_length = current_length;
 }
 
+const char *descriptor_type_to_string[NUM_DESCRIPTOR_TYPES] = {
+    [DESCRIPTOR_TYPE_UNIFORM] = "UNIFORM",
+    [DESCRIPTOR_TYPE_SAMPLER2D] = "SAMPLER2D",
+};
+
+// Loop over bindings in a descriptor set.
+// For
 static void populate_descriptor_set_layout_name(DescriptorSetLayout *descriptor_set_layout) {
   memset(descriptor_set_layout->name, 0, sizeof(descriptor_set_layout->name));
 
   const char *prefix = "DESCRIPTOR_SET_LAYOUT";
   memcpy(descriptor_set_layout->name, prefix, strlen(prefix));
   u32 current_length = strlen(prefix);
-
-  const char *descriptor_type_to_string[NUM_DESCRIPTOR_TYPES] = {
-      [DESCRIPTOR_TYPE_UNIFORM] = "UNIFORM",
-      [DESCRIPTOR_TYPE_SAMPLER2D] = "SAMPLER2D",
-  };
 
   // main loop
   for (u32 binding_id = 0; binding_id < MAX_NUM_DESCRIPTOR_BINDINGS; binding_id++) {
@@ -1234,19 +1237,16 @@ static void populate_descriptor_set_layout_name(DescriptorSetLayout *descriptor_
     }
 
     // meaningful stuff: binding #, binding type, binding count
+    const char *binding_string = descriptor_type_to_string[binding->type];
     u32 remaining_length = MAX_DESCRIPTOR_SET_LAYOUT_NAME_LENGTH - current_length;
-    u32 next_length = snprintf(
-        NULL, 0, "_BIND%u_%s_ARR%u", binding_id, descriptor_type_to_string[binding->type], binding->descriptor_count
-    );
-    if (next_length > remaining_length) {
+    u32 next_length = snprintf(NULL, 0, "_BIND%u_%s_ARR%u", binding_id, binding_string, binding->descriptor_count);
+    if (next_length >= remaining_length) {
       printf("Ran out of room for descriptor set layout name at %s, stopping.\n", descriptor_set_layout->name);
       return;
     }
 
-    snprintf(
-        descriptor_set_layout->name + current_length, remaining_length, "_BIND%u_%s_ARR%u", binding_id,
-        descriptor_type_to_string[binding->type], binding->descriptor_count
-    );
+    char *start = descriptor_set_layout->name + current_length;
+    snprintf(start, remaining_length, "_BIND%u_%s_ARR%u", binding_id, binding_string, binding->descriptor_count);
     current_length += next_length;
   }
 }
@@ -1363,9 +1363,10 @@ static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layo
 StructSearchResult
 search_for_matching_struct(const GLSLStruct *new_glsl_struct, const GLSLStruct *glsl_structs, u32 num_glsl_structs) {
 
-  StructSearchResult search_result;
-  search_result.matching_struct = NULL;
-  search_result.found_mismatch = false;
+  StructSearchResult search_result = {
+      .matching_struct = NULL,
+      .found_mismatch = false,
+  };
 
   // bool found_mismatch = false;
   u32 name_length = new_glsl_struct->type_name_length;
@@ -1390,14 +1391,14 @@ search_for_matching_struct(const GLSLStruct *new_glsl_struct, const GLSLStruct *
   return search_result;
 }
 
-bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_shaders_ir) {
+bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
 
-  // TODO make return successful or not, and if not, don't compile header
-  Parser parser;
-  parser.tokens = lex_string(shader_to_compile.source, shader_to_compile.source_length);
-  parser.source = shader_to_compile.source;
-  parser.source_length = shader_to_compile.source_length;
-  parser.token_index = 0;
+  Parser parser = {
+      .tokens = lex_string(shader_to_compile.source, shader_to_compile.source_length),
+      .source = shader_to_compile.source,
+      .source_length = shader_to_compile.source_length,
+      .token_index = 0,
+  };
 
   u32 string_slice_index = 0;
 
@@ -1461,23 +1462,22 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
     case TOKEN_TYPE_DIRECTIVE_LOCATION: {
       template_string_slice.type = DIRECTIVE_TYPE_LOCATION;
 
-      LocationDirectiveParse location_directive_parse =
+      LocationDirectiveParse location_parse =
           parse_location_directive(&parser, shader_to_compile.stage, &template_string_slice);
 
-      if (location_directive_parse.vertex_attribute.glsl_type != GLSL_TYPE_NULL) {
+      if (location_parse.vertex_attribute.glsl_type != GLSL_TYPE_NULL) {
         assert(shader_to_compile.stage == SHADER_STAGE_VERTEX);
-        if (vertex_layout.attributes[location_directive_parse.vertex_attribute.location].is_valid) {
+        if (vertex_layout.attributes[location_parse.vertex_attribute.location].is_valid) {
           fprintf(
-              stderr, "Found repeat location %u for vertex layout in %s.\n",
-              location_directive_parse.vertex_attribute.location, shader_to_compile.name
+              stderr, "Found repeat location %u for vertex layout in %s.\n", location_parse.vertex_attribute.location,
+              shader_to_compile.name
           );
         } else {
-          vertex_layout.attributes[location_directive_parse.vertex_attribute.location] =
-              location_directive_parse.vertex_attribute;
+          vertex_layout.attributes[location_parse.vertex_attribute.location] = location_parse.vertex_attribute;
         }
       }
 
-      glsl_string_slice.start = location_directive_parse.next_glsl_source_start;
+      glsl_string_slice.start = location_parse.next_glsl_source_start;
       break;
     }
 
@@ -1486,20 +1486,18 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
       // just accumulate here, validate and assign pointers after parsing
     case TOKEN_TYPE_DIRECTIVE_SET_BINDING: {
       template_string_slice.type = DIRECTIVE_TYPE_SET_BINDING;
-      SetBindingDirectiveParse set_binding_directive_parse =
-          parse_set_binding_directive(&parser, &template_string_slice);
-      glsl_string_slice.start = set_binding_directive_parse.next_glsl_source_start;
-      set_binding_directive_parse.descriptor_binding.shader_stage = shader_to_compile.stage;
+
+      SetBindingDirectiveParse set_binding_parse = parse_set_binding_directive(&parser, &template_string_slice);
+      set_binding_parse.descriptor_binding.shader_stage = shader_to_compile.stage;
+      glsl_string_slice.start = set_binding_parse.next_glsl_source_start;
 
       // validate descriptor binding
       // just got a single binding for a particular set in a particular shader
       // it may describe a struct we haven't seen before, or may be a redefintion of one with the same name
-      if (set_binding_directive_parse.descriptor_binding.type == DESCRIPTOR_TYPE_UNIFORM) {
-        const GLSLStruct *new_glsl_struct = &set_binding_directive_parse.glsl_struct;
-        StructSearchResult struct_search_result = search_for_matching_struct(
-            &set_binding_directive_parse.glsl_struct, parsed_shaders_ir->glsl_structs,
-            parsed_shaders_ir->num_glsl_structs
-        );
+      if (set_binding_parse.descriptor_binding.type == DESCRIPTOR_TYPE_UNIFORM) {
+        const GLSLStruct *new_glsl_struct = &set_binding_parse.glsl_struct;
+        StructSearchResult struct_search_result =
+            search_for_matching_struct(&set_binding_parse.glsl_struct, ir->glsl_structs, ir->num_glsl_structs);
 
         if (struct_search_result.found_mismatch == true) {
           fprintf(
@@ -1517,18 +1515,20 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
 
         // discovered new struct
         if (struct_search_result.matching_struct != NULL) {
-          set_binding_directive_parse.descriptor_binding.glsl_struct = struct_search_result.matching_struct;
+          set_binding_parse.descriptor_binding.glsl_struct = struct_search_result.matching_struct;
         } else {
-          set_binding_directive_parse.glsl_struct.discovered_shader_name = shader_to_compile.name;
-          set_binding_directive_parse.glsl_struct.discovered_shader_name_length = shader_to_compile.name_length;
-          parsed_shaders_ir->glsl_structs[parsed_shaders_ir->num_glsl_structs++] =
-              set_binding_directive_parse.glsl_struct;
+          set_binding_parse.glsl_struct.discovered_shader_name = shader_to_compile.name;
+          set_binding_parse.glsl_struct.discovered_shader_name_length = shader_to_compile.name_length;
+
+          ir->glsl_structs[ir->num_glsl_structs] = set_binding_parse.glsl_struct;
+          set_binding_parse.descriptor_binding.glsl_struct = &ir->glsl_structs[ir->num_glsl_structs];
+          ir->num_glsl_structs++;
         }
       }
 
       // check that we haven't double defined this binding for this set
-      u32 set = set_binding_directive_parse.set;
-      u32 binding = set_binding_directive_parse.binding;
+      u32 set = set_binding_parse.set;
+      u32 binding = set_binding_parse.binding;
       if (descriptor_set_layouts[set].bindings[binding].is_valid) {
         fprintf(
             stderr, "Found repeat binding %u for set %u in shader %.*s.\n", binding, set, shader_to_compile.name_length,
@@ -1536,23 +1536,22 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
         );
         return false;
       } else {
-        descriptor_set_layouts[set].bindings[binding] = set_binding_directive_parse.descriptor_binding;
+        descriptor_set_layouts[set].bindings[binding] = set_binding_parse.descriptor_binding;
         descriptor_set_layouts[set].num_bindings++;
       }
 
       // check for new uniform buffer slots
       // TODO save pointers to these in this shader spec
       bool should_add_new_buffer_label = true;
-      if (set_binding_directive_parse.buffer_label_name == NULL) {
+      if (set_binding_parse.buffer_label_name == NULL) {
         // if name is null, found nothing, nothing to add
         should_add_new_buffer_label = false;
       } else {
-        for (u32 i = 0; i < parsed_shaders_ir->num_buffer_labels; i++) {
-          const UniformBufferLabel *buffer_label = &parsed_shaders_ir->uniform_buffer_labels[i];
+        for (u32 i = 0; i < ir->num_buffer_labels; i++) {
+          const UniformBufferLabel *buffer_label = &ir->uniform_buffer_labels[i];
 
-          if (buffer_label->name_length == set_binding_directive_parse.buffer_label_name_length &&
-              (strncmp(buffer_label->name, set_binding_directive_parse.buffer_label_name, buffer_label->name_length) ==
-               0)) {
+          if (buffer_label->name_length == set_binding_parse.buffer_label_name_length &&
+              (strncmp(buffer_label->name, set_binding_parse.buffer_label_name, buffer_label->name_length) == 0)) {
             should_add_new_buffer_label = false; // found repeat
             break;
           }
@@ -1561,20 +1560,20 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
 
       if (should_add_new_buffer_label) {
         UniformBufferLabel uniform_buffer_label = {
-            .name = set_binding_directive_parse.buffer_label_name,
-            .name_length = set_binding_directive_parse.buffer_label_name_length
+            .name = set_binding_parse.buffer_label_name,
+            .name_length = set_binding_parse.buffer_label_name_length,
         };
-        parsed_shaders_ir->uniform_buffer_labels[parsed_shaders_ir->num_buffer_labels++] = uniform_buffer_label;
+        ir->uniform_buffer_labels[ir->num_buffer_labels++] = uniform_buffer_label;
       }
 
-      if (set_binding_directive_parse.descriptor_binding.type != DESCRIPTOR_TYPE_INVALID) {
-        if (set_binding_directive_parse.descriptor_binding.type == NUM_DESCRIPTOR_TYPES) {
+      if (set_binding_parse.descriptor_binding.type != DESCRIPTOR_TYPE_INVALID) {
+        if (set_binding_parse.descriptor_binding.type == NUM_DESCRIPTOR_TYPES) {
           fprintf(
               stderr, "Somehow descriptor set binding type is NUM_DESCRIPTOR TYPES, in shader %.*s.\n",
               shader_to_compile.name_length, shader_to_compile.name
           );
         } else {
-          parsed_shaders_ir->descriptor_binding_types[set_binding_directive_parse.descriptor_binding.type]++;
+          ir->descriptor_binding_types[set_binding_parse.descriptor_binding.type]++;
         }
       }
       break;
@@ -1606,9 +1605,9 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
     if (vertex_layout_validate_and_compute_offsets(&vertex_layout)) {
       // if this vertex layout is valid, check that it doesn't match an existing one
       const VertexLayout *matching_vertex_layout_index = NULL;
-      for (u32 i = 0; i < parsed_shaders_ir->num_vertex_layouts; i++) {
-        if (vertex_layout_equals(&vertex_layout, &parsed_shaders_ir->vertex_layouts[i])) {
-          matching_vertex_layout_index = &parsed_shaders_ir->vertex_layouts[i];
+      for (u32 i = 0; i < ir->num_vertex_layouts; i++) {
+        if (vertex_layout_equals(&vertex_layout, &ir->vertex_layouts[i])) {
+          matching_vertex_layout_index = &ir->vertex_layouts[i];
           break;
         }
       }
@@ -1616,8 +1615,8 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
       if (matching_vertex_layout_index != NULL) {
         parsed_shader.vertex_layout = matching_vertex_layout_index;
       } else {
-        parsed_shaders_ir->vertex_layouts[parsed_shaders_ir->num_vertex_layouts++] = vertex_layout;
-        parsed_shader.vertex_layout = &parsed_shaders_ir->vertex_layouts[parsed_shaders_ir->num_vertex_layouts - 1];
+        ir->vertex_layouts[ir->num_vertex_layouts++] = vertex_layout;
+        parsed_shader.vertex_layout = &ir->vertex_layouts[ir->num_vertex_layouts - 1];
       }
     } else {
       // release locks?
@@ -1630,28 +1629,30 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *parsed_sha
   for (u32 i = 0; i < MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER; i++) {
     DescriptorSetLayout *descriptor_set_layout = &descriptor_set_layouts[i];
     if (descriptor_set_layout->num_bindings > 0) {
+      // TODO
       populate_descriptor_set_layout_name(descriptor_set_layout);
+      printf("%s\n", descriptor_set_layout->name);
     }
   }
 
   parsed_shader.num_template_slices = string_slice_index;
-  parsed_shaders_ir->parsed_shaders[parsed_shaders_ir->num_parsed_shaders++] = parsed_shader;
+  ir->parsed_shaders[ir->num_parsed_shaders++] = parsed_shader;
   token_vector_free(&parser.tokens);
   return true;
 }
 
 ParsedShadersIR parse_all_shaders_and_populate_global_tables(const ShaderToCompileList *shader_to_compile_list) {
-  ParsedShadersIR parsed_shaders_ir;
-  memset(&parsed_shaders_ir, 0, sizeof(parsed_shaders_ir));
+  ParsedShadersIR ir;
+  memset(&ir, 0, sizeof(ir));
 
   bool all_parsing_successful = true;
   for (u32 i = 0; i < shader_to_compile_list->num_shaders; i++) {
-    bool parsing_successful = parse_shader(shader_to_compile_list->shaders[i], &parsed_shaders_ir);
+    bool parsing_successful = parse_shader(shader_to_compile_list->shaders[i], &ir);
     if (!parsing_successful) {
       all_parsing_successful = false;
     }
   }
 
-  parsed_shaders_ir.parsing_successful = all_parsing_successful;
-  return parsed_shaders_ir;
+  ir.parsing_successful = all_parsing_successful;
+  return ir;
 }

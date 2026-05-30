@@ -280,7 +280,7 @@ inline void token_vector_free(TokenVector *token_vector) {
 // parser state and APIs
 struct Parser {
   const char *source;
-  u32 source_length;
+  u64 source_length;
   TokenVector tokens;
   u32 token_index;
 };

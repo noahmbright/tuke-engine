@@ -342,6 +342,7 @@ struct DescriptorSetBuilder {
   VkDescriptorImageInfo descriptor_image_infos[MAX_DESCRIPTOR_IMAGE_INFOS];
 };
 
+// TODO want less things called "Handle"
 struct DescriptorSetHandle {
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_set_layout;
@@ -526,9 +527,6 @@ void load_vulkan_textures(
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
 VkSampler create_sampler(VkDevice device);
 
-VkDescriptorSetLayoutBinding create_descriptor_set_layout_binding(
-    u32 binding, VkShaderStageFlags stage_flags, VkDescriptorType descriptor_type, u32 descriptor_count
-);
 DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context);
 
 // TODO this function/builder structure itself needs updated to decouple layouts
