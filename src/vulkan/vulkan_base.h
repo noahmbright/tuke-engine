@@ -320,8 +320,8 @@ struct DescriptorSetBuilder {
   // Layout bindings: The shape of the descriptor.
   //    binding ID, num descriptors, which stages, immutable samplers (?),
   //    and descriptor type (sampler, uniform, storage buffer, etc.)
-  VkDescriptorSetLayoutBinding layout_bindings[MAX_LAYOUT_BINDINGS];
   u32 binding_count;
+  VkDescriptorSetLayoutBinding layout_bindings[MAX_LAYOUT_BINDINGS];
 
   // Writes: how to write specific resources to the descriptor.
   //    Takes pointers to image/buffer infos + buffer views.
@@ -336,6 +336,7 @@ struct DescriptorSetBuilder {
   // Which buffer, offset, range.
   u32 buffer_info_count;
   VkDescriptorBufferInfo descriptor_buffer_infos[MAX_DESCRIPTOR_BUFFER_INFOS];
+
   // Sampler, image view, and image layout.
   u32 image_info_count;
   VkDescriptorImageInfo descriptor_image_infos[MAX_DESCRIPTOR_IMAGE_INFOS];

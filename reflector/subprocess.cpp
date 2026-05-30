@@ -1,10 +1,13 @@
 #include "subprocess.h"
-#include "codegen.h"
 #include "reflector.h"
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -138,6 +141,29 @@ static int read_file_to_heap(const char *path, u8 **out_buf, size_t *out_len) {
   return 0;
 }
 
+// Could potentially optimize this with cleverer buffering.
+// Could avoid text copy by searching for boundaries and doing fwrite.
+void dump_source_with_line_numbers(const char *source_string) {
+  const u32 BUF_SIZE = 1024;
+  char buf[BUF_SIZE];
+
+  u32 line_no = 1;
+  const char *c = source_string;
+
+  while (*c) {
+    u32 i = 0;
+    while (*c != '\n' && *c != '\0') {
+      assert(i < BUF_SIZE - 1); //  - 1 for null terminator
+      buf[i++] = *c++;
+    }
+    buf[i] = '\0';
+
+    printf("%u %s\n", line_no, buf);
+    c += (*c == '\n');
+    line_no++;
+  }
+}
+
 SpirVBytesArray compile_vulkan_source_to_spirv(GLSLSource glsl_source, ShaderStage stage) {
   SpirVBytesArray bytes_array;
   bytes_array.length = 0;
@@ -186,7 +212,7 @@ SpirVBytesArray compile_vulkan_source_to_spirv(GLSLSource glsl_source, ShaderSta
   // invoke compiler
   int glslangValidator_rc = invoke_glslValidator(glsl_source_path, spirv_bytecode_path, stage);
   if (glslangValidator_rc != 0) {
-    printf("Shader compilation failed, source dump:\n%s\n", glsl_source.string);
+    dump_source_with_line_numbers(glsl_source.string);
     return bytes_array;
   }
 

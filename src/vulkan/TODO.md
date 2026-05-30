@@ -7,28 +7,7 @@ manages backend state and calls raw Vulkan — this all needs to move into the b
 
 **What leaks into application code today:**
 - `vkCmdEndRenderPass` — raw Vulkan, belongs in the backend
-- `vkEndCommandBuffer` — raw Vulkan, belongs in the backend
-- `vkCmdSetViewport` / `vkCmdSetScissor` — always called together after begin_render_pass, should fold in
-- `context.framebuffers[context.image_index]` — app manages framebuffer selection
 - `NUM_ATTACHMENTS` — backend constant leaking into test code
-
-**Done:**
-- `context.current_frame++` / `context.current_frame_index = ...` — replaced by `update_frame_index()`
-- `current_frame` removed from `VulkanContext` — now lives in game State
-
-**Target API:**
-```cpp
-if (!begin_frame(&context)) continue;
-VkCommandBuffer cb = begin_frame_commands(&context, clear_color);
-render_mesh(cb, &render_call);
-end_frame(&context, cb);  // EndRenderPass + EndCommandBuffer + submit + present + increment index
-```
-
-**Frame index ownership:**
-- `current_frame_index` stays in context, incremented inside `end_frame`, never touched by app
-- `current_frame` (game frame number) belongs to game logic, remove from VulkanContext
-- App queries `context.current_frame_index` to index its own per-frame resources (double-buffered uniforms etc.)
-- `MAX_FRAMES_IN_FLIGHT` must not leak past the renderer layer into game logic
 
 **Render packet pattern (longer term):**
 - Game produces a plain data struct (RenderPacket) each frame
