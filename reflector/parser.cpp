@@ -9,6 +9,10 @@
 #include <stdarg.h>
 #include <string.h>
 
+static bool labels_match(const char *a, const char *b, u32 a_len, u32 b_len) {
+  return a_len == b_len && (strncmp(a, b, a_len) == 0);
+}
+
 inline Token parser_get_current_token(const Parser *parser) { return parser->tokens.tokens[parser->token_index]; }
 
 inline void parser_advance(Parser *parser) { parser->token_index++; }
@@ -115,8 +119,8 @@ TokenType string_slice_to_keyword_or_identifier(const char *string, u32 length) 
   if (length == 14 && strncmp(string, "TIGHTLY_PACKED", length) == 0) {
     return TOKEN_TYPE_TIGHTLY_PACKED;
   }
-  if (length == 12 && strncmp(string, "BUFFER_LABEL", length) == 0) {
-    return TOKEN_TYPE_BUFFER_LABEL;
+  if (length == 9 && strncmp(string, "SET_LABEL", length) == 0) {
+    return TOKEN_TYPE_SET_LABEL;
   }
   if (length == 12 && strncmp(string, "VERTEX_INDEX", length) == 0) {
     return TOKEN_TYPE_DIRECTIVE_VERTEX_INDEX;
@@ -835,15 +839,16 @@ GLSLStructMemberList parse_glsl_struct_member_list(Parser *parser) {
   return member_list;
 }
 
-//{{ SET_BINDING set binding }} uniform sampler2D identifier;
-//{{ SET_BINDING set binding BUFFER_LABEL label}} uniform identifier { (type identifier;)! } idenitifer;
+//{{ SET_BINDING set binding SET_LABEL label}} uniform sampler2D identifier;
+//{{ SET_BINDING set binding SET_LABEL label}} uniform identifier { (type identifier;)! } idenitifer;
 //  first identifier is a typename, the second is the instance identifier
 SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string_slice) {
   SetBindingDirectiveParse directive_parse = {
+      .descriptor_type = DESCRIPTOR_TYPE_INVALID,
       .was_successful = false,
       .next_glsl_source_start = NULL,
-      .buffer_label_name = NULL,
-      .buffer_label_name_length = 0,
+      .set_label_name = NULL,
+      .set_label_name_length = 0,
   };
 
   Token cur_tok = parser_get_current_token(parser);
@@ -881,34 +886,69 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     return directive_parse;
   }
 
-  // if we get a sampler, the double R braces come here
-  DescriptorType descriptor_type = DESCRIPTOR_TYPE_INVALID;
+  // SET_LABEL
   cur_tok = parser_advance_and_get_next_token(parser);
-  if (cur_tok.type == TOKEN_TYPE_DOUBLE_R_BRACE) {
+  if (cur_tok.type != TOKEN_TYPE_SET_LABEL) {
+    report_parser_error(
+        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+        "In SET_BINDING for uniform buffer, expected SET_LABEL after binding, got %s",
+        token_type_to_string[cur_tok.type]
+    );
+    return directive_parse;
+  }
 
-    cur_tok = parser_advance_and_get_next_token(parser);
-    if (cur_tok.type != TOKEN_TYPE_UNIFORM) {
-      report_parser_error(
-          parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
-          "In SET_BINDING without buffer label, expected uniform after DOUBLE_R_BRACES, got %s",
-          token_type_to_string[cur_tok.type]
-      );
-      return directive_parse;
-    }
-    template_string_slice->end = cur_tok.start;
-    directive_parse.next_glsl_source_start = cur_tok.start;
+  // SET_LABEL's textual identifier
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_TEXT) {
+    report_parser_error(
+        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+        "In SET_BINDING for uniform buffer, expected identifier after SET_LABEL, got %s",
+        token_type_to_string[cur_tok.type]
+    );
+    return directive_parse;
+  }
+  Token set_label_tok = cur_tok;
+  directive_parse.set_label_name = set_label_tok.start;
+  directive_parse.set_label_name_length = set_label_tok.text_length;
 
-    cur_tok = parser_advance_and_get_next_token(parser);
-    if (cur_tok.type != TOKEN_TYPE_SAMPLER2D) {
-      report_parser_error(
-          parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
-          "In SET_BINDING for sampler, expected sampler2D after uniform , got %s", token_type_to_string[cur_tok.type]
-      );
-      return directive_parse;
-    }
-    // TODO extend for other sampler2D types
-    descriptor_type = DESCRIPTOR_TYPE_SAMPLER2D;
+  // TOKEN_TYPE_DOUBLE_R_BRACE
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
+    report_parser_error(
+        parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
+        "In SET_BINDING for uniform buffer, expected DOUBLE_R_BRACE after buffer_label, got %s",
+        token_type_to_string[cur_tok.type]
+    );
+    return directive_parse;
+  }
 
+  // TOKEN_TYPE_UNIFORM
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_UNIFORM) {
+    report_parser_error(
+        parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
+        "In SET_BINDING for uniform buffer, expected uniform after DOUBLE_R_BRACES, got %s",
+        token_type_to_string[cur_tok.type]
+    );
+    return directive_parse;
+  }
+  template_string_slice->end = cur_tok.start;
+  directive_parse.next_glsl_source_start = cur_tok.start;
+
+  // Diverge here - either sampler2D or uniform struct's typename
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_SAMPLER2D && cur_tok.type != TOKEN_TYPE_TEXT) {
+    // TODO Fix error message
+    report_parser_error(
+        parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
+        "In SET_BINDING for uniform buffer, expected identifier after uniform, got %s",
+        token_type_to_string[cur_tok.type]
+    );
+    return directive_parse;
+  }
+
+  // Sampler
+  if (cur_tok.type == TOKEN_TYPE_SAMPLER2D) {
     cur_tok = parser_advance_and_get_next_token(parser);
     if (cur_tok.type != TOKEN_TYPE_TEXT) {
       report_parser_error(
@@ -939,80 +979,16 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     }
 
     parser_advance(parser);
-    directive_parse.descriptor_binding = {
-        .type = descriptor_type,
-        .name = NULL,
-        .name_length = 0,
-        .descriptor_count = descriptor_count,
-        .glsl_struct = NULL,
-        .is_valid = true,
-    };
     directive_parse.was_successful = true;
     directive_parse.set = set;
     directive_parse.binding = binding;
     template_string_slice->set = set;
     template_string_slice->binding = binding;
-    template_string_slice->descriptor_type = descriptor_type;
-    return directive_parse;
-  }
-  // done parsing sampler
-
-  // on BUFFER_LABEL
-  // {{ SET_BINDING set binding BUFFER_LABEL label}} uniform identifier { (type identifier;)! } idenitifer;
-  if (cur_tok.type != TOKEN_TYPE_BUFFER_LABEL) {
-    report_parser_error(
-        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
-        "In SET_BINDING for uniform buffer, expected BUFFER_LABEL after binding, got %s",
-        token_type_to_string[cur_tok.type]
-    );
+    template_string_slice->descriptor_type = DESCRIPTOR_TYPE_SAMPLER2D;
     return directive_parse;
   }
 
-  cur_tok = parser_advance_and_get_next_token(parser);
-  if (cur_tok.type != TOKEN_TYPE_TEXT) {
-    report_parser_error(
-        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
-        "In SET_BINDING for uniform buffer, expected identifier after BUFFER_LABEL, got %s",
-        token_type_to_string[cur_tok.type]
-    );
-    return directive_parse;
-  }
-  Token buffer_label_token = cur_tok;
-
-  cur_tok = parser_advance_and_get_next_token(parser);
-  if (cur_tok.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
-    report_parser_error(
-        parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
-        "In SET_BINDING for uniform buffer, expected DOUBLE_R_BRACE after buffer_label, got %s",
-        token_type_to_string[cur_tok.type]
-    );
-    return directive_parse;
-  }
-
-  cur_tok = parser_advance_and_get_next_token(parser);
-  if (cur_tok.type != TOKEN_TYPE_UNIFORM) {
-    report_parser_error(
-        parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
-        "In SET_BINDING for uniform buffer, expected uniform after DOUBLE_R_BRACES, got %s",
-        token_type_to_string[cur_tok.type]
-    );
-    return directive_parse;
-  }
-  template_string_slice->end = cur_tok.start;
-  directive_parse.next_glsl_source_start = cur_tok.start;
-  descriptor_type = DESCRIPTOR_TYPE_UNIFORM;
-
-  // struct's typename
-  cur_tok = parser_advance_and_get_next_token(parser);
-  if (cur_tok.type != TOKEN_TYPE_TEXT) {
-    report_parser_error(
-        parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
-        "In SET_BINDING for uniform buffer, expected identifier after uniform, got %s",
-        token_type_to_string[cur_tok.type]
-    );
-    return directive_parse;
-  }
-
+  // On struct typename
   GLSLStruct glsl_struct = {
       .type_name = cur_tok.start,
       .type_name_length = cur_tok.text_length,
@@ -1042,8 +1018,7 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     );
     return directive_parse;
   }
-  const char *struct_instance_name = cur_tok.start;
-  u32 struct_instance_name_length = cur_tok.text_length;
+  // Token struct_instance_tok = cur_tok;
 
   cur_tok = parser_advance_and_get_next_token(parser);
   u32 descriptor_count = 0;
@@ -1064,16 +1039,12 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     return directive_parse;
   }
 
-  template_string_slice->descriptor_type = descriptor_type;
-  directive_parse.descriptor_binding.type = descriptor_type;
-  directive_parse.descriptor_binding.name = struct_instance_name;
-  directive_parse.descriptor_binding.name_length = struct_instance_name_length;
-  // still need to check if we already found the same struct in a different shader
-  directive_parse.descriptor_binding.descriptor_count = descriptor_count;
-  directive_parse.descriptor_binding.glsl_struct = NULL;
-  directive_parse.descriptor_binding.is_valid = true;
-  directive_parse.buffer_label_name = buffer_label_token.start;
-  directive_parse.buffer_label_name_length = buffer_label_token.text_length;
+  template_string_slice->descriptor_type = DESCRIPTOR_TYPE_UNIFORM;
+
+  directive_parse.descriptor_type = DESCRIPTOR_TYPE_UNIFORM;
+  // directive_parse.descriptor_binding.name = struct_instance_tok.start;
+  // directive_parse.descriptor_binding.name_length = struct_instance_tok.text_length;
+  directive_parse.descriptor_count = descriptor_count;
 
   directive_parse.was_successful = true;
   directive_parse.glsl_struct = glsl_struct;
@@ -1220,37 +1191,6 @@ const char *descriptor_type_to_string[NUM_DESCRIPTOR_TYPES] = {
     [DESCRIPTOR_TYPE_SAMPLER2D] = "SAMPLER2D",
 };
 
-// Loop over bindings in a descriptor set.
-// For
-static void populate_descriptor_set_layout_name(DescriptorSetLayout *descriptor_set_layout) {
-  memset(descriptor_set_layout->name, 0, sizeof(descriptor_set_layout->name));
-
-  const char *prefix = "DESCRIPTOR_SET_LAYOUT";
-  memcpy(descriptor_set_layout->name, prefix, strlen(prefix));
-  u32 current_length = strlen(prefix);
-
-  // main loop
-  for (u32 binding_id = 0; binding_id < MAX_NUM_DESCRIPTOR_BINDINGS; binding_id++) {
-    const DescriptorBinding *binding = &descriptor_set_layout->bindings[binding_id];
-    if (!binding->is_valid) {
-      continue;
-    }
-
-    // meaningful stuff: binding #, binding type, binding count
-    const char *binding_string = descriptor_type_to_string[binding->type];
-    u32 remaining_length = MAX_DESCRIPTOR_SET_LAYOUT_NAME_LENGTH - current_length;
-    u32 next_length = snprintf(NULL, 0, "_BIND%u_%s_ARR%u", binding_id, binding_string, binding->descriptor_count);
-    if (next_length >= remaining_length) {
-      printf("Ran out of room for descriptor set layout name at %s, stopping.\n", descriptor_set_layout->name);
-      return;
-    }
-
-    char *start = descriptor_set_layout->name + current_length;
-    snprintf(start, remaining_length, "_BIND%u_%s_ARR%u", binding_id, binding_string, binding->descriptor_count);
-    current_length += next_length;
-  }
-}
-
 static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layout) {
 
   bool found_first_invalid_after_valids = false;
@@ -1360,35 +1300,129 @@ static bool vertex_layout_validate_and_compute_offsets(VertexLayout *vertex_layo
   return true;
 }
 
-StructSearchResult
-search_for_matching_struct(const GLSLStruct *new_glsl_struct, const GLSLStruct *glsl_structs, u32 num_glsl_structs) {
+static inline bool glsl_struct_member_list_equals(const GLSLStructMemberList *left, const GLSLStructMemberList *right) {
+  if (left->num_members != right->num_members) {
+    return false;
+  }
 
+  for (u32 i = 0; i < left->num_members; i++) {
+    const GLSLStructMember *left_member = &left->members[i];
+    const GLSLStructMember *right_member = &right->members[i];
+
+    bool name_lens_are_same = (left_member->identifier_length == right_member->identifier_length);
+    if (!name_lens_are_same) {
+      return false;
+    }
+
+    bool names_are_same =
+        (strncmp(left_member->identifier, right_member->identifier, left_member->identifier_length) == 0);
+    bool array_lens_are_same = left_member->array_length == right_member->array_length;
+    bool types_are_same = left_member->type == right_member->type;
+    if (!names_are_same || !array_lens_are_same || !types_are_same) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+#if 0 
+static inline bool descriptor_set_layout_equals(const DescriptorSetLayout *left, const DescriptorSetLayout *right) {
+  if (left->num_bindings != right->num_bindings) {
+    return false;
+  }
+
+  for (u32 i = 0; i < MAX_NUM_DESCRIPTOR_BINDINGS; i++) {
+    const DescriptorBinding *l = &left->bindings[i];
+    const DescriptorBinding *r = &right->bindings[i];
+
+    if (!l->is_valid || !r->is_valid) {
+      if (!l->is_valid && !r->is_valid) {
+        continue;
+      } else {
+        return false;
+      }
+    }
+
+    // TODO this may be incorrect.
+    // A label may define a set/binding in either the vertex or fragment stage.
+    // Set/binding pairs must be consistent per label
+    //
+    // don't bother comparing stage, will merge at pipeline creation time
+    // don't think I need to compare buffer labels. if the layouts are the same but they draw from
+    // different buffers, I can still reuse
+    bool type_equals = (l->type == r->type);
+    bool count_equals = (l->descriptor_count == r->descriptor_count);
+    if (!type_equals || !count_equals) {
+      return false;
+    }
+  }
+
+  return true;
+}
+#endif
+
+static StructSearchResult search_for_matching_struct(const GLSLStruct *new_struct, const ParsedShadersIR *ir) {
   StructSearchResult search_result = {
       .matching_struct = NULL,
       .found_mismatch = false,
   };
 
   // bool found_mismatch = false;
-  u32 name_length = new_glsl_struct->type_name_length;
-  const char *name = new_glsl_struct->type_name;
+  u32 name_len = new_struct->type_name_length;
+  const char *name = new_struct->type_name;
 
-  for (u32 i = 0; i < num_glsl_structs; i++) {
-    const GLSLStruct *current_glsl_struct = &glsl_structs[i];
-    bool name_is_same =
-        (current_glsl_struct->type_name_length == name_length &&
-         (strncmp(current_glsl_struct->type_name, name, name_length) == 0));
-
-    if (name_is_same) {
-      search_result.matching_struct = current_glsl_struct;
-      if (!glsl_struct_member_list_equals(&new_glsl_struct->member_list, &current_glsl_struct->member_list)) {
-        // mismatch - same typenames but different layouts
-        search_result.found_mismatch = true;
-      }
-      break;
+  for (u32 i = 0; i < ir->num_glsl_structs; i++) {
+    const GLSLStruct *old_struct = &ir->glsl_structs[i];
+    bool name_is_same = labels_match(old_struct->type_name, name, old_struct->type_name_length, name_len);
+    if (!name_is_same) {
+      continue;
     }
+
+    // Name is same. If mismatch, report error. If matches, update matching struct.
+    bool same_members = glsl_struct_member_list_equals(&new_struct->member_list, &old_struct->member_list);
+    if (!same_members) {
+      search_result.found_mismatch = true;
+    }
+
+    search_result.matching_struct = old_struct;
+    break;
   }
 
   return search_result;
+}
+
+static inline bool push_and_validate_descriptor(ParsedShadersIR *ir, const SetBindingDirectiveParse *sb_parse) {
+  // Descriptor sets are keyed by label.
+  u32 name_len = sb_parse->set_label_name_length;
+  for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
+    DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
+    bool name_is_same = labels_match(sb_parse->set_label_name, layout->name, name_len, layout->name_length);
+    if (!name_is_same) {
+      continue;
+    }
+
+    // Found match
+    DescriptorBinding *binding = &layout->bindings[sb_parse->binding];
+    binding->stage_flags |= sb_parse->stage;
+
+    return true;
+  }
+
+  // No match. As long as we have room for more sets, we can push freely.
+  u32 new_idx = ir->num_descriptor_set_layouts;
+  assert(new_idx < MAX_NUM_DESCRIPTOR_SET_LISTS);
+
+  DescriptorSetLayout *new_layout = &ir->descriptor_set_layouts[new_idx];
+  memcpy(new_layout->name, sb_parse->set_label_name, name_len);
+  new_layout->name_length = name_len;
+
+  assert(sb_parse->binding < MAX_NUM_DESCRIPTOR_BINDINGS);
+  DescriptorBinding *binding = &new_layout->bindings[sb_parse->binding];
+  binding->stage_flags = sb_parse->stage;
+
+  ir->num_descriptor_set_layouts++;
+  return true;
 }
 
 bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
@@ -1409,12 +1443,6 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
 
   VertexLayout vertex_layout;
   memset(&vertex_layout, 0, sizeof(vertex_layout));
-
-  // within a shader, the set id uniquely identifies a set
-  // across two different shaders, set 0 can be two different layouts, but in THIS shader
-  // we parse now, it has to be one consistent thing
-  DescriptorSetLayout descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER];
-  memset(&descriptor_set_layouts, 0, sizeof(descriptor_set_layouts));
 
   TemplateStringSlice glsl_string_slice = new_template_string_slice(shader_to_compile.source);
   glsl_string_slice.type = DIRECTIVE_TYPE_GLSL_SOURCE;
@@ -1487,96 +1515,57 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
     case TOKEN_TYPE_DIRECTIVE_SET_BINDING: {
       template_string_slice.type = DIRECTIVE_TYPE_SET_BINDING;
 
-      SetBindingDirectiveParse set_binding_parse = parse_set_binding_directive(&parser, &template_string_slice);
-      set_binding_parse.descriptor_binding.shader_stage = shader_to_compile.stage;
-      glsl_string_slice.start = set_binding_parse.next_glsl_source_start;
+      SetBindingDirectiveParse sb_parse = parse_set_binding_directive(&parser, &template_string_slice);
+      sb_parse.stage = shader_to_compile.stage;
+      glsl_string_slice.start = sb_parse.next_glsl_source_start;
 
       // validate descriptor binding
       // just got a single binding for a particular set in a particular shader
       // it may describe a struct we haven't seen before, or may be a redefintion of one with the same name
-      if (set_binding_parse.descriptor_binding.type == DESCRIPTOR_TYPE_UNIFORM) {
-        const GLSLStruct *new_glsl_struct = &set_binding_parse.glsl_struct;
-        StructSearchResult struct_search_result =
-            search_for_matching_struct(&set_binding_parse.glsl_struct, ir->glsl_structs, ir->num_glsl_structs);
+      if (sb_parse.descriptor_type == DESCRIPTOR_TYPE_UNIFORM) {
+        const GLSLStruct *new_struct = &sb_parse.glsl_struct;
+        StructSearchResult struct_search = search_for_matching_struct(new_struct, ir);
 
-        if (struct_search_result.found_mismatch == true) {
+        if (struct_search.found_mismatch == true) {
+          const GLSLStruct *match = struct_search.matching_struct;
           fprintf(
               stderr, "Found mismatching definitions for struct %.*s. Originally found in %.*s, repeat in %.*s.\n",
-              new_glsl_struct->type_name_length, new_glsl_struct->type_name,
-              struct_search_result.matching_struct->discovered_shader_name_length,
-              struct_search_result.matching_struct->discovered_shader_name, shader_to_compile.name_length,
-              shader_to_compile.name
+              new_struct->type_name_length, new_struct->type_name, match->discovered_shader_name_length,
+              match->discovered_shader_name, shader_to_compile.name_length, shader_to_compile.name
           );
           fprintf(stderr, "New struct is:\n");
-          log_glsl_struct(stderr, new_glsl_struct);
+          log_glsl_struct(stderr, new_struct);
           fprintf(stderr, "Old struct is:\n");
-          log_glsl_struct(stderr, struct_search_result.matching_struct);
+          log_glsl_struct(stderr, struct_search.matching_struct);
         }
 
-        // discovered new struct
-        if (struct_search_result.matching_struct != NULL) {
-          set_binding_parse.descriptor_binding.glsl_struct = struct_search_result.matching_struct;
-        } else {
-          set_binding_parse.glsl_struct.discovered_shader_name = shader_to_compile.name;
-          set_binding_parse.glsl_struct.discovered_shader_name_length = shader_to_compile.name_length;
+        // Discovered new struct.
+        if (struct_search.matching_struct == NULL) {
+          sb_parse.glsl_struct.discovered_shader_name = shader_to_compile.name;
+          sb_parse.glsl_struct.discovered_shader_name_length = shader_to_compile.name_length;
 
-          ir->glsl_structs[ir->num_glsl_structs] = set_binding_parse.glsl_struct;
-          set_binding_parse.descriptor_binding.glsl_struct = &ir->glsl_structs[ir->num_glsl_structs];
+          ir->glsl_structs[ir->num_glsl_structs] = sb_parse.glsl_struct;
           ir->num_glsl_structs++;
         }
       }
 
-      // check that we haven't double defined this binding for this set
-      u32 set = set_binding_parse.set;
-      u32 binding = set_binding_parse.binding;
-      if (descriptor_set_layouts[set].bindings[binding].is_valid) {
-        fprintf(
-            stderr, "Found repeat binding %u for set %u in shader %.*s.\n", binding, set, shader_to_compile.name_length,
-            shader_to_compile.name
-        );
+      bool descriptor_success = push_and_validate_descriptor(ir, &sb_parse);
+      if (!descriptor_success) {
         return false;
-      } else {
-        descriptor_set_layouts[set].bindings[binding] = set_binding_parse.descriptor_binding;
-        descriptor_set_layouts[set].num_bindings++;
       }
 
-      // check for new uniform buffer slots
-      // TODO save pointers to these in this shader spec
-      bool should_add_new_buffer_label = true;
-      if (set_binding_parse.buffer_label_name == NULL) {
-        // if name is null, found nothing, nothing to add
-        should_add_new_buffer_label = false;
-      } else {
-        for (u32 i = 0; i < ir->num_buffer_labels; i++) {
-          const UniformBufferLabel *buffer_label = &ir->uniform_buffer_labels[i];
-
-          if (buffer_label->name_length == set_binding_parse.buffer_label_name_length &&
-              (strncmp(buffer_label->name, set_binding_parse.buffer_label_name, buffer_label->name_length) == 0)) {
-            should_add_new_buffer_label = false; // found repeat
-            break;
-          }
-        }
-      }
-
-      if (should_add_new_buffer_label) {
-        UniformBufferLabel uniform_buffer_label = {
-            .name = set_binding_parse.buffer_label_name,
-            .name_length = set_binding_parse.buffer_label_name_length,
-        };
-        ir->uniform_buffer_labels[ir->num_buffer_labels++] = uniform_buffer_label;
-      }
-
-      if (set_binding_parse.descriptor_binding.type != DESCRIPTOR_TYPE_INVALID) {
-        if (set_binding_parse.descriptor_binding.type == NUM_DESCRIPTOR_TYPES) {
+      if (sb_parse.descriptor_type != DESCRIPTOR_TYPE_INVALID) {
+        if (sb_parse.descriptor_type == NUM_DESCRIPTOR_TYPES) {
           fprintf(
               stderr, "Somehow descriptor set binding type is NUM_DESCRIPTOR TYPES, in shader %.*s.\n",
               shader_to_compile.name_length, shader_to_compile.name
           );
         } else {
-          ir->descriptor_binding_types[set_binding_parse.descriptor_binding.type]++;
+          ir->descriptor_binding_types[sb_parse.descriptor_type]++;
         }
       }
-      break;
+
+      break; // End switch case
     }
 
       // push constant
@@ -1625,14 +1614,9 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
     }
   }
 
-  // validate descriptor sets
+  // Validate descriptor sets
   for (u32 i = 0; i < MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER; i++) {
-    DescriptorSetLayout *descriptor_set_layout = &descriptor_set_layouts[i];
-    if (descriptor_set_layout->num_bindings > 0) {
-      // TODO
-      populate_descriptor_set_layout_name(descriptor_set_layout);
-      printf("%s\n", descriptor_set_layout->name);
-    }
+    // DescriptorSetLayout *descriptor_set_layout = &descriptor_set_layouts[i];
   }
 
   parsed_shader.num_template_slices = string_slice_index;

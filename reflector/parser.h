@@ -71,7 +71,7 @@ enum TokenType {
   TOKEN_TYPE_BINDING,
   TOKEN_TYPE_OFFSET,
   TOKEN_TYPE_TIGHTLY_PACKED,
-  TOKEN_TYPE_BUFFER_LABEL,
+  TOKEN_TYPE_SET_LABEL,
   TOKEN_TYPE_DIRECTIVE_VERTEX_INDEX,
   TOKEN_TYPE_DIRECTIVE_INSTANCE_INDEX,
 
@@ -131,7 +131,7 @@ static const char *token_type_to_string[NUM_TOKEN_TYPES] = {
     [TOKEN_TYPE_BINDING] = "BINDING",
     [TOKEN_TYPE_OFFSET] = "OFFSET",
     [TOKEN_TYPE_TIGHTLY_PACKED] = "TIGHTLY_PACKED",
-    [TOKEN_TYPE_BUFFER_LABEL] = "BUFFER_LABEL",
+    [TOKEN_TYPE_SET_LABEL] = "SET_LABEL",
 
     [TOKEN_TYPE_TEXT] = "a text literal",
     [TOKEN_TYPE_NUMBER] = "a number literal",
@@ -156,7 +156,6 @@ struct TemplateStringSlice {
   DirectiveType type;
   // fat struct with all the possible fields that could be needed for any of my
   // supported template replacements
-  // slightly wasteful in space, but easy to use
   u32 location;
   u32 set;
   u32 binding;
@@ -196,11 +195,16 @@ inline void log_string_slices(const TemplateStringSlice *template_string_slices,
 struct SetBindingDirectiveParse {
   const char *next_glsl_source_start;
   GLSLStruct glsl_struct;
-  DescriptorBinding descriptor_binding;
+
   u32 set;
   u32 binding;
-  const char *buffer_label_name;
-  u32 buffer_label_name_length;
+  u32 descriptor_count;
+  ShaderStage stage;
+  DescriptorType descriptor_type;
+
+  const char *set_label_name;
+  u32 set_label_name_length;
+
   bool was_successful;
 };
 
@@ -294,7 +298,9 @@ struct ParsedShader {
   TemplateStringSlice template_slices[MAX_NUM_STRING_SLICES];
   u32 num_template_slices;
 
-  DescriptorSetLayout *descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER];
+  // TODO will accumulate descriptors globally, and then eventually use this so
+  // ShaderSpecs can tell users what layouts they use
+  // DescriptorSetLayout *_descriptor_set_layouts_[MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER];
 
   // vertex input layout
   const VertexLayout *vertex_layout;
@@ -326,9 +332,6 @@ struct ParsedShadersIR {
 
   GLSLStruct glsl_structs[MAX_NUM_GLSL_STRUCTS];
   u32 num_glsl_structs;
-
-  UniformBufferLabel uniform_buffer_labels[MAX_NUM_BINDING_SLOTS];
-  u32 num_buffer_labels;
 };
 
 struct StructSearchResult {

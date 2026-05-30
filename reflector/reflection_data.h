@@ -26,6 +26,8 @@ enum GLSLType {
   NUM_GLSL_TYPES,
 };
 
+static const char *vertex_layout_null_string = "VERTEX_LAYOUT_NULL";
+
 static const char *glsl_type_to_string[NUM_GLSL_TYPES]{
     [GLSL_TYPE_NULL] = "null", [GLSL_TYPE_FLOAT] = "float", [GLSL_TYPE_UINT] = "uint",
     [GLSL_TYPE_VEC2] = "vec2", [GLSL_TYPE_VEC3] = "vec3",   [GLSL_TYPE_VEC4] = "vec4",
@@ -148,9 +150,13 @@ inline void log_vertex_layout(const VertexLayout *vertex_layout) {
 }
 
 inline bool vertex_layout_equals(const VertexLayout *left, const VertexLayout *right) {
+
   for (u32 i = 0; i < MAX_NUM_VERTEX_ATTRIBUTES; i++) {
-    bool left_valid = left->attributes[i].is_valid;
-    bool right_valid = right->attributes[i].is_valid;
+    VertexAttribute l = left->attributes[i];
+    VertexAttribute r = right->attributes[i];
+
+    bool left_valid = l.is_valid;
+    bool right_valid = r.is_valid;
     if (left_valid != right_valid) {
       return false;
     }
@@ -159,11 +165,11 @@ inline bool vertex_layout_equals(const VertexLayout *left, const VertexLayout *r
       continue;
     }
 
-    bool same_location = (left->attributes[i].location == right->attributes[i].location);
-    bool same_type = (left->attributes[i].glsl_type == right->attributes[i].glsl_type);
-    bool same_binding = (left->attributes[i].binding == right->attributes[i].binding);
-    bool same_rate = (left->attributes[i].rate == right->attributes[i].rate);
-    bool same_glsl_type = (left->attributes[i].glsl_type == right->attributes[i].glsl_type);
+    bool same_location = (l.location == r.location);
+    bool same_type = (l.glsl_type == r.glsl_type);
+    bool same_binding = (l.binding == r.binding);
+    bool same_rate = (l.rate == r.rate);
+    bool same_glsl_type = (l.glsl_type == r.glsl_type);
     if (!(same_type && same_location && same_binding && same_rate && same_glsl_type)) {
       return false;
     }
@@ -171,8 +177,6 @@ inline bool vertex_layout_equals(const VertexLayout *left, const VertexLayout *r
 
   return true;
 }
-
-static const char *vertex_layout_null_string = "VERTEX_LAYOUT_NULL";
 
 // only supporting native GLSL types, no nested structs
 struct GLSLStructMember {
@@ -197,32 +201,6 @@ struct GLSLStruct {
 
   GLSLStructMemberList member_list;
 };
-
-inline bool glsl_struct_member_list_equals(const GLSLStructMemberList *left, const GLSLStructMemberList *right) {
-  if (left->num_members != right->num_members) {
-    return false;
-  }
-
-  for (u32 i = 0; i < left->num_members; i++) {
-    const GLSLStructMember *left_member = &left->members[i];
-    const GLSLStructMember *right_member = &right->members[i];
-
-    bool name_lens_are_same = (left_member->identifier_length == right_member->identifier_length);
-    if (!name_lens_are_same) {
-      return false;
-    }
-
-    bool names_are_same =
-        (strncmp(left_member->identifier, right_member->identifier, left_member->identifier_length) == 0);
-    bool array_lens_are_same = left_member->array_length == right_member->array_length;
-    bool types_are_same = left_member->type == right_member->type;
-    if (!names_are_same || !array_lens_are_same || !types_are_same) {
-      return false;
-    }
-  }
-
-  return true;
-}
 
 inline void log_glsl_struct(FILE *destination, const GLSLStruct *glsl_struct) {
   fprintf(
@@ -253,20 +231,22 @@ enum DescriptorType {
   NUM_DESCRIPTOR_TYPES,
 };
 
-// fat struct with all possible data
+// Fat struct for uniform and samplers
+// To describe a uniform binding, need offset/range
+// VkDescriptorSetLayoutBinding is:
+//  binding, type(sampler, uniform, etc.), count, stage, immutable sampler*
 struct DescriptorBinding {
   DescriptorType type;
+  u32 descriptor_count; // For uniform/texture arrays
+  u32 stage_flags;
 
-  // descriptors all give an identifier, the name of the texture or unform instance
-  const char *name;
-  u32 name_length;
-  u32 descriptor_count;
+  // TODO there are the layouts, and then there are the writes.
+  // Writes depend on things like uniform struct/image sizes
+  const GLSLStruct *glsl_struct; // For uniforms
 
-  // for uniforms
-  const GLSLStruct *glsl_struct;
-  ShaderStage shader_stage;
-
-  bool is_valid;
+  // Descriptors all give an identifier, the name of the texture or uniform instance
+  // const char *name;
+  // u32 name_length;
 };
 
 struct DescriptorSetLayout {
@@ -274,43 +254,8 @@ struct DescriptorSetLayout {
   u8 name_length;
 
   DescriptorBinding bindings[MAX_NUM_DESCRIPTOR_BINDINGS];
-  ShaderStage stage;
   u8 num_bindings;
+
+  // TODO is set index necessary? This may be needed at the application level.
   u8 set_index; // numerically, which number set this is
-};
-
-inline bool descriptor_set_layout_equals(const DescriptorSetLayout *left, const DescriptorSetLayout *right) {
-  if (left->num_bindings != right->num_bindings) {
-    return false;
-  }
-
-  for (u32 i = 0; i < MAX_NUM_DESCRIPTOR_BINDINGS; i++) {
-    const DescriptorBinding *left_binding = &left->bindings[i];
-    const DescriptorBinding *right_binding = &right->bindings[i];
-
-    if (!left_binding->is_valid || !right_binding->is_valid) {
-      if (!left_binding->is_valid && !right_binding->is_valid) {
-        continue;
-      } else {
-        return false;
-      }
-    }
-
-    // don't bother comparing stage, will merge at pipeline creation time
-    // don't think I need to compare buffer labels. if the layouts are the same but they draw from
-    // different buffers, I can still reuse
-    bool type_equals = (left_binding->type == right_binding->type);
-    bool count_equals = (left_binding->descriptor_count == right_binding->descriptor_count);
-    if (!type_equals || !count_equals) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-// for opengl slot bindings
-struct UniformBufferLabel {
-  const char *name;
-  u32 name_length;
 };

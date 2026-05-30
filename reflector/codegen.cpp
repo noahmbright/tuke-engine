@@ -86,7 +86,7 @@ TemplateStringReplacement directive_replacement_location(GraphicsBackend backend
 }
 
 // only supporting set and binding numbers < 10
-// {{ SET_BINDING 0 0 BUFFER_LABEL GLOBAL }}
+// {{ SET_BINDING 0 0 SET_LABEL GLOBAL }}
 // turns into
 // layout(set = 0, binding = 0) for vulkan
 // layout(binding = 0) for opengl
@@ -641,9 +641,10 @@ void codegen_footer(FILE *dst, const ParsedShadersIR *ir) {
 
 void codegen_buffer_labels(FILE *dst, const ParsedShadersIR *ir) {
   fprintf(dst, "enum UniformBufferLabel {\n");
-  for (u32 i = 0; i < ir->num_buffer_labels; i++) {
+  for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
+    const DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
     fprintf(dst, "  UNIFORM_BUFFER_LABEL_");
-    print_name_in_caps_n(dst, ir->uniform_buffer_labels[i].name, ir->uniform_buffer_labels[i].name_length);
+    print_name_in_caps_n(dst, layout->name, layout->name_length);
     fprintf(dst, ",\n");
   }
   fprintf(dst, "\n  NUM_UNIFORM_BUFFER_LABELS\n");

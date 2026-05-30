@@ -8,11 +8,11 @@
 {{ LOCATION 1 }} out vec2 uv;
 {{ LOCATION 2 }} out vec3 frag_pos;
 
-{{ SET_BINDING 0 0 BUFFER_LABEL GLOBAL }} uniform CubeModel {
+{{ SET_BINDING 0 0 SET_LABEL GLOBAL }} uniform CubeModel {
     mat4 model;
 } cube_transform;
 
-{{ SET_BINDING 0 2 BUFFER_LABEL GLOBAL }} uniform CameraVP {
+{{ SET_BINDING 0 2 SET_LABEL GLOBAL }} uniform CameraVP {
     mat4 vp;
 } camera_vp;
 

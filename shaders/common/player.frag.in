@@ -1,6 +1,6 @@
 #version {{ VERSION }}
 
-{{ SET_BINDING 0 0 }} uniform sampler2D tex;
+{{ SET_BINDING 0 0 SET_LABEL PLACEHOLDER }} uniform sampler2D tex;
 
 {{ LOCATION 0 }}  in vec2 uv;
 

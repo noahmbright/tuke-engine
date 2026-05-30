@@ -16,10 +16,15 @@ using f32 = float;
 using f64 = double;
 
 enum ShaderStage {
-  SHADER_STAGE_VERTEX,
-  SHADER_STAGE_FRAGMENT,
-  SHADER_STAGE_COMPUTE,
-  SHADER_STAGE_COMBINED,
+  SHADER_STAGE_VERTEX = 1 << 0,
+  SHADER_STAGE_FRAGMENT = 1 << 1,
+  SHADER_STAGE_COMPUTE = 1 << 2,
+
+  // TODO may want to support putting vertex and fragment shaders in one file.
+  //      This is unused placeholder right now. Parser will need to understand what
+  //      stage it's on after loading the file. Current approach uses filename to
+  //      figure out what stage.
+  SHADER_STAGE_COMBINED = 1 << 3, // Should never set this
 
   NUM_SHADER_STAGES
 };

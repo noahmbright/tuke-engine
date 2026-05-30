@@ -4,7 +4,7 @@
 
 {{ LOCATION 0 }} out vec2 uv;
 
-{{ SET_BINDING 0 0 BUFFER_LABEL CAMERA_VP }} uniform VPUniform {
+{{ SET_BINDING 0 0 SET_LABEL CAMERA_VP }} uniform VPUniform {
     mat4 vp;
 } u_vp;
 

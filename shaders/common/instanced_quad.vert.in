@@ -7,13 +7,13 @@
 {{ LOCATION 0 }} out vec2 uv;
 {{ LOCATION 1 }} out float pos_z;
 
-{{ SET_BINDING 0 0 BUFFER_LABEL GLOBAL }} uniform MVPUniform{
+{{ SET_BINDING 0 0 SET_LABEL GLOBAL }} uniform MVPUniform{
     mat4 model;
     mat4 view;
     mat4 projection;
 } mvp;
 
-{{ SET_BINDING 0 1 BUFFER_LABEL GLOBAL }} uniform XUniform{
+{{ SET_BINDING 0 1 SET_LABEL GLOBAL }} uniform XUniform{
     float x;
 } u_x;
 

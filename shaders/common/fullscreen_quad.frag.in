@@ -3,7 +3,7 @@
 {{ LOCATION  0 }} in vec2 uv;
 {{ LOCATION  0 }} out vec4 out_color;
 
-{{ SET_BINDING 0 0 }} uniform sampler2D tex;
+{{ SET_BINDING 0 0 SET_LABEL PLACEHOLDER }} uniform sampler2D tex;
 
 void main() {
     out_color = texture(tex, uv);
