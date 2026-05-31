@@ -938,10 +938,9 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
   // Diverge here - either sampler2D or uniform struct's typename
   cur_tok = parser_advance_and_get_next_token(parser);
   if (cur_tok.type != TOKEN_TYPE_SAMPLER2D && cur_tok.type != TOKEN_TYPE_TEXT) {
-    // TODO Fix error message
     report_parser_error(
         parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
-        "In SET_BINDING for uniform buffer, expected identifier after uniform, got %s",
+        "In SET_BINDING, expected sampler2D or structure type after DOUBLE_R_BRACKETS, got %s",
         token_type_to_string[cur_tok.type]
     );
     return directive_parse;
@@ -967,6 +966,8 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
             parser, cur_tok.start, TOKEN_TYPE_R_BRACE, "Failed to parse descriptor count in sampler2D."
         );
       }
+    } else {
+      descriptor_count = 1;
     }
 
     cur_tok = parser_get_current_token(parser);
@@ -978,10 +979,15 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
       return directive_parse;
     }
 
+    // Not happy about duplicate assignment here and in the uniform path
     parser_advance(parser);
     directive_parse.was_successful = true;
     directive_parse.set = set;
     directive_parse.binding = binding;
+    directive_parse.descriptor_type = DESCRIPTOR_TYPE_SAMPLER2D;
+    directive_parse.descriptor_count = descriptor_count;
+
+    // TODO Don't like the repetition between the directive parse and slice here.
     template_string_slice->set = set;
     template_string_slice->binding = binding;
     template_string_slice->descriptor_type = DESCRIPTOR_TYPE_SAMPLER2D;
@@ -1027,6 +1033,8 @@ SetBindingDirectiveParse parse_set_binding_directive(Parser *parser, TemplateStr
     if (descriptor_count == 0) {
       report_parser_error(parser, cur_tok.start, TOKEN_TYPE_R_BRACE, "Failed to parse descriptor count in uniform.");
     }
+  } else {
+    descriptor_count = 1;
   }
 
   cur_tok = parser_get_current_token(parser);
@@ -1326,42 +1334,6 @@ static inline bool glsl_struct_member_list_equals(const GLSLStructMemberList *le
   return true;
 }
 
-#if 0 
-static inline bool descriptor_set_layout_equals(const DescriptorSetLayout *left, const DescriptorSetLayout *right) {
-  if (left->num_bindings != right->num_bindings) {
-    return false;
-  }
-
-  for (u32 i = 0; i < MAX_NUM_DESCRIPTOR_BINDINGS; i++) {
-    const DescriptorBinding *l = &left->bindings[i];
-    const DescriptorBinding *r = &right->bindings[i];
-
-    if (!l->is_valid || !r->is_valid) {
-      if (!l->is_valid && !r->is_valid) {
-        continue;
-      } else {
-        return false;
-      }
-    }
-
-    // TODO this may be incorrect.
-    // A label may define a set/binding in either the vertex or fragment stage.
-    // Set/binding pairs must be consistent per label
-    //
-    // don't bother comparing stage, will merge at pipeline creation time
-    // don't think I need to compare buffer labels. if the layouts are the same but they draw from
-    // different buffers, I can still reuse
-    bool type_equals = (l->type == r->type);
-    bool count_equals = (l->descriptor_count == r->descriptor_count);
-    if (!type_equals || !count_equals) {
-      return false;
-    }
-  }
-
-  return true;
-}
-#endif
-
 static StructSearchResult search_for_matching_struct(const GLSLStruct *new_struct, const ParsedShadersIR *ir) {
   StructSearchResult search_result = {
       .matching_struct = NULL,
@@ -1404,8 +1376,37 @@ static inline bool push_and_validate_descriptor(ParsedShadersIR *ir, const SetBi
 
     // Found match
     DescriptorBinding *binding = &layout->bindings[sb_parse->binding];
-    binding->stage_flags |= sb_parse->stage;
+    bool binding_in_use = (binding->type != DESCRIPTOR_TYPE_INVALID);
 
+    // If we find two definitions for this set/binding, assert consistency.
+    if (binding_in_use) {
+      bool types_match = (binding->type == sb_parse->descriptor_type);
+      if (!types_match) {
+        fprintf(stderr, "Set %.*s has overrwritten descriptor types.\n", name_len, layout->name);
+      }
+
+      bool counts_match = (binding->descriptor_count == sb_parse->descriptor_count);
+      if (!counts_match) {
+        fprintf(stderr, "Set %.*s has overrwritten descriptor count.\n", name_len, layout->name);
+      }
+
+      if (!types_match || !counts_match) {
+        return false;
+      }
+
+      // Using the same binding from a new shader stage is allowed.
+      binding->stage_flags |= sb_parse->stage;
+      return true;
+    }
+
+    // New binding for this set.
+    *binding = {
+        .descriptor_count = sb_parse->descriptor_count,
+        .type = sb_parse->descriptor_type,
+        .stage_flags = sb_parse->stage,
+    };
+
+    layout->num_bindings++;
     return true;
   }
 
@@ -1418,8 +1419,12 @@ static inline bool push_and_validate_descriptor(ParsedShadersIR *ir, const SetBi
   new_layout->name_length = name_len;
 
   assert(sb_parse->binding < MAX_NUM_DESCRIPTOR_BINDINGS);
-  DescriptorBinding *binding = &new_layout->bindings[sb_parse->binding];
-  binding->stage_flags = sb_parse->stage;
+  new_layout->bindings[sb_parse->binding] = {
+      .stage_flags = sb_parse->stage,
+      .descriptor_count = sb_parse->descriptor_count,
+      .type = sb_parse->descriptor_type,
+  };
+  new_layout->num_bindings++;
 
   ir->num_descriptor_set_layouts++;
   return true;
@@ -1612,11 +1617,6 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
       fprintf(stderr, "Failed to validate vertex layout for %s.\n", shader_to_compile.name);
       return true;
     }
-  }
-
-  // Validate descriptor sets
-  for (u32 i = 0; i < MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER; i++) {
-    // DescriptorSetLayout *descriptor_set_layout = &descriptor_set_layouts[i];
   }
 
   parsed_shader.num_template_slices = string_slice_index;

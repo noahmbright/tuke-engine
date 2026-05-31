@@ -235,13 +235,15 @@ enum DescriptorType {
 // To describe a uniform binding, need offset/range
 // VkDescriptorSetLayoutBinding is:
 //  binding, type(sampler, uniform, etc.), count, stage, immutable sampler*
+// TODO may want discovered shader here too
 struct DescriptorBinding {
   DescriptorType type;
   u32 descriptor_count; // For uniform/texture arrays
   u32 stage_flags;
 
   // TODO there are the layouts, and then there are the writes.
-  // Writes depend on things like uniform struct/image sizes
+  // Writes depend on things like uniform struct/image sizes.
+  // I need to cleanly separate these stages.
   const GLSLStruct *glsl_struct; // For uniforms
 
   // Descriptors all give an identifier, the name of the texture or uniform instance

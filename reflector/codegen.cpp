@@ -471,7 +471,75 @@ void generate_opengl_vertex_layout_array(FILE *dst, const ParsedShadersIR *ir) {
   fprintf(dst, "};\n\n");
 }
 
-void generate_vulkan_descriptor_pool_size_array(FILE *dst, const ParsedShadersIR *ir) {
+static inline const char *get_stage_flags_string(u32 stage_flags) {
+  bool vertex_visible = stage_flags & SHADER_STAGE_VERTEX;
+  bool fragment_visible = stage_flags & SHADER_STAGE_FRAGMENT;
+  bool compute_visible = stage_flags & SHADER_STAGE_COMPUTE;
+
+  const char *flags_string;
+  if (compute_visible && fragment_visible && vertex_visible) {
+    flags_string = "VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT";
+  } else if (fragment_visible && vertex_visible) {
+    flags_string = "VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT";
+  } else if (fragment_visible && compute_visible) {
+    flags_string = "VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT";
+  } else if (vertex_visible && compute_visible) {
+    flags_string = "VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT";
+  } else if (vertex_visible) {
+    flags_string = "VK_SHADER_STAGE_VERTEX_BIT";
+  } else if (fragment_visible) {
+    flags_string = "VK_SHADER_STAGE_FRAGMENT_BIT";
+  } else if (compute_visible) {
+    flags_string = "VK_SHADER_STAGE_COMPUTE_BIT";
+  } else {
+    assert(false && "stage_flags = 0");
+    flags_string = NULL;
+  }
+
+  return flags_string;
+}
+
+static void generate_vulkan_descriptor_set_binding_lists(FILE *dst, const ParsedShadersIR *ir) {
+  for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
+    const DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
+    fprintf(
+        dst, "static VkDescriptorSetLayoutBinding %.*s_descriptor_set_layout_bindings[] = {\n", layout->name_length,
+        layout->name
+    );
+
+    for (u32 j = 0; j < MAX_NUM_DESCRIPTOR_BINDINGS; j++) {
+      DescriptorBinding binding = layout->bindings[j];
+      if (binding.type == DESCRIPTOR_TYPE_INVALID) {
+        continue;
+      }
+
+      // Support for descriptor types is limited currently.
+      // Would really like to better understand how to separate samplers from images.
+      // Might just move type string into its own routine now.
+      const char *type_string = binding.type == DESCRIPTOR_TYPE_UNIFORM ? "VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER"
+                                                                        : "VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER";
+      const char *flags_string = get_stage_flags_string(binding.stage_flags);
+
+      fprintf(dst, "  {\n");
+      fprintf(dst, "    .binding = %u,\n", j);
+      fprintf(dst, "    .descriptorType = %s,\n", type_string);
+      fprintf(dst, "    .descriptorCount = %u,\n", binding.descriptor_count);
+      fprintf(dst, "    .stageFlags = %s,\n", flags_string);
+      fprintf(dst, "    .pImmutableSamplers = NULL,\n");
+      fprintf(dst, "  },\n");
+    }
+
+    fprintf(dst, "};\n");
+
+    // Size
+    fprintf(
+        dst, "static uint32_t %.*s_num_descriptor_set_layout_bindings = %u;\n\n", layout->name_length, layout->name,
+        layout->num_bindings
+    );
+  }
+}
+
+static void generate_vulkan_descriptor_pool_size_array(FILE *dst, const ParsedShadersIR *ir) {
   u32 max_sets = 0;
   for (u32 i = 0; i < NUM_DESCRIPTOR_TYPES; i++) {
     u32 num_sets = ir->descriptor_binding_types[i];
@@ -492,16 +560,6 @@ void generate_vulkan_descriptor_pool_size_array(FILE *dst, const ParsedShadersIR
       ir->descriptor_binding_types[DESCRIPTOR_TYPE_SAMPLER2D]
   );
   fprintf(dst, "};\n\n");
-}
-
-void generate_vulkan_descriptor_set_layout_binding_lists(FILE *dst, const ParsedShadersIR *ir) {
-  (void)dst;
-
-  for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
-    const DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
-    for (u32 j = 0; j < layout->num_bindings; j++) {
-    }
-  }
 }
 
 inline void codegen_shader_spec_definition(FILE *dst) {
@@ -717,15 +775,19 @@ bool codegen(const char *output_filepath, const ParsedShadersIR *ir) {
   fprintf(dst, "//////////////////// OPENGL VERTEX LAYOUTS ///////////////\n");
   generate_opengl_vertex_layout_array(dst, ir);
 
-  // descriptor sets
+  // TODO file walking in main is incorrect. gen/shaders sees all buffers.
+  // Descriptor sets
   // enum
   fprintf(dst, "enum DescriptorSetLayoutIDs{\n");
   for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
     fprintf(dst, "  %s,\n", ir->descriptor_set_layouts[i].name);
   }
   fprintf(dst, "\n  NUM_DESCRIPTOR_SET_LAYOUTS\n};\n\n");
+
+  generate_vulkan_descriptor_set_binding_lists(dst, ir);
+
   generate_vulkan_descriptor_pool_size_array(dst, ir);
-  generate_vulkan_descriptor_set_layout_binding_lists(dst, ir);
+
   codegen_struct_defintions(dst, ir->glsl_structs, ir->num_glsl_structs);
 
   // for individual shaders, the spirv bytes, the opengl glsl
