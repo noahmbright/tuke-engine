@@ -249,6 +249,9 @@ struct DescriptorBinding {
   // Descriptors all give an identifier, the name of the texture or uniform instance
   // const char *name;
   // u32 name_length;
+
+  const char *discovered_shader_name;
+  u32 discovered_shader_name_length;
 };
 
 struct DescriptorSetLayout {

@@ -339,4 +339,10 @@ struct StructSearchResult {
   bool found_mismatch;
 };
 
+struct BindingSearchResult {
+  const DescriptorBinding *matching_binding;
+  DescriptorBinding *added_binding;
+  bool found_mismatch;
+};
+
 ParsedShadersIR parse_all_shaders_and_populate_global_tables(const ShaderToCompileList *shader_to_compile_list);

@@ -2206,7 +2206,6 @@ void add_uniform_buffer_descriptor_set(
   assert(builder->buffer_info_count < MAX_DESCRIPTOR_BUFFER_INFOS);
   assert(builder->binding_count < MAX_LAYOUT_BINDINGS);
 
-  assert(dynamic == false && "Dynamic uniform buffers not yet implemented");
   VkDescriptorType descriptor_type =
       dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 
@@ -2275,7 +2274,7 @@ void add_image_descriptor_set(
   builder->descriptor_writes[builder->write_descriptor_count++] = {
       .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
       .pNext = NULL,
-      .dstSet = VK_NULL_HANDLE,
+      .dstSet = VK_NULL_HANDLE, // This is unclear - this eventually needs to be set
       .dstBinding = binding,
       .dstArrayElement = 0,
       .descriptorCount = descriptor_count,

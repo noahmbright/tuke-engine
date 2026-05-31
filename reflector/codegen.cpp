@@ -546,7 +546,9 @@ static void generate_vulkan_descriptor_pool_size_array(FILE *dst, const ParsedSh
     max_sets = (max_sets > num_sets) ? max_sets : num_sets;
   }
 
-  fprintf(dst, "const uint32_t pool_size_count = %u;\n", NUM_DESCRIPTOR_TYPES);
+  // TODO Subtract 1 for DESCRIPTOR_TYPE_INVALID - would like to have less implicit coupling.
+  // Keeping DESCRIPTOR_TYPE_INVALID = 0 in the enum makes 0 init nice, which is also implicit.
+  fprintf(dst, "const uint32_t pool_size_count = %u;\n", NUM_DESCRIPTOR_TYPES - 1);
   fprintf(dst, "const uint32_t max_descriptor_sets = %u;\n", max_sets);
   fprintf(dst, "const VkDescriptorPoolSize generated_pool_sizes[%u] = {\n", NUM_DESCRIPTOR_TYPES);
 

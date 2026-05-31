@@ -1195,6 +1195,7 @@ static inline void populate_vertex_layout_name(VertexLayout *vertex_layout) {
 }
 
 const char *descriptor_type_to_string[NUM_DESCRIPTOR_TYPES] = {
+    [DESCRIPTOR_TYPE_INVALID] = "INVALID",
     [DESCRIPTOR_TYPE_UNIFORM] = "UNIFORM",
     [DESCRIPTOR_TYPE_SAMPLER2D] = "SAMPLER2D",
 };
@@ -1364,7 +1365,14 @@ static StructSearchResult search_for_matching_struct(const GLSLStruct *new_struc
   return search_result;
 }
 
-static inline bool push_and_validate_descriptor(ParsedShadersIR *ir, const SetBindingDirectiveParse *sb_parse) {
+static inline BindingSearchResult
+push_and_validate_descriptor(ParsedShadersIR *ir, const SetBindingDirectiveParse *sb_parse) {
+  BindingSearchResult search_result = {
+      .matching_binding = NULL,
+      .added_binding = NULL,
+      .found_mismatch = false,
+  };
+
   // Descriptor sets are keyed by label.
   u32 name_len = sb_parse->set_label_name_length;
   for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
@@ -1382,21 +1390,39 @@ static inline bool push_and_validate_descriptor(ParsedShadersIR *ir, const SetBi
     if (binding_in_use) {
       bool types_match = (binding->type == sb_parse->descriptor_type);
       if (!types_match) {
-        fprintf(stderr, "Set %.*s has overrwritten descriptor types.\n", name_len, layout->name);
+        fprintf(
+            stderr, "Set %.*s has overrwritten descriptor types for binding %u.\n", name_len, layout->name,
+            sb_parse->binding
+        );
+        fprintf(
+            stderr, "Originally found in %.*s.\n", binding->discovered_shader_name_length,
+            binding->discovered_shader_name
+        );
       }
 
       bool counts_match = (binding->descriptor_count == sb_parse->descriptor_count);
       if (!counts_match) {
-        fprintf(stderr, "Set %.*s has overrwritten descriptor count.\n", name_len, layout->name);
+        fprintf(
+            stderr, "Set %.*s has overrwritten descriptor count for binding %u.\n", name_len, layout->name,
+            sb_parse->binding
+
+        );
+        fprintf(
+            stderr, "Originally found in %.*s.\n", binding->discovered_shader_name_length,
+            binding->discovered_shader_name
+        );
       }
 
       if (!types_match || !counts_match) {
-        return false;
+        search_result.found_mismatch = true;
+        return search_result;
       }
 
       // Using the same binding from a new shader stage is allowed.
       binding->stage_flags |= sb_parse->stage;
-      return true;
+
+      search_result.matching_binding = binding;
+      return search_result;
     }
 
     // New binding for this set.
@@ -1407,7 +1433,8 @@ static inline bool push_and_validate_descriptor(ParsedShadersIR *ir, const SetBi
     };
 
     layout->num_bindings++;
-    return true;
+    search_result.added_binding = binding;
+    return search_result;
   }
 
   // No match. As long as we have room for more sets, we can push freely.
@@ -1419,7 +1446,8 @@ static inline bool push_and_validate_descriptor(ParsedShadersIR *ir, const SetBi
   new_layout->name_length = name_len;
 
   assert(sb_parse->binding < MAX_NUM_DESCRIPTOR_BINDINGS);
-  new_layout->bindings[sb_parse->binding] = {
+  DescriptorBinding *new_binding = &new_layout->bindings[sb_parse->binding];
+  *new_binding = {
       .stage_flags = sb_parse->stage,
       .descriptor_count = sb_parse->descriptor_count,
       .type = sb_parse->descriptor_type,
@@ -1427,7 +1455,8 @@ static inline bool push_and_validate_descriptor(ParsedShadersIR *ir, const SetBi
   new_layout->num_bindings++;
 
   ir->num_descriptor_set_layouts++;
-  return true;
+  search_result.added_binding = new_binding;
+  return search_result;
 }
 
 bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
@@ -1554,9 +1583,16 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
         }
       }
 
-      bool descriptor_success = push_and_validate_descriptor(ir, &sb_parse);
-      if (!descriptor_success) {
+      // Here we parse a single set/binding directive, so we find one new binding.
+      // Can track discovery of new bindings here.
+      BindingSearchResult binding_search = push_and_validate_descriptor(ir, &sb_parse);
+      if (binding_search.found_mismatch) {
         return false;
+      }
+
+      if (binding_search.added_binding != NULL) {
+        binding_search.added_binding->discovered_shader_name = shader_to_compile.name;
+        binding_search.added_binding->discovered_shader_name_length = shader_to_compile.name_length;
       }
 
       if (sb_parse.descriptor_type != DESCRIPTOR_TYPE_INVALID) {
