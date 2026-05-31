@@ -116,6 +116,7 @@ struct QueueFamilyIndices {
 };
 
 // History: here is the first C typedef struct of this project's life cycle.
+//          At least, the first one I noticed (may have copied another one before, whoops)
 typedef struct {
   u32 extension_count;
   const char **extensions;
@@ -125,6 +126,7 @@ typedef struct {
   int height;
 } VulkanWindowInfo;
 
+// TODO is this necessary as a swapchain member?
 struct DepthBuffer {
   VkImage image;
   VkImageView image_view;
@@ -404,6 +406,7 @@ struct BufferManager {
   StagingArena staging_arena;
 };
 
+// TODO Audit this. Unused.
 struct CoherentStreamingBuffer {
   VulkanBuffer vulkan_buffer;
   u8 *data;
@@ -430,79 +433,50 @@ void destroy_vulkan_context(VulkanContext *);
 
 // Buffers
 VulkanBuffer create_buffer_explicit(
-    const VulkanContext *context, VkBufferUsageFlags usage, VkDeviceSize size, VkMemoryPropertyFlags properties
+    const VulkanContext *ctx, VkBufferUsageFlags usage, VkDeviceSize size, VkMemoryPropertyFlags properties
 );
-VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type, VkDeviceSize size);
-void destroy_vulkan_buffer(const VulkanContext *context, VulkanBuffer buffer);
+VulkanBuffer create_buffer(const VulkanContext *ctx, BufferType buffer_type, VkDeviceSize size);
+void destroy_vulkan_buffer(const VulkanContext *ctx, VulkanBuffer buffer);
 void write_to_vulkan_buffer(
-    VulkanContext *context, const void *src_data, VkDeviceSize size, VkDeviceSize offset, VulkanBuffer vulkan_buffer
+    VulkanContext *ctx, const void *src_data, VkDeviceSize size, VkDeviceSize offset, VulkanBuffer vulkan_buffer
 );
-VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context);
-void end_single_use_command_buffer(const VulkanContext *context, VkCommandBuffer command_buffer);
-VkShaderModule create_shader_module(VkDevice device, const u32 *code, u32 code_size);
 
+BufferUploadQueue create_buffer_upload_queue();
+const BufferHandle *upload_data(BufferUploadQueue *queue, BufferType buffer_type, void *data, u64 size);
+BufferManager flush_buffers(VulkanContext *ctx, BufferUploadQueue *queue);
+void destroy_buffer_manager(BufferManager *buffer_manager);
+
+// these macros are specifically for arrays, e.g., f32 array[], with the [];
+// will fail on pointers to arrays of data
+#define UPLOAD_VERTEX_ARRAY(queue, array) (upload_data(&queue, BUFFER_TYPE_VERTEX, (void *)array, sizeof(array)))
+#define UPLOAD_INDEX_ARRAY(queue, array) (upload_data(&queue, BUFFER_TYPE_INDEX, (void *)array, sizeof(array)))
+
+CoherentStreamingBuffer create_coherent_streaming_buffer(const VulkanContext *ctx, u32 size);
+void write_to_streaming_buffer(CoherentStreamingBuffer *coherent_streaming_buffer, void *data, u32 size);
+
+// Homeless??
+void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call);
+VkFormat find_depth_format(VkPhysicalDevice physical_device);
+
+// Command buffers
+VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *ctx);
+void end_single_use_command_buffer(const VulkanContext *ctx, VkCommandBuffer command_buffer);
+
+// Shaders
+VkShaderModule create_shader_module(VkDevice device, const u32 *code, u32 code_size);
+ShaderModule create_shader_stage(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point = "main");
+
+// Pipelines
 VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *config, VkPipelineCache pipeline_cache);
 
 VkPipeline create_default_graphics_pipeline(
-    const VulkanContext *context,
+    const VulkanContext *ctx,
     VkRenderPass render_pass,
     VkShaderModule vertex_shader,
     VkShaderModule fragment_shader,
     const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
     VkPipelineLayout pipeline_layout
 );
-
-// Per Frame Commands
-void begin_frame(VulkanContext *context);
-VkCommandBuffer begin_command_buffer(const VulkanContext *context);
-void update_frame_index(VulkanContext *context);
-void end_frame(VulkanContext *ctx, VkCommandBuffer cmd);
-void submit_and_present(const VulkanContext *context, VkCommandBuffer command_buffer);
-
-ViewportState create_viewport_state_offset(VkExtent2D swapchain_extent, VkOffset2D offset);
-ViewportState create_viewport_state_xy(VkExtent2D swapchain_extent, u32 x, u32 y);
-
-void begin_render_pass(
-    const VulkanContext *context,
-    VkCommandBuffer command_buffer,
-    VkRenderPass render_pass,
-    VkFramebuffer framebuffer,
-    const VkClearValue *clear_value,
-    u32 clear_value_count,
-    ViewportState viewport_state
-);
-
-VkPipelineLayout
-create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts, u32 set_layout_count);
-
-VkDescriptorPool
-create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets);
-
-StagingArena create_staging_arena(const VulkanContext *context, u32 total_size);
-u32 stage_data_explicit(
-    const VulkanContext *context, StagingArena *arena, const void *data, u32 size, VkBuffer destination, u32 dst_offset
-);
-u32 stage_data_auto(
-    const VulkanContext *context, StagingArena *arena, const void *data, u32 size, VkBuffer destination
-);
-
-#define STAGE_ARRAY(context, arena, array, destination)                                                                \
-  (stage_data_auto(context, arena, array, sizeof(array), destination))
-
-void flush_staging_arena(const VulkanContext *context, StagingArena *arena);
-
-ShaderModule create_shader_stage(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point = "main");
-
-// TODO abstract over dynamic uniform buffers
-UniformBuffer create_uniform_buffer(const VulkanContext *context, u32 buffer_size);
-
-void destroy_uniform_buffer(const VulkanContext *context, UniformBuffer *uniform_buffer);
-
-void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, UniformWrite uniform_write);
-
-UniformBufferManager create_uniform_buffer_manager();
-
-UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager, u32 size);
 
 PipelineConfig create_default_graphics_pipeline_config(
     VkRenderPass render_pass,
@@ -512,25 +486,80 @@ PipelineConfig create_default_graphics_pipeline_config(
     VkPipelineLayout pipeline_layout
 );
 
+VkPipelineLayout
+create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts, u32 set_layout_count);
+
+// Per Frame Commands
+void begin_frame(VulkanContext *ctx);
+VkCommandBuffer begin_command_buffer(const VulkanContext *ctx);
+void update_frame_index(VulkanContext *ctx);
+void end_frame(VulkanContext *ctx, VkCommandBuffer cmd);
+void submit_and_present(const VulkanContext *ctx, VkCommandBuffer command_buffer);
+
+ViewportState create_viewport_state_offset(VkExtent2D swapchain_extent, VkOffset2D offset);
+ViewportState create_viewport_state_xy(VkExtent2D swapchain_extent, u32 x, u32 y);
+
+// Render passes
+void begin_render_pass(
+    const VulkanContext *ctx,
+    VkCommandBuffer command_buffer,
+    VkRenderPass render_pass,
+    VkFramebuffer framebuffer,
+    const VkClearValue *clear_value,
+    u32 clear_value_count,
+    ViewportState viewport_state
+);
+
+VkRenderPass create_render_pass(
+    VkDevice device,
+    u32 num_attachment_descriptions,
+    const VkAttachmentDescription *attachment_descriptions,
+    u32 num_subpass_descriptions,
+    const VkSubpassDescription *subpass_descriptions,
+    u32 num_dependencies,
+    const VkSubpassDependency *dependencies
+);
+
+VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat color_format, VkFormat depth_format);
+VkRenderPass create_color_render_pass(VkDevice device, VkFormat format);
+
+VkDescriptorPool
+create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets);
+
+// Staging Buffer
+StagingArena create_staging_arena(const VulkanContext *ctx, u32 total_size);
+u32 stage_data_explicit(
+    const VulkanContext *ctx, StagingArena *arena, const void *data, u32 size, VkBuffer dst, u32 dst_offset
+);
+u32 stage_data_auto(const VulkanContext *ctx, StagingArena *arena, const void *data, u32 size, VkBuffer dst);
+
+#define STAGE_ARRAY(ctx, arena, array, destination) (stage_data_auto(ctx, arena, array, sizeof(array), destination))
+
+void flush_staging_arena(const VulkanContext *ctx, StagingArena *arena);
+
+// Uniforms
+UniformBuffer create_uniform_buffer(const VulkanContext *ctx, u32 buffer_size);
+void destroy_uniform_buffer(const VulkanContext *ctx, UniformBuffer *uniform_buffer);
+void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, UniformWrite uniform_write);
+UniformBufferManager create_uniform_buffer_manager();
+UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager, u32 size);
+
+// Vertex Buffers
 VkVertexInputBindingDescription create_instanced_vertex_binding_description(u32 binding, u32 stride);
 VkVertexInputAttributeDescription
 create_vertex_attribute_description(u32 location, u32 binding, VkFormat format, u32 offset);
 VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u32 stride);
 
 u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties);
-VulkanTexture create_vulkan_texture(
-    VulkanContext *context, VulkanImageData image_data, VulkanBuffer staging_buffer, void *ptr_to_mapped_memory
-);
-void load_vulkan_textures(
-    VulkanContext *context, const VulkanImageData *image_datas, u32 num_images, VulkanTexture *out_textures
-);
-void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
-VkSampler create_sampler(VkDevice device);
 
-DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context);
+// Descriptor Sets
+VkDescriptorSetLayout
+create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count);
+VkDescriptorSet
+create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *set_layouts, VkDescriptorPool descriptor_pool);
 
-// TODO this function/builder structure itself needs updated to decouple layouts
-// from descriptor sets - a layout should be a list of descriptors
+// TODO RIP OUT DescriptorSetBuilder
+DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *ctx);
 DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescriptorPool descriptor_pool);
 
 void add_uniform_buffer_descriptor_set(
@@ -555,36 +584,8 @@ void add_image_descriptor_set(
 
 void destroy_descriptor_set_handle(VkDevice device, DescriptorSetHandle *handle);
 
-void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call);
-
-BufferUploadQueue create_buffer_upload_queue();
-const BufferHandle *upload_data(BufferUploadQueue *queue, BufferType buffer_type, void *data, u64 size);
-BufferManager flush_buffers(VulkanContext *context, BufferUploadQueue *queue);
-void destroy_buffer_manager(BufferManager *buffer_manager);
-
-// these macros are specifically for arrays, e.g., f32 array[], with the [];
-// will fail on pointers to arrays of data
-#define UPLOAD_VERTEX_ARRAY(queue, array) (upload_data(&queue, BUFFER_TYPE_VERTEX, (void *)array, sizeof(array)))
-
-#define UPLOAD_INDEX_ARRAY(queue, array) (upload_data(&queue, BUFFER_TYPE_INDEX, (void *)array, sizeof(array)))
-
-CoherentStreamingBuffer create_coherent_streaming_buffer(const VulkanContext *ctx, u32 size);
-void write_to_streaming_buffer(CoherentStreamingBuffer *coherent_streaming_buffer, void *data, u32 size);
-
-VkRenderPass create_render_pass(
-    VkDevice device,
-    u32 num_attachment_descriptions,
-    const VkAttachmentDescription *attachment_descriptions,
-    u32 num_subpass_descriptions,
-    const VkSubpassDescription *subpass_descriptions,
-    u32 num_dependencies,
-    const VkSubpassDependency *dependencies
-);
-
-VkFormat find_depth_format(VkPhysicalDevice physical_device);
-VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat color_format, VkFormat depth_format);
-VkRenderPass create_color_render_pass(VkDevice device, VkFormat format);
-
+// Framebuffers
+// Generally need a better understanding of lifetime management/ownership for these
 VkFramebuffer create_framebuffer(
     VkDevice device,
     VkRenderPass render_pass,
@@ -593,21 +594,19 @@ VkFramebuffer create_framebuffer(
     VkExtent2D extent
 );
 
-VkImage
-create_default_image(const VulkanContext *context, u32 width, u32 height, VkImageUsageFlags usage, VkFormat format);
-
-VkDeviceMemory allocate_and_bind_image_memory(const VulkanContext *context, VkImage image);
-
-VkImageView create_default_image_view(
-    const VulkanContext *context, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags
-);
-
+// TODO Backend only?
 ColorDepthFramebuffer create_color_depth_framebuffer(
-    const VulkanContext *context, VkExtent2D extent, VkFormat color_format, VkFormat depth_format
+    const VulkanContext *ctx, VkExtent2D extent, VkFormat color_format, VkFormat depth_format
 );
+void destroy_color_depth_framebuffer(const VulkanContext *ctx, ColorDepthFramebuffer *color_depth_framebuffer);
 
-void destroy_color_depth_framebuffer(const VulkanContext *context, ColorDepthFramebuffer *color_depth_framebuffer);
-
-void transition_image_layout(
-    VkCommandBuffer command_buffer, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout
+// Images/Textures - May want to have this transitioning business be entirely backend
+void transition_image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout);
+VulkanTexture create_vulkan_texture(
+    VulkanContext *ctx, VulkanImageData image_data, VulkanBuffer staging_buffer, void *ptr_to_mapped_memory
 );
+void load_vulkan_textures(
+    VulkanContext *ctx, const VulkanImageData *image_datas, u32 num_images, VulkanTexture *out_textures
+);
+void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
+VkSampler create_sampler(VkDevice device);

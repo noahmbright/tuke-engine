@@ -789,11 +789,11 @@ VkFormat find_depth_format(VkPhysicalDevice physical_device) {
 
 DepthBuffer create_depth_buffer(VulkanContext *context, VkFormat depth_format) {
 
-  DepthBuffer depth_buffer;
-
   VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
   VkImageAspectFlagBits aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
   VkExtent2D extent = context->swapchain_extent;
+
+  DepthBuffer depth_buffer;
   depth_buffer.image = create_default_image(context, extent.width, extent.height, usage, depth_format);
   depth_buffer.device_memory = allocate_and_bind_image_memory(context, depth_buffer.image);
   depth_buffer.image_view = create_default_image_view(context, depth_buffer.image, depth_format, aspect);
@@ -2181,6 +2181,40 @@ VkSampler create_sampler(VkDevice device) {
   VkResult result = vkCreateSampler(device, &sampler_create_info, NULL, &sampler);
   VK_CHECK(result, "Failed to create sampler");
   return sampler;
+}
+
+VkDescriptorSetLayout
+create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count) {
+  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_ci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .bindingCount = binding_count,
+      .pBindings = bindings,
+  };
+
+  VkDescriptorSetLayout descriptor_set_layout;
+  VkResult result = vkCreateDescriptorSetLayout(device, &descriptor_set_layout_ci, NULL, &descriptor_set_layout);
+  VK_CHECK(result, "Failed to create descriptor set layout");
+
+  return descriptor_set_layout;
+}
+
+VkDescriptorSet
+create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *set_layouts, VkDescriptorPool descriptor_pool) {
+  VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .pNext = NULL,
+      .descriptorPool = descriptor_pool,
+      .descriptorSetCount = 1,
+      .pSetLayouts = set_layouts,
+  };
+
+  VkDescriptorSet descriptor_set;
+  VkResult result = vkAllocateDescriptorSets(device, &descriptor_set_allocate_info, &descriptor_set);
+  VK_CHECK(result, "Failed to allocate descriptor set");
+
+  return descriptor_set;
 }
 
 DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {

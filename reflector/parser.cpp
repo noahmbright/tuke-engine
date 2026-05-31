@@ -1553,9 +1553,8 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
       sb_parse.stage = shader_to_compile.stage;
       glsl_string_slice.start = sb_parse.next_glsl_source_start;
 
-      // validate descriptor binding
-      // just got a single binding for a particular set in a particular shader
-      // it may describe a struct we haven't seen before, or may be a redefintion of one with the same name
+      // May have a new struct, or may be a redefintion of one with the same name.
+      const GLSLStruct *persistent_struct = NULL;
       if (sb_parse.descriptor_type == DESCRIPTOR_TYPE_UNIFORM) {
         const GLSLStruct *new_struct = &sb_parse.glsl_struct;
         StructSearchResult struct_search = search_for_matching_struct(new_struct, ir);
@@ -1573,13 +1572,15 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
           log_glsl_struct(stderr, struct_search.matching_struct);
         }
 
-        // Discovered new struct.
-        if (struct_search.matching_struct == NULL) {
+        if (struct_search.matching_struct == NULL) { // Discovered new struct.
           sb_parse.glsl_struct.discovered_shader_name = shader_to_compile.name;
           sb_parse.glsl_struct.discovered_shader_name_length = shader_to_compile.name_length;
 
           ir->glsl_structs[ir->num_glsl_structs] = sb_parse.glsl_struct;
+          persistent_struct = &ir->glsl_structs[ir->num_glsl_structs];
           ir->num_glsl_structs++;
+        } else { // Found existing match.
+          persistent_struct = struct_search.matching_struct;
         }
       }
 
@@ -1590,11 +1591,14 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
         return false;
       }
 
-      if (binding_search.added_binding != NULL) {
-        binding_search.added_binding->discovered_shader_name = shader_to_compile.name;
-        binding_search.added_binding->discovered_shader_name_length = shader_to_compile.name_length;
+      DescriptorBinding *added_binding = binding_search.added_binding;
+      if (added_binding != NULL) {
+        added_binding->discovered_shader_name = shader_to_compile.name;
+        added_binding->discovered_shader_name_length = shader_to_compile.name_length;
+        added_binding->glsl_struct = persistent_struct;
       }
 
+      // Increment IR's descriptor_binding_types
       if (sb_parse.descriptor_type != DESCRIPTOR_TYPE_INVALID) {
         if (sb_parse.descriptor_type == NUM_DESCRIPTOR_TYPES) {
           fprintf(

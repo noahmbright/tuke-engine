@@ -38,10 +38,10 @@ int main() {
   VulkanContext ctx = create_vulkan_context("Tuke", window_info);
 
   // This needs moved into the backend.
-  // Only doing this while migrating generated headers is causing conflicts.
+  // Only doing this here while migrating generated headers is causing conflicts.
   for (uint32_t i = 0; i < NUM_SHADER_HANDLES; i++) {
-    shader_modules[i] =
-        create_shader_module(ctx.device, generated_shader_specs[i]->spv, generated_shader_specs[i]->spv_size);
+    const ShaderSpec *spec = generated_shader_specs[i];
+    shader_modules[i] = create_shader_module(ctx.device, spec->spv, spec->spv_size);
   }
 
   ViewportState viewport_state = create_viewport_state_xy(ctx.swapchain_extent, 0, 0);
@@ -62,71 +62,27 @@ int main() {
   VkDescriptorPool descriptor_pool =
       create_descriptor_pool(ctx.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
 
-  VkDescriptorSetLayoutBinding binding = TRIANGLE_TRANSFORMATION_descriptor_set_layout_bindings[0];
-
+  // These are needed for a write to particular buffer - runtime info.
   VkDescriptorBufferInfo descriptor_buffer_info = {
       .buffer = ub.vulkan_buffer.buffer,
       .offset = handle.offset,
       .range = handle.size,
   };
 
-  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_ci = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .bindingCount = TRIANGLE_TRANSFORMATION_num_descriptor_set_layout_bindings,
-      .pBindings = TRIANGLE_TRANSFORMATION_descriptor_set_layout_bindings,
-  };
-
-  VkDescriptorSetLayout descriptor_set_layout;
-  VkResult result = vkCreateDescriptorSetLayout(ctx.device, &descriptor_set_layout_ci, NULL, &descriptor_set_layout);
-  VK_CHECK(result, "Failed to create descriptor set layout");
-
-  // Descriptor set
-  VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .pNext = NULL,
-      .descriptorPool = descriptor_pool,
-      .descriptorSetCount = 1,
-      .pSetLayouts = &descriptor_set_layout,
-  };
-
-  VkDescriptorSet descriptor_set;
-  result = vkAllocateDescriptorSets(ctx.device, &descriptor_set_allocate_info, &descriptor_set);
-  VK_CHECK(result, "Failed to allocate descriptor set");
+  const VkDescriptorSetLayoutBinding *bindings = TRIANGLE_TRANSFORMATION_descriptor_set_layout_bindings;
+  u32 binding_count = TRIANGLE_TRANSFORMATION_num_descriptor_set_layout_bindings;
+  VkDescriptorSetLayout descriptor_set_layout = create_descriptor_set_layout(ctx.device, bindings, binding_count);
+  VkDescriptorSet descriptor_set = create_descriptor_set(ctx.device, &descriptor_set_layout, descriptor_pool);
 
   // Know binding, descriptor count, and type from generated layout bindings - from reflection
-  VkWriteDescriptorSet write = {
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .pNext = NULL,
-      .dstSet = descriptor_set,
-      .dstBinding = binding.binding,
-      .dstArrayElement = 0,
-      .descriptorCount = binding.descriptorCount,
-      .descriptorType = binding.descriptorType,
-      .pImageInfo = NULL,
-      .pBufferInfo = &descriptor_buffer_info,
-      .pTexelBufferView = NULL,
-  };
+  VkWriteDescriptorSet *write = TRIANGLE_TRANSFORMATION_write_templates;
+  write->pBufferInfo = &descriptor_buffer_info;
+  write->dstSet = descriptor_set;
 
   u32 write_descriptor_count = 1;
   u32 copy_descriptor_count = 0;
-  vkUpdateDescriptorSets(ctx.device, write_descriptor_count, &write, copy_descriptor_count, NULL);
+  vkUpdateDescriptorSets(ctx.device, write_descriptor_count, write, copy_descriptor_count, NULL);
 
-#if 0
-  DescriptorSetBuilder set_builder = create_descriptor_set_builder(&ctx);
-  add_uniform_buffer_descriptor_set(
-      &set_builder, &ub, handle.offset, handle.size, 0 /*binding*/, 1 /*count*/, VK_SHADER_STAGE_VERTEX_BIT,
-      false /* dynamic */
-  );
-  // Not sure about this. Feels verbose
-  DescriptorSetHandle descriptor = build_descriptor_set(&set_builder, descriptor_pool);
-  VkDescriptorSet descriptor_set = descriptor.descriptor_set;
-  VkDescriptorSetLayout descriptor_set_layout = descriptor.descriptor_set_layout;
-#endif
-
-  // Questioning if my descriptor set thing can be more transparent.
-  // Forgot about how it owns a layout
   u32 num_desc_set_layouts = 1;
   VkPipelineLayout pipeline_layout = create_pipeline_layout(ctx.device, &descriptor_set_layout, num_desc_set_layouts);
 

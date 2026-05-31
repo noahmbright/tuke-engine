@@ -10,6 +10,22 @@
 static const u32 max_num_vertex_attributes = 4;
 static const u32 max_num_vertex_bindings = 4;
 
+static u32 align_up(u32 offset, u32 alignment) { return (offset + alignment - 1) & ~(alignment - 1); }
+
+static u32 compute_glsl_struct_size(const GLSLStruct *glsl_struct) {
+  u32 max_alignment = 0;
+  u32 size = 0;
+  for (u32 i = 0; i < glsl_struct->member_list.num_members; i++) {
+    const GLSLStructMember *member = &glsl_struct->member_list.members[i];
+    u32 alignment = glsl_type_to_alignment[member->type];
+    if (alignment > max_alignment)
+      max_alignment = alignment;
+    size = align_up(size, alignment);
+    size += glsl_type_to_size[member->type];
+  }
+  return align_up(size, max_alignment);
+}
+
 // line with version is #version {{ VERSION }}
 TemplateStringReplacement directive_replacement_version(GraphicsBackend backend) {
   TemplateStringReplacement replacement;
@@ -539,6 +555,50 @@ static void generate_vulkan_descriptor_set_binding_lists(FILE *dst, const Parsed
   }
 }
 
+static void generate_vulkan_descriptor_write_templates(FILE *dst, const ParsedShadersIR *ir) {
+  for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
+    const DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
+
+    fprintf(dst, "static VkWriteDescriptorSet %.*s_write_templates[] = {\n", layout->name_length, layout->name);
+    for (u32 j = 0; j < MAX_NUM_DESCRIPTOR_BINDINGS; j++) {
+      const DescriptorBinding *binding = &layout->bindings[j];
+      if (binding->type == DESCRIPTOR_TYPE_INVALID) {
+        continue;
+      }
+
+      const char *type_string = binding->type == DESCRIPTOR_TYPE_UNIFORM ? "VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER"
+                                                                         : "VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER";
+      fprintf(dst, "  {\n");
+      fprintf(dst, "    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,\n");
+      fprintf(dst, "    .pNext = NULL,\n");
+      fprintf(dst, "    .dstSet = VK_NULL_HANDLE,\n");
+      fprintf(dst, "    .dstBinding = %u,\n", j);
+      fprintf(dst, "    .dstArrayElement = 0,\n");
+      fprintf(dst, "    .descriptorCount = %u,\n", binding->descriptor_count);
+      fprintf(dst, "    .descriptorType = %s,\n", type_string);
+      fprintf(dst, "    .pImageInfo = NULL,\n");
+      fprintf(dst, "    .pBufferInfo = NULL,\n");
+      fprintf(dst, "    .pTexelBufferView = NULL,\n");
+      fprintf(dst, "  },\n");
+    }
+    fprintf(dst, "};\n\n");
+
+    fprintf(dst, "static VkDeviceSize %.*s_ranges[] = {\n", layout->name_length, layout->name);
+    for (u32 j = 0; j < MAX_NUM_DESCRIPTOR_BINDINGS; j++) {
+      const DescriptorBinding *binding = &layout->bindings[j];
+      if (binding->type == DESCRIPTOR_TYPE_INVALID) {
+        continue;
+      }
+
+      bool has_struct = (binding->type == DESCRIPTOR_TYPE_UNIFORM && binding->glsl_struct != NULL);
+      u32 size = has_struct ? compute_glsl_struct_size(binding->glsl_struct) : 0;
+      printf("size %u\n", size);
+      fprintf(dst, "  %u,\n", size);
+    }
+    fprintf(dst, "};\n\n");
+  }
+}
+
 static void generate_vulkan_descriptor_pool_size_array(FILE *dst, const ParsedShadersIR *ir) {
   u32 max_sets = 0;
   for (u32 i = 0; i < NUM_DESCRIPTOR_TYPES; i++) {
@@ -574,8 +634,6 @@ inline void codegen_shader_spec_definition(FILE *dst) {
   fprintf(dst, "  ShaderStage stage;\n");
   fprintf(dst, "};\n\n");
 }
-
-static u32 align_up(u32 offset, u32 alignment) { return (offset + alignment - 1) & ~(alignment - 1); }
 
 static void codegen_struct_defintions(FILE *dst, const GLSLStruct *glsl_structs, u32 num_glsl_structs) {
   for (u32 i = 0; i < num_glsl_structs; i++) {
@@ -787,6 +845,7 @@ bool codegen(const char *output_filepath, const ParsedShadersIR *ir) {
   fprintf(dst, "\n  NUM_DESCRIPTOR_SET_LAYOUTS\n};\n\n");
 
   generate_vulkan_descriptor_set_binding_lists(dst, ir);
+  generate_vulkan_descriptor_write_templates(dst, ir);
 
   generate_vulkan_descriptor_pool_size_array(dst, ir);
 
