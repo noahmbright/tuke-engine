@@ -59,6 +59,7 @@ void free_shader_to_compile_list(ShaderToCompileList *shader_to_compile_list) {
   for (u32 i = 0; i < shader_to_compile_list->num_shaders; i++) {
     if (shader_to_compile_list != NULL) {
       free((void *)shader_to_compile_list->shaders[i].source);
+      free((void *)shader_to_compile_list->shaders[i].name);
       shader_to_compile_list->shaders[i].source = NULL;
     } else {
       fprintf(stderr, "Attemped to free memory from ShaderToCompile when null\n");
@@ -232,12 +233,9 @@ ShaderToCompileList collect_shaders_to_compile(
       }
 
       const char *shaders_prefix_trimmed_path = full_path + strlen(shaders_root) + 1;
-
-      // get filename - check for windows backslash vs forward slash
       const char *cursor = shaders_prefix_trimmed_path;
-
-      // last slash and cursor now point into full_path stack buffer
       const char *last_slash_location = shaders_prefix_trimmed_path;
+
       while ((cursor - full_path) < FULL_PATH_BUFFER_LENGTH - 1 && *cursor != '\0') {
         if (*cursor == '/') {
           last_slash_location = cursor;
@@ -254,6 +252,7 @@ ShaderToCompileList collect_shaders_to_compile(
         fprintf(stderr, "%s: shader filename %s ended after name: need stage and extension\n", __func__, full_path);
         continue;
       }
+      u32 shader_name_length = cursor - shaders_prefix_trimmed_path;
       cursor++;
 
       cursor = scan_token(cursor, token, BUFFER_SIZE, '.');
@@ -294,11 +293,8 @@ ShaderToCompileList collect_shaders_to_compile(
         continue;
       }
 
-      // shader name is the sanitized part after the shaders prefix
-      // if we got here, then the we have a valid file path of the form
-      // path/to/something.stage.in
-      // discard the .in and turn / and . to _
-      u32 shader_name_length = strlen(shaders_prefix_trimmed_path) - 3;
+      // Shader name is the sanitized part after the shaders prefix
+      // For path/to/something.stage.in, it is path_to_something
       char *shader_name = (char *)malloc((shader_name_length + 1) * sizeof(char));
       if (shader_name == NULL) {
         fprintf(stderr, "Failed to allocate buffer shader name %s\n", shaders_prefix_trimmed_path);
@@ -311,14 +307,13 @@ ShaderToCompileList collect_shaders_to_compile(
       }
       shader_name[shader_name_length] = '\0';
 
-      shader_list.shaders[shader_list.num_shaders] = {
+      shader_list.shaders[shader_list.num_shaders++] = {
           .stage = shader_stage,
           .source = shader_source,
           .source_length = source_length,
           .name = shader_name,
           .name_length = shader_name_length,
       };
-      shader_list.num_shaders++;
     } // nested loop over files in subdir
     closedir(subdirectory);
   } // main loop over subdirectories

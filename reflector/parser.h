@@ -147,8 +147,6 @@ enum DirectiveType {
   DIRECTIVE_TYPE_GLSL_SOURCE // not really a directive, but the stuff that comes between the directives
 };
 
-enum GraphicsBackend { GRAPHICS_BACKEND_VULKAN, GRAPHICS_BACKEND_OPENGL, NUM_GRAPHICS_BACKENDS };
-
 // template string slices start on the first { of {{ and end on the first char of the next token
 // or they start on the first token after the {{ and end on the first } of the }}
 struct TemplateStringSlice {
@@ -289,24 +287,23 @@ struct Parser {
   u32 token_index;
 };
 
-// ParsedShader not responsible for freeing name, that belongs to ShaderToCompile
-// parsed shader not responsible for freeing anything
+// ParsedShader not responsible for freeing name - belongs to ShaderToCompile
 struct ParsedShader {
   ShaderStage stage;
-  const char *name;
+  const char *name; // name is a malloc'd string owned by ShaderToCompile
 
   TemplateStringSlice template_slices[MAX_NUM_STRING_SLICES];
   u32 num_template_slices;
-
-  // TODO will accumulate descriptors globally, and then eventually use this so
-  // ShaderSpecs can tell users what layouts they use
-  // DescriptorSetLayout *_descriptor_set_layouts_[MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER];
 
   // vertex input layout
   const VertexLayout *vertex_layout;
   VertexAttributeRate binding_rates[MAX_NUM_VERTEX_BINDINGS];
   u16 binding_strides[MAX_NUM_VERTEX_BINDINGS];
   u8 binding_count;
+
+  // TODO will accumulate descriptors globally, and then eventually use this so
+  // ShaderSpecs can tell users what layouts they use
+  // DescriptorSetLayout *_descriptor_set_layouts_[MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER];
 };
 
 // the IR contains the shaders after parsing, which all have their slices and pointers to their descriptor sets and

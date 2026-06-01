@@ -12,7 +12,7 @@ struct SubdirectoryList {
   char subdirectories[MAX_NUM_SUBDIRECTORIES][SUBDIRECTORY_PATH_BUFFER_LENGTH];
 };
 
-// ShaderToCompile is the owner of source, responsible for freeing
+// ShaderToCompile is the owner of source and name. Responsible for freeing both.
 struct ShaderToCompile {
   ShaderStage stage;
   const char *source;
@@ -31,4 +31,6 @@ void validate_in_path(const char *raw_path, char *out_path);
 void free_shader_to_compile_list(ShaderToCompileList *shader_to_compile_list);
 void push_subdirectory(SubdirectoryList *subdirectory_list, const char *s);
 void walk_dirs(const char *path, SubdirectoryList *subdirectory_list);
-ShaderToCompileList collect_shaders_to_compile(const SubdirectoryList *subdirectory_list, const char *shaders_root, const char *output_path);
+ShaderToCompileList collect_shaders_to_compile(
+    const SubdirectoryList *subdirectory_list, const char *shaders_root, const char *output_path
+);

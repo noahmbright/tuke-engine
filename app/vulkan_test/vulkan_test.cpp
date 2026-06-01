@@ -14,11 +14,11 @@
 int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
   VulkanWindowInfo window_info = create_glfw_vulkan_window_info(window);
-  VulkanContext context = create_vulkan_context("Tuke", window_info);
+  VulkanContext ctx = create_vulkan_context("Disastrous Vulkan Test", window_info);
   VkDescriptorPool descriptor_pool =
-      create_descriptor_pool(context.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
-  init_generated_shader_vk_modules(context.device);
-  ViewportState viewport_state = create_viewport_state_xy(context.swapchain_extent, 0, 0);
+      create_descriptor_pool(ctx.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
+  init_generated_shader_vk_modules(ctx.device);
+  ViewportState viewport_state = create_viewport_state_xy(ctx.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {
       {.color = {{0.01, 0.01, 0.01, 1.0}}}, {.depthStencil = {.depth = 1.0f, .stencil = 0}}
   };
@@ -34,16 +34,16 @@ int main() {
   }
 
   VulkanTexture textures[NUM_TEXTURES];
-  load_vulkan_textures(&context, image_datas, NUM_TEXTURES, textures);
+  load_vulkan_textures(&ctx, image_datas, NUM_TEXTURES, textures);
 
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
     free_stb_handle(&stbs[i]);
   }
 
-  VkSampler sampler = create_sampler(context.device);
+  VkSampler sampler = create_sampler(ctx.device);
 
   ColorDepthFramebuffer offscreen_framebuffer =
-      create_color_depth_framebuffer(&context, context.swapchain_extent, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D32_SFLOAT);
+      create_color_depth_framebuffer(&ctx, ctx.swapchain_extent, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D32_SFLOAT);
 
   BufferUploadQueue buffer_upload_queue = create_buffer_upload_queue();
   const BufferHandle *triangle_vertices_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, triangle_vertices);
@@ -54,7 +54,7 @@ int main() {
   const BufferHandle *cube_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, cube_vertices);
   (void)unit_square_indices_slice;
 
-  BufferManager buffer_manager = flush_buffers(&context, &buffer_upload_queue);
+  BufferManager buffer_manager = flush_buffers(&ctx, &buffer_upload_queue);
   VulkanBuffer *vertex_buffer = &buffer_manager.vertex_buffer;
   VulkanBuffer *index_buffer = &buffer_manager.index_buffer;
 
@@ -64,12 +64,12 @@ int main() {
   UniformWrite x_handle = push_uniform(&ub_manager, sizeof(UniformBufferObject));
   UniformWrite light_position_handle = push_uniform(&ub_manager, sizeof(LightPosition));
   UniformWrite camera_vp_handle = push_uniform(&ub_manager, sizeof(CameraVP));
-  UniformBuffer global_uniform_buffer = create_uniform_buffer(&context, ub_manager.current_offset);
+  UniformBuffer global_uniform_buffer = create_uniform_buffer(&ctx, ub_manager.current_offset);
 
   // It is unacceptable that I need to think this hard about sets and bindings in the app.
   // Stateful builders are kind of ugly.
   // for simple.frag.in, x uniform is set/binding 0/0
-  DescriptorSetBuilder simple_set_builder = create_descriptor_set_builder(&context);
+  DescriptorSetBuilder simple_set_builder = create_descriptor_set_builder(&ctx);
 
   add_uniform_buffer_descriptor_set(
       &simple_set_builder, &global_uniform_buffer, x_handle.offset, x_handle.size, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -84,11 +84,10 @@ int main() {
       VK_SHADER_STAGE_VERTEX_BIT, false
   );
   DescriptorSetHandle simple_descriptor = build_descriptor_set(&simple_set_builder, descriptor_pool);
-  VkPipelineLayout x_pipeline_layout =
-      create_pipeline_layout(context.device, &simple_descriptor.descriptor_set_layout, 1);
+  VkPipelineLayout x_pipeline_layout = create_pipeline_layout(ctx.device, &simple_descriptor.descriptor_set_layout, 1);
 
   // instanced quad: the mvp uniform is set/binding 0/0, the float is 0/1
-  DescriptorSetBuilder mvp_set_builder = create_descriptor_set_builder(&context);
+  DescriptorSetBuilder mvp_set_builder = create_descriptor_set_builder(&ctx);
   add_uniform_buffer_descriptor_set(
       &mvp_set_builder, &global_uniform_buffer, mvp_handle.offset, mvp_handle.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT,
       false
@@ -100,11 +99,10 @@ int main() {
 
   DescriptorSetHandle mvp_descriptor = build_descriptor_set(&mvp_set_builder, descriptor_pool);
 
-  VkPipelineLayout mvp_pipeline_layout =
-      create_pipeline_layout(context.device, &mvp_descriptor.descriptor_set_layout, 1);
+  VkPipelineLayout mvp_pipeline_layout = create_pipeline_layout(ctx.device, &mvp_descriptor.descriptor_set_layout, 1);
 
   // cube descriptor set
-  DescriptorSetBuilder cube_set_builder = create_descriptor_set_builder(&context);
+  DescriptorSetBuilder cube_set_builder = create_descriptor_set_builder(&ctx);
   add_uniform_buffer_descriptor_set(
       &cube_set_builder, &global_uniform_buffer, cube_model_handle.offset, cube_model_handle.size, 0, 1,
       VK_SHADER_STAGE_VERTEX_BIT, false
@@ -119,32 +117,31 @@ int main() {
   );
   DescriptorSetHandle cube_descriptor = build_descriptor_set(&cube_set_builder, descriptor_pool);
 
-  VkPipelineLayout cube_pipeline_layout =
-      create_pipeline_layout(context.device, &cube_descriptor.descriptor_set_layout, 1);
+  VkPipelineLayout cube_pipeline_layout = create_pipeline_layout(ctx.device, &cube_descriptor.descriptor_set_layout, 1);
 
   // fullscreen quad descriptor set
-  DescriptorSetBuilder fullscreen_quad_set_builder = create_descriptor_set_builder(&context);
+  DescriptorSetBuilder fullscreen_quad_set_builder = create_descriptor_set_builder(&ctx);
   add_image_descriptor_set(
       &fullscreen_quad_set_builder, offscreen_framebuffer.color_image_view, sampler, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT
   );
   DescriptorSetHandle fullscreen_quad_descriptor = build_descriptor_set(&fullscreen_quad_set_builder, descriptor_pool);
   assert(fullscreen_quad_set_builder.layout_bindings[0].stageFlags == VK_SHADER_STAGE_FRAGMENT_BIT);
   VkPipelineLayout fullscreen_quad_pipeline_layout =
-      create_pipeline_layout(context.device, &fullscreen_quad_descriptor.descriptor_set_layout, 1);
+      create_pipeline_layout(ctx.device, &fullscreen_quad_descriptor.descriptor_set_layout, 1);
 
   // create pipelines
   VkPipeline triangle_pipeline = shader_handles_to_graphics_pipeline(
-      &context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT, SHADER_HANDLE_COMMON_SIMPLE_FRAG,
+      &ctx, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT, SHADER_HANDLE_COMMON_SIMPLE_FRAG,
       x_pipeline_layout
   );
 
   VkPipeline square_pipeline = shader_handles_to_graphics_pipeline(
-      &context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT, SHADER_HANDLE_COMMON_SQUARE_FRAG,
+      &ctx, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT, SHADER_HANDLE_COMMON_SQUARE_FRAG,
       x_pipeline_layout
   );
 
   VkPipeline instanced_quad_pipeline = shader_handles_to_graphics_pipeline(
-      &context, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_INSTANCED_QUAD_VERT,
+      &ctx, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_INSTANCED_QUAD_VERT,
       SHADER_HANDLE_COMMON_INSTANCED_QUAD_FRAG, mvp_pipeline_layout
   );
 
@@ -154,11 +151,11 @@ int main() {
       &generated_vulkan_vertex_layouts[common_cube_vert_shader_spec.vertex_layout_id], cube_pipeline_layout
   );
   cube_pipeline_config.cull_mode = VK_CULL_MODE_FRONT_BIT;
-  VkPipeline cube_pipeline = create_graphics_pipeline(context.device, &cube_pipeline_config, context.pipeline_cache);
+  VkPipeline cube_pipeline = create_graphics_pipeline(ctx.device, &cube_pipeline_config, ctx.pipeline_cache);
 
   VkPipeline fullscreen_quad_pipeline = shader_handles_to_graphics_pipeline(
-      &context, context.render_pass, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT,
-      SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG, fullscreen_quad_pipeline_layout
+      &ctx, ctx.render_pass, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG,
+      fullscreen_quad_pipeline_layout
   );
 
   RenderCall triangle_render_call = {
@@ -244,8 +241,6 @@ int main() {
   init_inputs(&inputs);
 
   f32 t0 = glfwGetTime();
-  u64 current_frame = 0;
-  (void)current_frame;
   while (!glfwWindowShouldClose(window)) {
     i32 height, width;
     glfwGetWindowSize(window, &width, &height);
@@ -270,7 +265,7 @@ int main() {
     CameraMatrices camera_matrices = create_camera_matrices(&camera, width, height);
     camera_vp = camera_matrices.projection * camera_matrices.view;
 
-    begin_frame(&context);
+    begin_frame(&ctx);
 
     // Should have a queue for these, something more automated
     write_to_uniform_buffer(&global_uniform_buffer, &mvp, mvp_handle);
@@ -279,103 +274,79 @@ int main() {
     write_to_uniform_buffer(&global_uniform_buffer, &light_position, light_position_handle);
     write_to_uniform_buffer(&global_uniform_buffer, &camera_vp, camera_vp_handle);
 
-    VkCommandBuffer command_buffer = begin_command_buffer(&context);
+    VkCommandBuffer cmd = begin_command_buffer(&ctx);
 
     // TODO do this through pipeline barriers
     //      Do this per frame? Or just at init?
     // transition to use as render target
     transition_image_layout(
-        command_buffer, offscreen_framebuffer.color_image, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        cmd, offscreen_framebuffer.color_image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     );
 
     begin_render_pass(
-        &context, command_buffer, offscreen_framebuffer.render_pass, offscreen_framebuffer.framebuffer, clear_values,
-        NUM_ATTACHMENTS, viewport_state
+        &ctx, cmd, offscreen_framebuffer.render_pass, offscreen_framebuffer.framebuffer, clear_values, NUM_ATTACHMENTS,
+        viewport_state
     );
 
     // Should have a queue for these, something more automated
-    render_mesh(command_buffer, &triangle_render_call);
-    render_mesh(command_buffer, &square_render_call);
-    render_mesh(command_buffer, &instanced_render_call);
-    render_mesh(command_buffer, &cube_render_call);
+    render_mesh(cmd, &triangle_render_call);
+    render_mesh(cmd, &square_render_call);
+    render_mesh(cmd, &instanced_render_call);
+    render_mesh(cmd, &cube_render_call);
 
-    vkCmdEndRenderPass(command_buffer);
+    vkCmdEndRenderPass(cmd);
 
     // transition to use as sampler
     transition_image_layout(
-        command_buffer, offscreen_framebuffer.color_image, VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        cmd, offscreen_framebuffer.color_image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
 
     begin_render_pass(
-        &context, command_buffer, context.render_pass, context.framebuffers[context.image_index], clear_values,
-        NUM_ATTACHMENTS, viewport_state
+        &ctx, cmd, ctx.render_pass, ctx.framebuffers[ctx.image_index], clear_values, NUM_ATTACHMENTS, viewport_state
     );
-    render_mesh(command_buffer, &fullscreen_quad_render_call);
-    vkCmdEndRenderPass(command_buffer);
-    VK_CHECK(vkEndCommandBuffer(command_buffer), "Failed to end command buffer");
+    render_mesh(cmd, &fullscreen_quad_render_call);
+    vkCmdEndRenderPass(cmd);
+    VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end command buffer");
 
-    submit_and_present(&context, command_buffer);
-    update_frame_index(&context);
+    submit_and_present(&ctx, cmd);
+    update_frame_index(&ctx);
 
     glm::vec2 movement_direction = inputs_to_direction(&inputs);
     f32 speed = 10.0f;
     camera_move_3d(&camera, dt * speed * movement_direction);
-
-#if 0
-    printf("offscreen image addr %p\n",
-           (void *)offscreen_framebuffer.color_image);
-    printf("framebuffer image addr %p\n",
-           (void *)context.framebuffers[context.image_index]);
-
-    if (context.current_frame % 120 == 0) {
-      printf("dt %f\n", dt);
-
-      log_camera(&camera);
-
-      printf("movement direction %f %f %f\n", movement_direction.x,
-             movement_direction.y, movement_direction.z);
-
-      printf("projection: \n%s\n",
-             glm::to_string(camera_matrices.projection).c_str());
-      printf("view: \n%s\n", glm::to_string(camera_matrices.view).c_str());
-    }
-#endif
   }
 
   // This is all too manual. Need a deletion queue managed internally.
-  // cleanup
-  vkDeviceWaitIdle(context.device);
+  vkDeviceWaitIdle(ctx.device);
 
-  vkDestroySampler(context.device, sampler, NULL);
+  vkDestroySampler(ctx.device, sampler, NULL);
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
-    destroy_vulkan_texture(context.device, &textures[i]);
+    destroy_vulkan_texture(ctx.device, &textures[i]);
   }
 
-  free_generated_shader_vk_modules(context.device);
+  free_generated_shader_vk_modules(ctx.device);
 
-  destroy_color_depth_framebuffer(&context, &offscreen_framebuffer);
-  destroy_descriptor_set_handle(context.device, &simple_descriptor);
-  destroy_descriptor_set_handle(context.device, &mvp_descriptor);
-  destroy_descriptor_set_handle(context.device, &cube_descriptor);
-  destroy_descriptor_set_handle(context.device, &fullscreen_quad_descriptor);
+  destroy_color_depth_framebuffer(ctx.device, &offscreen_framebuffer);
+  destroy_descriptor_set_handle(ctx.device, &simple_descriptor);
+  destroy_descriptor_set_handle(ctx.device, &mvp_descriptor);
+  destroy_descriptor_set_handle(ctx.device, &cube_descriptor);
+  destroy_descriptor_set_handle(ctx.device, &fullscreen_quad_descriptor);
 
-  vkDestroyPipelineLayout(context.device, x_pipeline_layout, NULL);
-  vkDestroyPipelineLayout(context.device, mvp_pipeline_layout, NULL);
-  vkDestroyPipelineLayout(context.device, cube_pipeline_layout, NULL);
-  vkDestroyPipelineLayout(context.device, fullscreen_quad_pipeline_layout, NULL);
+  vkDestroyPipelineLayout(ctx.device, x_pipeline_layout, NULL);
+  vkDestroyPipelineLayout(ctx.device, mvp_pipeline_layout, NULL);
+  vkDestroyPipelineLayout(ctx.device, cube_pipeline_layout, NULL);
+  vkDestroyPipelineLayout(ctx.device, fullscreen_quad_pipeline_layout, NULL);
 
-  vkDestroyPipeline(context.device, square_pipeline, NULL);
-  vkDestroyPipeline(context.device, triangle_pipeline, NULL);
-  vkDestroyPipeline(context.device, instanced_quad_pipeline, NULL);
-  vkDestroyPipeline(context.device, cube_pipeline, NULL);
-  vkDestroyPipeline(context.device, fullscreen_quad_pipeline, NULL);
+  vkDestroyPipeline(ctx.device, square_pipeline, NULL);
+  vkDestroyPipeline(ctx.device, triangle_pipeline, NULL);
+  vkDestroyPipeline(ctx.device, instanced_quad_pipeline, NULL);
+  vkDestroyPipeline(ctx.device, cube_pipeline, NULL);
+  vkDestroyPipeline(ctx.device, fullscreen_quad_pipeline, NULL);
 
-  destroy_uniform_buffer(&context, &global_uniform_buffer);
-  vkDestroyDescriptorPool(context.device, descriptor_pool, NULL);
+  destroy_uniform_buffer(&ctx, &global_uniform_buffer);
+  vkDestroyDescriptorPool(ctx.device, descriptor_pool, NULL);
   destroy_buffer_manager(&buffer_manager);
-  destroy_vulkan_context(&context);
+  destroy_vulkan_context(&ctx);
 
   return 0;
 }

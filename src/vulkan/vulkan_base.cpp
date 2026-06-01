@@ -2032,14 +2032,14 @@ void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, Un
   memcpy(uniform_buffer->mapped + uniform_write.offset, data, uniform_write.size);
 }
 
-ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *context, u32 buffer_size) {
+ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *ctx, u32 buffer_size) {
   ReadOnlyStorageBuffer readonly_storage_buffer = {
-      .vulkan_buffer = create_buffer(context, BUFFER_TYPE_READONLY_STORAGE, buffer_size),
+      .vulkan_buffer = create_buffer(ctx, BUFFER_TYPE_READONLY_STORAGE, buffer_size),
       .size = buffer_size,
   };
 
   VkResult result = vkMapMemory(
-      context->device, readonly_storage_buffer.vulkan_buffer.memory, 0, buffer_size, 0,
+      ctx->device, readonly_storage_buffer.vulkan_buffer.memory, 0, buffer_size, 0,
       (void **)&readonly_storage_buffer.mapped
   );
   VK_CHECK(result, "Failed to map storage buffer memory");
@@ -2120,31 +2120,29 @@ VulkanTexture create_vulkan_texture(
 // I could pass an array of structs containing a VulkanTexture and a path
 // Also could do hashing
 void load_vulkan_textures(
-    VulkanContext *context, const VulkanImageData *image_datas, u32 num_images, VulkanTexture *out_textures
+    VulkanContext *ctx, const VulkanImageData *image_datas, u32 num_images, VulkanTexture *out_textures
 ) {
 
   u32 max_size = 0;
   for (u32 i = 0; i < num_images; i++) {
-    // TODO need to fix this 4 issue
-    //      Could also think of other better-for-GPU formats to use in preprocessing
     const VulkanImageData *data = &image_datas[i];
     u32 texture_size = data->width * data->height * data->n_channels;
     max_size = (texture_size > max_size) ? texture_size : max_size;
   }
 
   // TODO find a way to reuse another staging buffer, already allocated
-  VulkanBuffer staging_buffer = create_buffer(context, BUFFER_TYPE_STAGING, max_size);
+  VulkanBuffer staging_buffer = create_buffer(ctx, BUFFER_TYPE_STAGING, max_size);
   void *texture_data;
   VkResult result =
-      vkMapMemory(context->device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data);
+      vkMapMemory(ctx->device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data);
   VK_CHECK(result, "Failed to map staging buffer memory");
 
   for (u32 i = 0; i < num_images; i++) {
-    out_textures[i] = create_vulkan_texture(context, image_datas[i], staging_buffer, texture_data);
+    out_textures[i] = create_vulkan_texture(ctx, image_datas[i], staging_buffer, texture_data);
   }
 
-  vkUnmapMemory(context->device, staging_buffer.memory);
-  destroy_vulkan_buffer(context, staging_buffer);
+  vkUnmapMemory(ctx->device, staging_buffer.memory);
+  destroy_vulkan_buffer(ctx, staging_buffer);
 }
 
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture) {
@@ -2196,7 +2194,6 @@ create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding
   VkDescriptorSetLayout descriptor_set_layout;
   VkResult result = vkCreateDescriptorSetLayout(device, &descriptor_set_layout_ci, NULL, &descriptor_set_layout);
   VK_CHECK(result, "Failed to create descriptor set layout");
-
   return descriptor_set_layout;
 }
 
@@ -2213,7 +2210,6 @@ create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *set_layouts,
   VkDescriptorSet descriptor_set;
   VkResult result = vkAllocateDescriptorSets(device, &descriptor_set_allocate_info, &descriptor_set);
   VK_CHECK(result, "Failed to allocate descriptor set");
-
   return descriptor_set;
 }
 
@@ -2371,15 +2367,13 @@ void destroy_descriptor_set_handle(VkDevice device, DescriptorSetHandle *handle)
   vkDestroyDescriptorSetLayout(device, handle->descriptor_set_layout, NULL);
 }
 
-void render_mesh(VkCommandBuffer command_buffer, RenderCall *call) {
+void render_mesh(VkCommandBuffer cmd, RenderCall *call) {
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, call->graphics_pipeline);
 
-  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, call->graphics_pipeline);
-
-  // TODO engine: try to move branching to render call init
   u32 first_binding = 0;
   if (call->num_vertex_buffers > 0) {
     vkCmdBindVertexBuffers(
-        command_buffer, first_binding, call->num_vertex_buffers, call->vertex_buffers, call->vertex_buffer_offsets
+        cmd, first_binding, call->num_vertex_buffers, call->vertex_buffers, call->vertex_buffer_offsets
     );
   }
 
@@ -2387,7 +2381,7 @@ void render_mesh(VkCommandBuffer command_buffer, RenderCall *call) {
     u32 first_set = 0;
     u32 dynamic_offset_count = 0;
     vkCmdBindDescriptorSets(
-        command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, call->pipeline_layout, first_set, call->num_descriptor_sets,
+        cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, call->pipeline_layout, first_set, call->num_descriptor_sets,
         call->descriptor_sets, dynamic_offset_count, NULL
     );
   }
@@ -2395,14 +2389,12 @@ void render_mesh(VkCommandBuffer command_buffer, RenderCall *call) {
   u32 first_instance = 0; // TODO understand when this would be non zero
   i32 vertex_offset = 0;  // TODO understand when this would be non zero
   if (call->is_indexed) {
-    vkCmdBindIndexBuffer(command_buffer, call->index_buffer, call->index_buffer_offset, VK_INDEX_TYPE_UINT16);
+    vkCmdBindIndexBuffer(cmd, call->index_buffer, call->index_buffer_offset, VK_INDEX_TYPE_UINT16);
     u32 first_index = 0;
-    vkCmdDrawIndexed(
-        command_buffer, call->num_indices, call->instance_count, first_index, vertex_offset, first_instance
-    );
+    vkCmdDrawIndexed(cmd, call->num_indices, call->instance_count, first_index, vertex_offset, first_instance);
   } else {
     u32 first_vertex = 0;
-    vkCmdDraw(command_buffer, call->num_vertices, call->instance_count, first_vertex, first_instance);
+    vkCmdDraw(cmd, call->num_vertices, call->instance_count, first_vertex, first_instance);
   }
 }
 
@@ -2554,13 +2546,13 @@ ColorDepthFramebuffer create_color_depth_framebuffer(
   return fb;
 }
 
-void destroy_color_depth_framebuffer(const VulkanContext *context, ColorDepthFramebuffer *color_depth_framebuffer) {
-  vkDestroyFramebuffer(context->device, color_depth_framebuffer->framebuffer, NULL);
-  vkDestroyImageView(context->device, color_depth_framebuffer->color_image_view, NULL);
-  vkDestroyImage(context->device, color_depth_framebuffer->color_image, NULL);
-  vkFreeMemory(context->device, color_depth_framebuffer->color_image_device_memory, NULL);
-  vkDestroyImageView(context->device, color_depth_framebuffer->depth_image_view, NULL);
-  vkDestroyImage(context->device, color_depth_framebuffer->depth_image, NULL);
-  vkFreeMemory(context->device, color_depth_framebuffer->depth_image_device_memory, NULL);
-  vkDestroyRenderPass(context->device, color_depth_framebuffer->render_pass, NULL);
+void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *color_depth_framebuffer) {
+  vkDestroyFramebuffer(device, color_depth_framebuffer->framebuffer, NULL);
+  vkDestroyImageView(device, color_depth_framebuffer->color_image_view, NULL);
+  vkDestroyImage(device, color_depth_framebuffer->color_image, NULL);
+  vkFreeMemory(device, color_depth_framebuffer->color_image_device_memory, NULL);
+  vkDestroyImageView(device, color_depth_framebuffer->depth_image_view, NULL);
+  vkDestroyImage(device, color_depth_framebuffer->depth_image, NULL);
+  vkFreeMemory(device, color_depth_framebuffer->depth_image_device_memory, NULL);
+  vkDestroyRenderPass(device, color_depth_framebuffer->render_pass, NULL);
 }

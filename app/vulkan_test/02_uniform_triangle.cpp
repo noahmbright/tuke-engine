@@ -35,7 +35,7 @@ int main() {
   // Init woes documented in 01_triangle
   GLFWwindow *window = create_window(true /* is_vulkan */);
   VulkanWindowInfo window_info = create_glfw_vulkan_window_info(window);
-  VulkanContext ctx = create_vulkan_context("Tuke", window_info);
+  VulkanContext ctx = create_vulkan_context("Test 02: Uniform Triangle", window_info);
 
   // This needs moved into the backend.
   // Only doing this here while migrating generated headers is causing conflicts.
@@ -54,20 +54,9 @@ int main() {
   VkFormat depth_format = find_depth_format(ctx.physical_device);
   VkRenderPass rp = create_color_depth_render_pass(ctx.device, ctx.surface_format.format, depth_format);
 
-  // Made a mistake with the wrong upload size here - used the wrong struct in the name.
-  UniformBufferManager ub_manager = create_uniform_buffer_manager();
-  UniformWrite handle = push_uniform(&ub_manager, sizeof(TriangleTransformation));
-  UniformBuffer ub = create_uniform_buffer(&ctx, ub_manager.current_offset);
-
+  // REAL FOCUS Descriptor Sets
   VkDescriptorPool descriptor_pool =
       create_descriptor_pool(ctx.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
-
-  // These are needed for a write to particular buffer - runtime info.
-  VkDescriptorBufferInfo descriptor_buffer_info = {
-      .buffer = ub.vulkan_buffer.buffer,
-      .offset = handle.offset,
-      .range = handle.size,
-  };
 
   const VkDescriptorSetLayoutBinding *bindings = TRIANGLE_TRANSFORMATION_descriptor_set_layout_bindings;
   u32 binding_count = TRIANGLE_TRANSFORMATION_num_descriptor_set_layout_bindings;
@@ -76,15 +65,28 @@ int main() {
 
   // Know binding, descriptor count, and type from generated layout bindings - from reflection
   VkWriteDescriptorSet *write = TRIANGLE_TRANSFORMATION_write_templates;
-  write->pBufferInfo = &descriptor_buffer_info;
   write->dstSet = descriptor_set;
 
-  u32 write_descriptor_count = 1;
-  u32 copy_descriptor_count = 0;
-  vkUpdateDescriptorSets(ctx.device, write_descriptor_count, write, copy_descriptor_count, NULL);
+  // Made a mistake with the wrong upload size here - used the wrong struct in the name.
+  UniformBufferManager ub_manager = create_uniform_buffer_manager();
+  UniformWrite handle = push_uniform(&ub_manager, sizeof(TriangleTransformation));
+  UniformBuffer ub = create_uniform_buffer(&ctx, ub_manager.current_offset);
+
+  // These are needed for a write to particular buffer - runtime info.
+  VkDescriptorBufferInfo descriptor_buffer_info = {
+      .buffer = ub.vulkan_buffer.buffer,
+      .offset = handle.offset,
+      .range = handle.size,
+  };
+  write->pBufferInfo = &descriptor_buffer_info;
+
+  u32 write_count = 1;
+  u32 copy_count = 0;
+  vkUpdateDescriptorSets(ctx.device, write_count, write, copy_count, NULL);
 
   u32 num_desc_set_layouts = 1;
   VkPipelineLayout pipeline_layout = create_pipeline_layout(ctx.device, &descriptor_set_layout, num_desc_set_layouts);
+  // END FOCUS
 
   VkPipeline pipeline = shader_handles_to_graphics_pipeline(
       &ctx, rp, SHADER_HANDLE_COMMON_UNIFORM_BRINGUP_VERT, SHADER_HANDLE_COMMON_UNIFORM_BRINGUP_FRAG, pipeline_layout
@@ -92,22 +94,17 @@ int main() {
 
   // Still don't like configuring these manually. This is like the fundamental issue.
   // Made a mistake in configuring descriptor sets.
-  // Should have descriptr stuff lumped together.
-  // What is the right abstraction?
+  // Should have descriptor stuff lumped together.
   RenderCall render_call = {
       .num_vertices = 3,
       .instance_count = 1,
       .graphics_pipeline = pipeline,
       .pipeline_layout = pipeline_layout,
       .num_descriptor_sets = 1,
-      // Same issue with not liking the descriptor's transparency
       .descriptor_sets = {descriptor_set},
       .is_indexed = false,
   };
 
-  // Where is a typical place to manage time? This is probably fine. The "game" is this file,
-  // and we have a file global t_total. Not so different from throwing this into a game state
-  // struct.
   f64 t_total = 0;
   f64 t0 = glfwGetTime();
   while (!glfwWindowShouldClose(window)) {

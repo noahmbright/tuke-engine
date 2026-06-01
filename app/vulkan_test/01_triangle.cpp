@@ -23,8 +23,6 @@ int main() {
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {
       {.color = {{0.01, 0.01, 0.01, 1.0}}}, {.depthStencil = {.depth = 1.0f, .stencil = 0}}
   };
-  // VkDescriptorPool descriptor_pool = create_descriptor_pool(context.device, generated_pool_sizes, pool_size_count,
-  // max_descriptor_sets);
 
   u32 num_desc_set_layouts = 0;
   VkPipelineLayout pipeline_layout = create_pipeline_layout(ctx.device, NULL, num_desc_set_layouts);
@@ -59,12 +57,11 @@ int main() {
     //      my state tracking robust.
     begin_frame(&ctx);
 
-    // TODO do we want to have begin frame return a command buffer for this frame?
+    // TODO do we want to have begin_frame() return a command buffer for this frame?
     //      That should all be handled internally. Maybe we need one big function to
     //      do all drawing, using all data to draw in this frame.
     VkCommandBuffer command_buffer = begin_command_buffer(&ctx);
 
-    // TODO here would be where we upload uniforms. Next test will consider how to do that.
     // TODO if we had textures and depth buffers, we'd want to transition their formats here.
     // TODO Right now, render passes are baked into the context. Would need to rip that out
     //      to better handle transitions through memory barriers
@@ -73,9 +70,8 @@ int main() {
     // TODO recording commands can be done in another thread. Need to wire that around here.
     // TODO This loop is too complicated to wire manually. I forget to end render passes and command
     // buffers in the right order. All of these are raw vulkan calls that belong in the backend.
-    begin_render_pass(
-        &ctx, command_buffer, rp, ctx.framebuffers[ctx.image_index], clear_values, NUM_ATTACHMENTS, viewport_state
-    );
+    VkFramebuffer framebuffer = ctx.framebuffers[ctx.image_index];
+    begin_render_pass(&ctx, command_buffer, rp, framebuffer, clear_values, NUM_ATTACHMENTS, viewport_state);
 
     render_mesh(command_buffer, &render_call);
     vkCmdEndRenderPass(command_buffer);
@@ -88,7 +84,8 @@ int main() {
   // TODO need to get this in the backend. Need a queue of all the stuff to destroy, or
   // have managers for all the different pieces of Vulkan state to destroy.
   //    PipelineLayouts, Pipelines, Buffers, Descriptor sets, etc.
-  vkDeviceWaitIdle(ctx.device);
+  VkResult result = vkDeviceWaitIdle(ctx.device);
+  VK_CHECK(result, "Failed to wait idle");
 
   // TODO Without this free thing, validation layers go crazy here. Maybe I want to
   // get rid of the all or nothing style and lazily init the ones I need.

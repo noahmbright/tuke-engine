@@ -456,8 +456,8 @@ void report_parser_error(Parser *parser, const char *token_start, TokenType reco
   printf("\t%.*s\n", (int)(end - start), start); // print offending line
 
   while (parser_still_valid(parser)) {
-    Token current_token = parser_get_current_token(parser);
-    if (current_token.type == recovery_token_type) {
+    Token cur_tok = parser_get_current_token(parser);
+    if (cur_tok.type == recovery_token_type) {
       break;
     }
     parser_advance(parser);
@@ -500,21 +500,21 @@ void parse_vertex_index_directive(Parser *parser, TemplateStringSlice *template_
 }
 
 void parse_instance_index_directive(Parser *parser, TemplateStringSlice *template_string_slice) {
-  Token current_token = parser_get_current_token(parser);
-  assert(current_token.type == TOKEN_TYPE_DIRECTIVE_INSTANCE_INDEX);
+  Token cur_tok = parser_get_current_token(parser);
+  assert(cur_tok.type == TOKEN_TYPE_DIRECTIVE_INSTANCE_INDEX);
 
-  current_token = parser_advance_and_get_next_token(parser);
-  if (current_token.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_DOUBLE_R_BRACE) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_DOUBLE_R_BRACE,
+        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
         "Expected DOUBLE_R_BRACE after INSTANCE_INDEX in instance index directive, got %s",
-        token_type_to_string[current_token.type]
+        token_type_to_string[cur_tok.type]
     );
     return;
   }
 
-  current_token = parser_advance_and_get_next_token(parser);
-  template_string_slice->end = current_token.start;
+  cur_tok = parser_advance_and_get_next_token(parser);
+  template_string_slice->end = cur_tok.start;
 }
 
 u32 parse_integer_token(Parser *parser, Token token) {
@@ -538,7 +538,7 @@ u32 parse_integer_token(Parser *parser, Token token) {
 LocationDirectiveParse
 parse_location_directive(Parser *parser, ShaderStage shader_stage, TemplateStringSlice *template_string_slice) {
   Token cur_tok = parser_get_current_token(parser);
-  assert(current_token.type == TOKEN_TYPE_DIRECTIVE_LOCATION);
+  assert(cur_tok.type == TOKEN_TYPE_DIRECTIVE_LOCATION);
 
   LocationDirectiveParse location_parse = {
       .next_glsl_source_start = NULL,
@@ -744,25 +744,25 @@ bool token_type_is_glsl_type(TokenType type) {
 }
 
 u32 parse_array_size(Parser *parser) {
-  Token current_token = parser_advance_and_get_next_token(parser);
+  Token cur_tok = parser_advance_and_get_next_token(parser);
   u32 array_length = 0; // you can't have arrays of size 0!
 
   // N
-  if (current_token.type != TOKEN_TYPE_NUMBER) {
+  if (cur_tok.type != TOKEN_TYPE_NUMBER) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_R_BRACKET,
-        "Expected number after opening bracket in array size, got %s", token_type_to_string[current_token.type]
+        parser, cur_tok.start, TOKEN_TYPE_R_BRACKET, "Expected number after opening bracket in array size, got %s",
+        token_type_to_string[cur_tok.type]
     );
     return array_length;
   }
-  array_length = parse_integer_token(parser, current_token);
+  array_length = parse_integer_token(parser, cur_tok);
 
   // ]
-  current_token = parser_advance_and_get_next_token(parser);
-  if (current_token.type != TOKEN_TYPE_R_BRACKET) {
+  cur_tok = parser_advance_and_get_next_token(parser);
+  if (cur_tok.type != TOKEN_TYPE_R_BRACKET) {
     report_parser_error(
-        parser, current_token.start, TOKEN_TYPE_R_BRACKET,
-        "Expected closing bracket after array size in array size, got %s", token_type_to_string[current_token.type]
+        parser, cur_tok.start, TOKEN_TYPE_R_BRACKET, "Expected closing bracket after array size in array size, got %s",
+        token_type_to_string[cur_tok.type]
     );
     return array_length;
   }
@@ -1482,22 +1482,22 @@ bool parse_shader(ShaderToCompile shader_to_compile, ParsedShadersIR *ir) {
   glsl_string_slice.type = DIRECTIVE_TYPE_GLSL_SOURCE;
 
   while (parser_still_valid(&parser)) {
-    Token current_token = parser_get_current_token(&parser);
-    if (current_token.type != TOKEN_TYPE_DOUBLE_L_BRACE) {
+    Token cur_tok = parser_get_current_token(&parser);
+    if (cur_tok.type != TOKEN_TYPE_DOUBLE_L_BRACE) {
       parser_advance(&parser);
       continue;
     }
 
     // on a double L brace, end the glsl slice
-    glsl_string_slice.end = current_token.start;
+    glsl_string_slice.end = cur_tok.start;
     if (glsl_string_slice.start != glsl_string_slice.end) {
       parsed_shader.template_slices[string_slice_index++] = glsl_string_slice;
     }
 
-    TemplateStringSlice template_string_slice = new_template_string_slice(current_token.start);
+    TemplateStringSlice template_string_slice = new_template_string_slice(cur_tok.start);
 
-    current_token = parser_advance_and_get_next_token(&parser);
-    switch (current_token.type) {
+    cur_tok = parser_advance_and_get_next_token(&parser);
+    switch (cur_tok.type) {
       // version
     case TOKEN_TYPE_DIRECTIVE_VERSION: {
       template_string_slice.type = DIRECTIVE_TYPE_VERSION;

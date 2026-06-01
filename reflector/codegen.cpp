@@ -6,6 +6,7 @@
 #include "subprocess.h"
 
 #include <assert.h>
+#include <cstring>
 
 static const u32 max_num_vertex_attributes = 4;
 static const u32 max_num_vertex_bindings = 4;
@@ -268,12 +269,11 @@ const char *glsl_type_to_vulkan_format(GLSLType type) {
     return "VK_FORMAT_R32_SFLOAT";
   case GLSL_TYPE_UINT:
     return "VK_FORMAT_R32_UINT";
-    // TODO?
+
   case GLSL_TYPE_VEC4:
   case GLSL_TYPE_MAT2:
   case GLSL_TYPE_MAT3:
   case GLSL_TYPE_MAT4:
-
   case GLSL_TYPE_NULL:
   default:
     fprintf(stderr, "glsl_type_to_vulkan_format got an invalid GLSLType enum.\n");
@@ -592,7 +592,6 @@ static void generate_vulkan_descriptor_write_templates(FILE *dst, const ParsedSh
 
       bool has_struct = (binding->type == DESCRIPTOR_TYPE_UNIFORM && binding->glsl_struct != NULL);
       u32 size = has_struct ? compute_glsl_struct_size(binding->glsl_struct) : 0;
-      printf("size %u\n", size);
       fprintf(dst, "  %u,\n", size);
     }
     fprintf(dst, "};\n\n");
@@ -684,33 +683,75 @@ static void codegen_struct_defintions(FILE *dst, const GLSLStruct *glsl_structs,
   }
 }
 
+static void print_c_string_with_newlines(FILE *destination, const char *s) {
+  for (; *s; s++) {
+    if (*s == '\n') {
+      if (s[1] && s[1] == '\n') {
+        fputs("\\n\"\n\"", destination);
+      } else {
+        fputs("\\n\"\n\"", destination);
+      }
+    } else {
+      fputc(*s, destination);
+    }
+  }
+}
+
+static void print_bytes_array(FILE *destination, const SpirVBytesArray *bytes_array) {
+  for (u32 i = 0; i < bytes_array->length; i += 4) {
+    u32 word = (bytes_array->bytes[i + 0] << 0) | (bytes_array->bytes[i + 1] << 8) | (bytes_array->bytes[i + 2] << 16) |
+               (bytes_array->bytes[i + 3] << 24);
+
+    fprintf(destination, "0x%08X, ", word);
+    u8 new_line = 8;
+    if (((i / 4) + 1) % new_line == 0)
+      fprintf(destination, "\n");
+  }
+  fprintf(destination, "\n");
+}
+
+static bool make_full_shader_name(char *buf, size_t buf_size, const char *name, const char *stage_suffix) {
+  int len = snprintf(buf, buf_size, "%s_%s", name, stage_suffix);
+  if (len < 0 || (size_t)len >= buf_size) {
+    fprintf(stderr, "Shader name '%s_%s' exceeds buffer size %zu.\n", name, stage_suffix, buf_size);
+    return false;
+  }
+  return true;
+}
+
 inline void codegen_shader_spec(
     FILE *dst,
     const ParsedShader *parsed_shader,
     const GLSLSource *opengl_glsl_source,
     const SpirVBytesArray *spirv_bytes_array
 ) {
+  const char *shader_name = parsed_shader->name;
+  const char *stage_suffix = shader_stage_to_string[parsed_shader->stage];
+
+  char full_name[256];
+  if (!make_full_shader_name(full_name, sizeof(full_name), shader_name, stage_suffix)) return;
+
   // bytes
-  fprintf(dst, "const uint32_t %s_spv[] = {\n", parsed_shader->name);
+  fprintf(dst, "const uint32_t %s_spv[] = {\n", full_name);
   print_bytes_array(dst, spirv_bytes_array);
   fprintf(dst, "};\n\n");
 
   // opengl glsl
-  fprintf(dst, "static const char* %s_opengl_glsl = \"", parsed_shader->name);
+  fprintf(dst, "static const char* %s_opengl_glsl = \"", full_name);
   print_c_string_with_newlines(dst, opengl_glsl_source[GRAPHICS_BACKEND_OPENGL].string);
   fprintf(dst, "\";\n\n");
 
   // vulkan glsl
-  fprintf(dst, "static const char* %s_vulkan_glsl = \"", parsed_shader->name);
+  fprintf(dst, "static const char* %s_vulkan_glsl = \"", full_name);
   print_c_string_with_newlines(dst, opengl_glsl_source[GRAPHICS_BACKEND_VULKAN].string);
   fprintf(dst, "\";\n\n");
 
   // struct definition
-  fprintf(dst, "const ShaderSpec %s_shader_spec = {\n", parsed_shader->name);
-  fprintf(dst, "  .name = \"%s\",\n", parsed_shader->name);
-  fprintf(dst, "  .opengl_glsl = %s_opengl_glsl,\n", parsed_shader->name);
-  fprintf(dst, "  .spv = %s_spv,\n", parsed_shader->name);
-  fprintf(dst, "  .spv_size = sizeof(%s_spv),\n", parsed_shader->name);
+  fprintf(dst, "const ShaderSpec %s_shader_spec = {\n", full_name);
+  fprintf(dst, "  .name = \"%s\",\n", full_name);
+  fprintf(dst, "  .opengl_glsl = %s_opengl_glsl,\n", full_name);
+  fprintf(dst, "  .spv = %s_spv,\n", full_name);
+  fprintf(dst, "  .spv_size = sizeof(%s_spv),\n", full_name);
 
   const char *vertex_layout_name = parsed_shader->vertex_layout->name;
   if (parsed_shader->stage != SHADER_STAGE_VERTEX) {
@@ -722,42 +763,26 @@ inline void codegen_shader_spec(
   fprintf(dst, "};\n\n");
 }
 
-void codegen_vulkan_shader_module_creation(FILE *dst) {
-  fprintf(dst, "inline void init_generated_shader_vk_modules(VkDevice device){\n");
-  fprintf(dst, "  for(uint32_t i = 0; i < NUM_SHADER_HANDLES; i++) {\n");
-  fprintf(dst, "    VkShaderModuleCreateInfo shader_module_create_info;\n");
-  fprintf(dst, "    shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;\n");
-  fprintf(dst, "    shader_module_create_info.pNext = NULL;\n");
-  fprintf(dst, "    shader_module_create_info.flags = 0;\n");
-  fprintf(dst, "    shader_module_create_info.codeSize = generated_shader_specs[i]->spv_size;\n");
-  fprintf(dst, "    shader_module_create_info.pCode = generated_shader_specs[i]->spv;\n\n");
-  fprintf(
-      dst, "    VkResult result = vkCreateShaderModule(device, &shader_module_create_info, NULL, &shader_modules[i]);\n"
-  );
-  fprintf(dst, "    if (result != VK_SUCCESS) {\n");
-  fprintf(
-      dst, "      fprintf(stderr, \"Creating shader module for generated shader %%s failed.\\n\", "
-           "generated_shader_specs[i]->name);\n"
-  );
-  fprintf(dst, "    }\n");
-  fprintf(dst, "  }\n");
-  fprintf(dst, "}\n\n");
-}
-
-void codegen_footer(FILE *dst, const ParsedShadersIR *ir) {
+static void codegen_footer(FILE *dst, const ParsedShadersIR *ir) {
   fprintf(dst, "const uint32_t num_generated_specs = %u;\n", ir->num_parsed_shaders);
 
   fprintf(dst, "static const ShaderSpec* generated_shader_specs[] = {\n");
   for (u32 i = 0; i < ir->num_parsed_shaders; i++) {
-    fprintf(dst, "  &%s_shader_spec,\n", ir->parsed_shaders[i].name);
+    const ParsedShader *shader = &ir->parsed_shaders[i];
+    const char *shader_name = shader->name;
+    const char *stage_suffix = shader_stage_to_string[shader->stage];
+
+    char full_name[256];
+    if (!make_full_shader_name(full_name, sizeof(full_name), shader_name, stage_suffix)) return;
+
+    fprintf(dst, "  &%s_shader_spec,\n", full_name);
   }
   fprintf(dst, "};\n\n");
 
   fprintf(dst, "extern VkShaderModule shader_modules[NUM_SHADER_HANDLES];\n");
-  // codegen_vulkan_shader_module_creation(dst);
 }
 
-void codegen_buffer_labels(FILE *dst, const ParsedShadersIR *ir) {
+static void codegen_buffer_labels(FILE *dst, const ParsedShadersIR *ir) {
   fprintf(dst, "enum UniformBufferLabel {\n");
   for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
     const DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
@@ -768,6 +793,86 @@ void codegen_buffer_labels(FILE *dst, const ParsedShadersIR *ir) {
   fprintf(dst, "\n  NUM_UNIFORM_BUFFER_LABELS\n");
   fprintf(dst, "};\n\n");
 }
+
+static void codegen_shader_handle_enum(FILE *dst, const ParsedShadersIR *ir) {
+  fprintf(dst, "enum ShaderHandle {\n");
+
+  for (u32 shaders_index = 0; shaders_index < ir->num_parsed_shaders; shaders_index++) {
+    const ParsedShader *shader = &ir->parsed_shaders[shaders_index];
+    const char *stage_suffix = shader_stage_to_enum_suffix[shader->stage];
+    fprintf(dst, "  SHADER_HANDLE_");
+    print_name_in_caps(dst, shader->name);
+    fprintf(dst, "%s,\n", stage_suffix);
+  }
+  fprintf(dst, "\n  NUM_SHADER_HANDLES\n};\n\n");
+}
+
+static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir) {
+  u32 num_names = 0;
+  ShaderNameValid names[MAX_NUM_SHADERS];
+  memset(names, 0, sizeof(names));
+
+  bool valid = true;
+
+  for (u32 j = 0; j < ir->num_parsed_shaders; j++) {
+    const ParsedShader *shader = &ir->parsed_shaders[j];
+    bool is_vert = (shader->stage == SHADER_STAGE_VERTEX);
+    bool is_frag = (shader->stage == SHADER_STAGE_FRAGMENT);
+    bool is_comp = (shader->stage == SHADER_STAGE_COMPUTE);
+
+    bool found = false;
+    for (u32 i = 0; i < num_names; i++) {
+      if (strcmp(shader->name, names[i].name) != 0)
+        continue;
+
+      ShaderNameValid *entry = &names[i];
+
+      if ((is_vert && entry->vert) || (is_frag && entry->frag) || (is_comp && entry->comp)) {
+        fprintf(stderr, "Shader %s has a duplicate stage.\n", shader->name);
+        valid = false;
+      }
+      if (is_comp && (entry->vert || entry->frag)) {
+        fprintf(stderr, "Shader %s mixes compute with vertex/fragment stages.\n", shader->name);
+        valid = false;
+      }
+      if ((is_vert || is_frag) && entry->comp) {
+        fprintf(stderr, "Shader %s mixes vertex/fragment with compute stage.\n", shader->name);
+        valid = false;
+      }
+
+      entry->vert |= is_vert;
+      entry->frag |= is_frag;
+      entry->comp |= is_comp;
+      found = true;
+      break;
+    }
+
+    if (!found) {
+      ShaderNameValid *entry = &names[num_names++];
+      entry->name = shader->name;
+      entry->vert = is_vert;
+      entry->frag = is_frag;
+      entry->comp = is_comp;
+    }
+  }
+
+  // Validation pass over found pairs.
+  for (u32 i = 0; i < num_names; i++) {
+    ShaderNameValid *entry = &names[i];
+    if (entry->comp) {
+      continue;
+    }
+    if (!entry->vert || !entry->frag) {
+      fprintf(stderr, "Shader %s is missing a %s stage.\n", entry->name, !entry->vert ? "vertex" : "fragment");
+      valid = false;
+    }
+  }
+
+  return valid;
+}
+
+// Only going to call this after validating that we have matching vert/frag pairs.
+// static void codegen_shader_program_enum(FILE *dst, const ParsedShadersIR *ir) {}
 
 // The real deal!
 bool codegen(const char *output_filepath, const ParsedShadersIR *ir) {
@@ -781,43 +886,37 @@ bool codegen(const char *output_filepath, const ParsedShadersIR *ir) {
 
   // First pass over shaders to check spirv compilation success and perform slice replacements
   bool should_codegen = true;
-  for (u32 shaders_index = 0; shaders_index < ir->num_parsed_shaders; shaders_index++) {
-    const ParsedShader *current_parsed_shader = &ir->parsed_shaders[shaders_index];
+  for (u32 shaders_idx = 0; shaders_idx < ir->num_parsed_shaders; shaders_idx++) {
+    GLSLSource *source = glsl_sources[shaders_idx];
+    const ParsedShader *current_shader = &ir->parsed_shaders[shaders_idx];
 
     // Replace string slices
-    for (u32 backend_index = 0; backend_index < NUM_GRAPHICS_BACKENDS; backend_index++) {
-      glsl_sources[shaders_index][backend_index] =
-          replace_string_slices(current_parsed_shader, (GraphicsBackend)backend_index);
+    for (u32 backend_idx = 0; backend_idx < NUM_GRAPHICS_BACKENDS; backend_idx++) {
+      source[backend_idx] = replace_string_slices(current_shader, (GraphicsBackend)backend_idx);
     }
 
     // Compile GLSL to spirv
-    spirv_bytes_arrays[shaders_index] = compile_vulkan_source_to_spirv(
-        glsl_sources[shaders_index][GRAPHICS_BACKEND_VULKAN], current_parsed_shader->stage
-    );
-    if (spirv_bytes_arrays[shaders_index].bytes == NULL) {
-      printf("Compilation for %s failed.\n", current_parsed_shader->name);
+    spirv_bytes_arrays[shaders_idx] =
+        compile_vulkan_source_to_spirv(source[GRAPHICS_BACKEND_VULKAN], current_shader->stage);
+    if (spirv_bytes_arrays[shaders_idx].bytes == NULL) {
+      printf("Compilation for %s failed.\n", current_shader->name);
       should_codegen = false;
     }
   }
 
+  bool pairs_valid = validate_vertex_fragment_pairs(ir);
+  if (!pairs_valid) {
+    should_codegen = false;
+  }
+
   if (!should_codegen) {
-    fprintf(stderr, "Shader compilation failed. Not opening %s for writing. Stopping.\n", output_filepath);
+    fprintf(stderr, "Shader compilation failed. Not writing %s. Stopping.\n", output_filepath);
     return false;
   }
 
   FILE *dst = fopen(output_filepath, "w");
-
   codegen_compiled_shader_header(dst);
-
-  // replace string slices, compile vulkan glsl to spirv, and emit the enum with shader IDs
-  fprintf(dst, "enum ShaderHandle {\n");
-
-  for (u32 shaders_index = 0; shaders_index < ir->num_parsed_shaders; shaders_index++) {
-    fputs("  SHADER_HANDLE_", dst);
-    print_name_in_caps(dst, ir->parsed_shaders[shaders_index].name);
-    fputs(",\n", dst);
-  }
-  fprintf(dst, "\n  NUM_SHADER_HANDLES\n};\n\n");
+  codegen_shader_handle_enum(dst, ir);
 
   // codegen for vertex layouts
   // struct definition
@@ -846,9 +945,7 @@ bool codegen(const char *output_filepath, const ParsedShadersIR *ir) {
 
   generate_vulkan_descriptor_set_binding_lists(dst, ir);
   generate_vulkan_descriptor_write_templates(dst, ir);
-
   generate_vulkan_descriptor_pool_size_array(dst, ir);
-
   codegen_struct_defintions(dst, ir->glsl_structs, ir->num_glsl_structs);
 
   // for individual shaders, the spirv bytes, the opengl glsl

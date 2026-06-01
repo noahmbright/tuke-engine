@@ -11,6 +11,8 @@
 #define MAX_VERTEX_LAYOUT_NAME_LENGTH 128
 #define MAX_DESCRIPTOR_SET_LAYOUT_NAME_LENGTH 256
 
+enum GraphicsBackend { GRAPHICS_BACKEND_VULKAN, GRAPHICS_BACKEND_OPENGL, NUM_GRAPHICS_BACKENDS };
+
 enum GLSLType {
   GLSL_TYPE_NULL,
 
@@ -169,8 +171,7 @@ inline bool vertex_layout_equals(const VertexLayout *left, const VertexLayout *r
     bool same_type = (l.glsl_type == r.glsl_type);
     bool same_binding = (l.binding == r.binding);
     bool same_rate = (l.rate == r.rate);
-    bool same_glsl_type = (l.glsl_type == r.glsl_type);
-    if (!(same_type && same_location && same_binding && same_rate && same_glsl_type)) {
+    if (!(same_type && same_location && same_binding && same_rate)) {
       return false;
     }
   }

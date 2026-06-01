@@ -598,7 +598,7 @@ VkFramebuffer create_framebuffer(
 ColorDepthFramebuffer create_color_depth_framebuffer(
     const VulkanContext *ctx, VkExtent2D extent, VkFormat color_format, VkFormat depth_format
 );
-void destroy_color_depth_framebuffer(const VulkanContext *ctx, ColorDepthFramebuffer *color_depth_framebuffer);
+void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *color_depth_framebuffer);
 
 // Images/Textures - May want to have this transitioning business be entirely backend
 void transition_image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout);
