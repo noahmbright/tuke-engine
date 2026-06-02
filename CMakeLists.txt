@@ -30,12 +30,6 @@ function(add_game_executable target)
     target_link_options(${target} PRIVATE -fsanitize=address,undefined)
 endfunction()
 
-add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/app/og_main/main.cpp)
-add_game_executable(${PROJECT_NAME})
-
-#add_executable(vulkan_test ${CMAKE_SOURCE_DIR}/app/vulkan_test/vulkan_test.cpp)
-#add_game_executable(vulkan_test)
-
 add_executable(opengl_test ${CMAKE_SOURCE_DIR}/app/opengl_test/opengl_test.cpp)
 add_game_executable(opengl_test)
 

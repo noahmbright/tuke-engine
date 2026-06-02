@@ -38,7 +38,7 @@ def main():
 
     if not args.no_build:
         target = args.target or args.run
-        make_cmd = ["make", "-C", "build"]
+        make_cmd = ["make", "-C", "build", "-j32"]
         if target:
             print(f"Building target: {target}")
             make_cmd.append(target)
