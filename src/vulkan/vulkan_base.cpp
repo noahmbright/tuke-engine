@@ -1173,7 +1173,7 @@ create_vertex_attribute_description(u32 location, u32 binding, VkFormat format, 
   return description;
 }
 
-VkPipelineShaderStageCreateInfo
+static VkPipelineShaderStageCreateInfo
 create_shader_stage_info(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point) {
   VkPipelineShaderStageCreateInfo shader_stage_create_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -2000,17 +2000,7 @@ void flush_staging_arena(const VulkanContext *context, StagingArena *arena) {
   end_single_use_command_buffer(context, command_buffer);
 }
 
-ShaderModule create_shader_stage(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point) {
-  ShaderModule shader_stage = {
-      .module = module,
-      .entry_point = entry_point,
-      .stage = stage,
-  };
-  return shader_stage;
-}
-
 UniformBuffer create_uniform_buffer(const VulkanContext *context, u32 buffer_size) {
-
   UniformBuffer uniform_buffer = {
       .vulkan_buffer = create_buffer(context, BUFFER_TYPE_UNIFORM, buffer_size),
       .size = buffer_size,

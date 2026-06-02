@@ -2,6 +2,7 @@
 
 #include "vulkan/vulkan_core.h"
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -109,11 +110,11 @@ typedef struct {
   VkFence in_flight_fence;
 } FrameSyncObjects;
 
-struct QueueFamilyIndices {
+typedef struct {
   int graphics_family;
   int present_family;
   int compute_family;
-};
+} QueueFamilyIndices;
 
 // History: here is the first C typedef struct of this project's life cycle.
 //          At least, the first one I noticed (may have copied another one before, whoops)
@@ -127,13 +128,13 @@ typedef struct {
 } VulkanWindowInfo;
 
 // TODO is this necessary as a swapchain member?
-struct DepthBuffer {
+typedef struct {
   VkImage image;
   VkImageView image_view;
   VkDeviceMemory device_memory;
-};
+} DepthBuffer;
 
-struct SwapchainStorage {
+typedef struct {
   bool use_static;
 
   u32 image_count;
@@ -150,15 +151,15 @@ struct SwapchainStorage {
   } as;
 
   DepthBuffer depth_buffers[NUM_SWAPCHAIN_IMAGES];
-};
+} SwapchainStorage;
 
-struct ShaderModule {
+typedef struct {
   VkShaderModule module;
   VkShaderStageFlagBits stage;
   const char *entry_point;
-};
+} ShaderModule;
 
-struct VulkanContext {
+typedef struct {
   VkDevice device;
   VkQueue graphics_queue;
   VkQueue present_queue;
@@ -204,14 +205,14 @@ struct VulkanContext {
   // These bools stored so we know to destroy the queue differently on teardown.
   bool compute_queue_index_is_different_than_graphics;
   bool present_queue_index_is_different_than_graphics;
-};
+} VulkanContext;
 
-struct VulkanBuffer {
+typedef struct {
   VkBuffer buffer;
   VkDeviceMemory memory;
   VkMemoryRequirements memory_requirements;
   VkMemoryPropertyFlags memory_property_flags;
-};
+} VulkanBuffer;
 
 // Uniform buffer layout is currently managed manually via push_uniform, which
 // advances a linear offset and returns an (offset, size) handle. Callers are
@@ -228,42 +229,42 @@ struct VulkanBuffer {
 //     and writes become direct field assignments through the mapped pointer.
 //   - Add explicit data_size to write_to_uniform_buffer so the copy size is always
 //     the caller's actual type size, not the reserved slot size.
-struct UniformBufferManager {
+typedef struct {
   u32 current_offset;
-};
+} UniformBufferManager;
 
-struct UniformWrite {
+typedef struct {
   u32 offset;
   u32 size;
-};
+} UniformWrite;
 
-struct UniformBuffer {
+typedef struct {
   VulkanBuffer vulkan_buffer;
   u8 *mapped;
   u32 size;
-};
+} UniformBuffer;
 
-struct ReadOnlyStorageBuffer {
+typedef struct {
   VulkanBuffer vulkan_buffer;
   u8 *mapped;
   u32 size;
-};
+} ReadOnlyStorageBuffer;
 
-struct ReadWriteStorageBuffer {
+typedef struct {
   VulkanBuffer vulkan_buffer;
   u8 *mapped;
   u32 size;
-};
+} ReadWriteStorageBuffer;
 
 // TODO this guy's on the chopping block.
-struct ViewportState {
+typedef struct {
   VkViewport viewport;
   VkRect2D scissor;
-};
+} ViewportState;
 
-enum BlendMode { BLEND_MODE_OPAQUE, BLEND_MODE_ALPHA };
+typedef enum { BLEND_MODE_OPAQUE, BLEND_MODE_ALPHA } BlendMode;
 
-struct PipelineConfig {
+typedef struct {
   // pipeline create info
   VkPipelineShaderStageCreateInfo stages[MAX_SHADER_STAGE_COUNT];
   u32 stage_count;
@@ -287,9 +288,9 @@ struct PipelineConfig {
   BlendMode blend_mode;
 
   VkExtent2D swapchain_extent;
-};
+} PipelineConfig;
 
-enum BufferType {
+typedef enum {
   BUFFER_TYPE_STAGING,
   BUFFER_TYPE_VERTEX,
   BUFFER_TYPE_INDEX,
@@ -297,16 +298,16 @@ enum BufferType {
   BUFFER_TYPE_COHERENT_STREAMING,
   BUFFER_TYPE_READONLY_STORAGE,
   BUFFER_TYPE_READ_WRITE_STORAGE,
-};
+} BufferType;
 
-struct StagingArena {
+typedef struct {
   VulkanBuffer buffer;
   u32 total_size;
   VkBuffer destination_buffers[MAX_COPY_REGIONS];
   VkBufferCopy copy_regions[MAX_COPY_REGIONS];
   u32 num_copy_regions;
   u32 offset;
-};
+} StagingArena;
 
 // Final vulkan API used with this struct is vkUpdateDescriptorSets
 // vkUpdateDescriptorSets acts on arrays of descriptor writes and copies.
@@ -316,7 +317,7 @@ struct StagingArena {
 // reused in different allocations, I guess?
 // This struct manages the write/copy arrays. It also manages the bindings
 // that are used to create the layouts.
-struct DescriptorSetBuilder {
+typedef struct {
   VkDevice device;
 
   // Layout bindings: The shape of the descriptor.
@@ -342,31 +343,31 @@ struct DescriptorSetBuilder {
   // Sampler, image view, and image layout.
   u32 image_info_count;
   VkDescriptorImageInfo descriptor_image_infos[MAX_DESCRIPTOR_IMAGE_INFOS];
-};
+} DescriptorSetBuilder;
 
 // TODO want less things called "Handle"
-struct DescriptorSetHandle {
+typedef struct {
   VkDescriptorSet descriptor_set;
   VkDescriptorSetLayout descriptor_set_layout;
-};
+} DescriptorSetHandle;
 
 // TODO don't like how this is redefined for my personal engine, STB, and here again for Vulkan
-struct VulkanImageData {
+typedef struct {
   u32 width;
   u32 height;
   u32 n_channels;
   u8 *data;
-};
+} VulkanImageData;
 
-struct VulkanTexture {
+typedef struct {
   VkImage image;
   u32 height;
   u32 width;
   VkDeviceMemory device_memory;
   VkImageView image_view;
-};
+} VulkanTexture;
 
-struct RenderCall {
+typedef struct {
   u32 num_vertices;
   u32 instance_count;
   VkPipeline graphics_pipeline;
@@ -383,38 +384,38 @@ struct RenderCall {
   u32 num_indices;
   VkBuffer index_buffer;
   bool is_indexed;
-};
+} RenderCall;
 
-struct BufferHandle {
+typedef struct {
   u64 offset;
   u64 size;
   BufferType buffer_type;
   void *data;
-};
+} BufferHandle;
 
-struct BufferUploadQueue {
+typedef struct {
   u64 vertex_buffer_offset;
   u64 index_buffer_offset;
   BufferHandle slices[MAX_BUFFER_UPLOADS];
   u32 num_slices;
-};
+} BufferUploadQueue;
 
-struct BufferManager {
+typedef struct {
   VulkanContext *context;
   VulkanBuffer vertex_buffer;
   VulkanBuffer index_buffer;
   StagingArena staging_arena;
-};
+} BufferManager;
 
 // TODO Audit this. Unused.
-struct CoherentStreamingBuffer {
+typedef struct {
   VulkanBuffer vulkan_buffer;
   u8 *data;
   u32 size;
   u32 head;
-};
+} CoherentStreamingBuffer;
 
-struct ColorDepthFramebuffer {
+typedef struct {
   VkRenderPass render_pass;
   VkFramebuffer framebuffer;
 
@@ -425,7 +426,7 @@ struct ColorDepthFramebuffer {
   VkImage depth_image;
   VkDeviceMemory depth_image_device_memory;
   VkImageView depth_image_view;
-};
+} ColorDepthFramebuffer;
 
 // Init/destroy
 VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_info);
@@ -464,7 +465,6 @@ void end_single_use_command_buffer(const VulkanContext *ctx, VkCommandBuffer com
 
 // Shaders
 VkShaderModule create_shader_module(VkDevice device, const u32 *code, u32 code_size);
-ShaderModule create_shader_stage(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point = "main");
 
 // Pipelines
 VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *config, VkPipelineCache pipeline_cache);
