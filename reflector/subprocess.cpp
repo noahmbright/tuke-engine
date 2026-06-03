@@ -164,7 +164,7 @@ void dump_source_with_line_numbers(const char *source_string) {
   }
 }
 
-SpirVBytesArray compile_vulkan_source_to_spirv(GLSLSource glsl_source, ShaderStage stage) {
+SpirVBytesArray compile_to_spirv(GLSLSource glsl_source, ShaderStage stage) {
   SpirVBytesArray bytes_array;
   bytes_array.length = 0;
   bytes_array.bytes = NULL;

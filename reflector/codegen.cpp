@@ -6,7 +6,6 @@
 #include "subprocess.h"
 
 #include <assert.h>
-#include <cstring>
 
 static const u32 max_num_vertex_attributes = 4;
 
@@ -238,7 +237,6 @@ inline void codegen_compiled_shader_header(FILE *dst) {
 
 static inline void codegen_shader_spec_struct_definition(FILE *dst) {
   fprintf(dst, "struct ShaderSpec {\n");
-  fprintf(dst, "  const char* name;\n");
   fprintf(dst, "  const char* opengl_glsl;\n");
   fprintf(dst, "  const uint32_t* spv;\n");
   fprintf(dst, "  const uint32_t spv_size;\n");
@@ -722,48 +720,46 @@ static bool make_full_shader_name(char *buf, size_t buf_size, const char *name, 
   return true;
 }
 
-inline void codegen_shader_spec(
-    FILE *dst,
-    const ParsedShader *parsed_shader,
-    const GLSLSource *opengl_glsl_source,
-    const SpirVBytesArray *spirv_bytes_array
-) {
+inline void codegen_shader_spec(FILE *dst, const CompiledShader *shader) {
+  const ParsedShader *parsed_shader = shader->parsed;
+  const GLSLSource *glsl_sources = shader->sources;
+
   const char *shader_name = parsed_shader->name;
   const char *stage_suffix = shader_stage_to_string[parsed_shader->stage];
 
   char full_name[256];
-  if (!make_full_shader_name(full_name, sizeof(full_name), shader_name, stage_suffix))
+  if (!make_full_shader_name(full_name, sizeof(full_name), shader_name, stage_suffix)) {
     return;
+  }
+
+  fprintf(dst, "/////////////////////////////////////////////////////////////////////////////////\n");
+  fprintf(dst, "// SHADER SPECIFICATION FOR: %s\n", full_name);
+  fprintf(dst, "/////////////////////////////////////////////////////////////////////////////////\n");
 
   // bytes
   fprintf(dst, "const uint32_t %s_spv[] = {\n", full_name);
-  print_bytes_array(dst, spirv_bytes_array);
+  print_bytes_array(dst, &shader->spirv_bytes_array);
   fprintf(dst, "};\n\n");
 
   // opengl glsl
   fprintf(dst, "static const char* %s_opengl_glsl = \"", full_name);
-  print_c_string_with_newlines(dst, opengl_glsl_source[GRAPHICS_BACKEND_OPENGL].string);
+  print_c_string_with_newlines(dst, glsl_sources[GRAPHICS_BACKEND_OPENGL].string);
   fprintf(dst, "\";\n\n");
 
   // vulkan glsl
   fprintf(dst, "static const char* %s_vulkan_glsl = \"", full_name);
-  print_c_string_with_newlines(dst, opengl_glsl_source[GRAPHICS_BACKEND_VULKAN].string);
+  print_c_string_with_newlines(dst, glsl_sources[GRAPHICS_BACKEND_VULKAN].string);
   fprintf(dst, "\";\n\n");
 
   // struct definition
+  bool is_vertex = parsed_shader->stage == SHADER_STAGE_VERTEX;
+  const char *vertex_layout_name = is_vertex ? parsed_shader->vertex_layout->name : vertex_layout_null_string;
+
   fprintf(dst, "const ShaderSpec %s_shader_spec = {\n", full_name);
-  fprintf(dst, "  .name = \"%s\",\n", full_name);
   fprintf(dst, "  .opengl_glsl = %s_opengl_glsl,\n", full_name);
   fprintf(dst, "  .spv = %s_spv,\n", full_name);
   fprintf(dst, "  .spv_size = sizeof(%s_spv),\n", full_name);
-
-  const char *vertex_layout_name = parsed_shader->vertex_layout->name;
-  if (parsed_shader->stage != SHADER_STAGE_VERTEX) {
-    vertex_layout_name = vertex_layout_null_string;
-  }
   fprintf(dst, "  .vertex_layout_id = %s,\n", vertex_layout_name);
-
-  // fprintf(dst, "  .stage = %s,\n", shader_stage_to_enum_string[parsed_shader->stage]);
   fprintf(dst, "};\n\n");
 }
 
@@ -777,8 +773,9 @@ static void codegen_footer(FILE *dst, const ParsedShadersIR *ir) {
     const char *stage_suffix = shader_stage_to_string[shader->stage];
 
     char full_name[256];
-    if (!make_full_shader_name(full_name, sizeof(full_name), shader_name, stage_suffix))
+    if (!make_full_shader_name(full_name, sizeof(full_name), shader_name, stage_suffix)) {
       return;
+    }
 
     fprintf(dst, "  &%s_shader_spec,\n", full_name);
   }
@@ -820,9 +817,8 @@ static void codegen_descriptor_set_enum(FILE *dst, const ParsedShadersIR *ir) {
 }
 
 // Only going to call this after validating that we have matching vert/frag pairs.
-static void codegen_shader_program_enum(FILE *dst, const ShaderNameValid *names, u32 num_names) {
+static void codegen_shader_program_enum(FILE *dst, const ShaderProgram *names, u32 num_names) {
   fprintf(dst, "typedef enum {\n");
-
   for (u32 i = 0; i < num_names; i++) {
     fprintf(dst, "  SHADER_PROGRAM_");
     print_name_in_caps(dst, names[i].name);
@@ -839,9 +835,8 @@ static void codegen_vertex_layout_enum(FILE *dst, const ParsedShadersIR *ir) {
   fprintf(dst, "\n  NUM_VERTEX_LAYOUT_IDS\n} VertexLayoutID;\n\n");
 }
 
-static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderNameValid *names, u32 *num_names) {
+static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderProgram *names, u32 *num_names) {
   u32 found_names = 0;
-
   bool valid = true;
 
   for (u32 j = 0; j < ir->num_parsed_shaders; j++) {
@@ -852,11 +847,12 @@ static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderName
 
     bool found = false;
     for (u32 i = 0; i < found_names; i++) {
-      if (strcmp(shader->name, names[i].name) != 0)
+      if (strcmp(shader->name, names[i].name) != 0) {
         continue;
+      }
+      ShaderProgram *entry = &names[i];
 
-      ShaderNameValid *entry = &names[i];
-
+      // Check stage compaibility.
       if ((is_vert && entry->vert) || (is_frag && entry->frag) || (is_comp && entry->comp)) {
         fprintf(stderr, "Shader %s has a duplicate stage.\n", shader->name);
         valid = false;
@@ -878,7 +874,7 @@ static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderName
     }
 
     if (!found) {
-      ShaderNameValid *entry = &names[found_names++];
+      ShaderProgram *entry = &names[found_names++];
       entry->name = shader->name;
       entry->vert = is_vert;
       entry->frag = is_frag;
@@ -886,14 +882,15 @@ static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderName
     }
   }
 
-  // Validation pass over found pairs.
+  // Validate names are either compute OR both vertex and fragment.
   for (u32 i = 0; i < found_names; i++) {
-    ShaderNameValid *entry = &names[i];
+    ShaderProgram *entry = &names[i];
     if (entry->comp) {
       continue;
     }
     if (!entry->vert || !entry->frag) {
-      fprintf(stderr, "Shader %s is missing a %s stage.\n", entry->name, !entry->vert ? "vertex" : "fragment");
+      const char *missing_stage = !entry->vert ? "vertex" : "fragment";
+      fprintf(stderr, "Shader %s is missing a %s stage.\n", entry->name, missing_stage);
       valid = false;
     }
   }
@@ -904,35 +901,30 @@ static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderName
 
 // The real deal!
 bool codegen(const char *output_filepath, const ParsedShadersIR *ir) {
+  CompiledShader compiled_shaders[MAX_NUM_SHADERS];
 
-  // Init
-  GLSLSource glsl_sources[MAX_NUM_SHADERS][NUM_GRAPHICS_BACKENDS];
-  memset(glsl_sources, 0, sizeof(glsl_sources));
-
-  SpirVBytesArray spirv_bytes_arrays[MAX_NUM_SHADERS];
-  memset(spirv_bytes_arrays, 0, sizeof(spirv_bytes_arrays));
-
-  // First pass over shaders to check spirv compilation success and perform slice replacements
+  // Check spirv compilation and replace slices.
   bool should_codegen = true;
   for (u32 shaders_idx = 0; shaders_idx < ir->num_parsed_shaders; shaders_idx++) {
-    GLSLSource *source = glsl_sources[shaders_idx];
-    const ParsedShader *current_shader = &ir->parsed_shaders[shaders_idx];
+    CompiledShader *compiled = &compiled_shaders[shaders_idx];
+    const ParsedShader *parsed = &ir->parsed_shaders[shaders_idx];
+    compiled->parsed = parsed;
 
     // Replace string slices
     for (u32 backend_idx = 0; backend_idx < NUM_GRAPHICS_BACKENDS; backend_idx++) {
-      source[backend_idx] = replace_string_slices(current_shader, (GraphicsBackend)backend_idx);
+      compiled->sources[backend_idx] = replace_string_slices(parsed, (GraphicsBackend)backend_idx);
     }
 
-    // Compile GLSL to spirv
-    spirv_bytes_arrays[shaders_idx] =
-        compile_vulkan_source_to_spirv(source[GRAPHICS_BACKEND_VULKAN], current_shader->stage);
-    if (spirv_bytes_arrays[shaders_idx].bytes == NULL) {
-      printf("Compilation for %s failed.\n", current_shader->name);
+    // Spirv
+    compiled->spirv_bytes_array = compile_to_spirv(compiled->sources[GRAPHICS_BACKEND_VULKAN], parsed->stage);
+    if (compiled->spirv_bytes_array.bytes == NULL) {
+      printf("SPIR-V compilation for %s failed.\n", parsed->name);
       should_codegen = false;
     }
   }
 
-  ShaderNameValid program_names[MAX_NUM_SHADERS];
+  // Collect shaders into programs.
+  ShaderProgram program_names[MAX_NUM_SHADERS];
   memset(program_names, 0, sizeof(program_names));
   u32 num_names;
   bool pairs_valid = validate_vertex_fragment_pairs(ir, program_names, &num_names);
@@ -946,7 +938,6 @@ bool codegen(const char *output_filepath, const ParsedShadersIR *ir) {
   }
 
   // Codegen
-  // TODO file walking in main is incorrect. gen/shaders sees all buffers.
   FILE *dst = fopen(output_filepath, "w");
 
   codegen_compiled_shader_header(dst);
@@ -966,7 +957,7 @@ bool codegen(const char *output_filepath, const ParsedShadersIR *ir) {
   codegen_struct_defintions(dst, ir->glsl_structs, ir->num_glsl_structs);
   codegen_shader_spec_struct_definition(dst);
   for (u32 i = 0; i < ir->num_parsed_shaders; i++) {
-    codegen_shader_spec(dst, &ir->parsed_shaders[i], glsl_sources[i], &spirv_bytes_arrays[i]);
+    codegen_shader_spec(dst, &compiled_shaders[i]);
   }
 
   codegen_footer(dst, ir);
