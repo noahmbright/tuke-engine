@@ -17,7 +17,13 @@ def main():
     parser.add_argument("--no-build", action="store_true", help="Skip building")
     parser.add_argument("--target", type=str, default="", help="Make target to build (default: all)")
     parser.add_argument("--run", type=str, default="", help="Executable to run (builds only that target)")
+    parser.add_argument("--clean", action="store_true", help="Remove build/ before building")
     args = parser.parse_args()
+
+    if args.clean and os.path.isdir("build"):
+        import shutil
+        print("Cleaning build/...")
+        shutil.rmtree("build")
 
     if not os.path.isdir("build"):
         print("build/ not found, running cmake...")

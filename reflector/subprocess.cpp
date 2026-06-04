@@ -87,7 +87,6 @@ int invoke_glslValidator(const char *glsl_in_path, const char *spirv_out_path, S
   }
 }
 
-// TODO copied from gpt, must review
 static int read_file_to_heap(const char *path, u8 **out_buf, size_t *out_len) {
   *out_buf = NULL;
   *out_len = 0;
