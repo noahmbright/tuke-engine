@@ -11,10 +11,11 @@ typedef struct {
 } TemplateStringReplacement;
 
 typedef struct {
-  const ParsedShader *parsed;
-  SpirVBytesArray spirv_bytes_array;
-  GLSLSource sources[NUM_GRAPHICS_BACKENDS];
-} CompiledShader;
+  const ParsedShader *parsed[MAX_NUM_SHADERS];
+  SpirVBytesArray spirv_bytes_arrays[MAX_NUM_SHADERS];
+  GLSLSource gl_sources[MAX_NUM_SHADERS];
+  GLSLSource vk_sources[MAX_NUM_SHADERS];
+} CompiledShaders;
 
 // Accumulate data needed for an entire compute or graphics pipeline.
 // Deduplicate across vertex/fragment stages.
@@ -25,7 +26,7 @@ typedef struct {
   const ParsedShader *parsed_comp;
 } ShaderProgram;
 
-GLSLSource replace_string_slices(const ParsedShader *sliced_shader, GraphicsBackend backend);
+GLSLSource replace_string_slices(const ParsedShader *sliced_shader, Backend backend);
 
 // Return value is whether codegen was successful or not.
 bool codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_ir);

@@ -6,6 +6,8 @@
 #include "subprocess.h"
 
 #include <assert.h>
+#include <time.h>
+#include <unistd.h>
 
 static const u32 max_num_vertex_attributes = 4;
 
@@ -26,14 +28,14 @@ static u32 compute_glsl_struct_size(const GLSLStruct *glsl_struct) {
 }
 
 // line with version is #version {{ VERSION }}
-TemplateStringReplacement directive_replacement_version(GraphicsBackend backend) {
+TemplateStringReplacement directive_replacement_version(Backend backend) {
   TemplateStringReplacement replacement;
 
   switch (backend) {
-  case GRAPHICS_BACKEND_OPENGL:
+  case BACKEND_OPENGL:
     replacement.string = "410 core\n\n";
     break;
-  case GRAPHICS_BACKEND_VULKAN:
+  case BACKEND_VULKAN:
     replacement.string = "450\n\n";
     break;
   default:
@@ -44,14 +46,14 @@ TemplateStringReplacement directive_replacement_version(GraphicsBackend backend)
   return replacement;
 }
 
-TemplateStringReplacement directive_replacement_vertex_index(GraphicsBackend backend) {
+TemplateStringReplacement directive_replacement_vertex_index(Backend backend) {
   TemplateStringReplacement replacement;
 
   switch (backend) {
-  case GRAPHICS_BACKEND_OPENGL:
+  case BACKEND_OPENGL:
     replacement.string = "gl_VertexID";
     break;
-  case GRAPHICS_BACKEND_VULKAN:
+  case BACKEND_VULKAN:
     replacement.string = "gl_VertexIndex";
     break;
   default:
@@ -62,14 +64,14 @@ TemplateStringReplacement directive_replacement_vertex_index(GraphicsBackend bac
   return replacement;
 }
 
-TemplateStringReplacement directive_replacement_instance_index(GraphicsBackend backend) {
+TemplateStringReplacement directive_replacement_instance_index(Backend backend) {
   TemplateStringReplacement replacement;
 
   switch (backend) {
-  case GRAPHICS_BACKEND_OPENGL:
+  case BACKEND_OPENGL:
     replacement.string = "gl_InstanceID";
     break;
-  case GRAPHICS_BACKEND_VULKAN:
+  case BACKEND_VULKAN:
     replacement.string = "gl_InstanceIndex";
     break;
   default:
@@ -83,11 +85,11 @@ TemplateStringReplacement directive_replacement_instance_index(GraphicsBackend b
 // {{ LOCATION 0 BINDING 0 RATE_VERTEX OFFSET TIGHTLY_PACKED }}
 // turns into
 // layout(location = 0) for both opengl and vulkan
-TemplateStringReplacement directive_replacement_location(GraphicsBackend backend) {
+TemplateStringReplacement directive_replacement_location(Backend backend) {
   TemplateStringReplacement replacement;
   switch (backend) {
-  case GRAPHICS_BACKEND_OPENGL:
-  case GRAPHICS_BACKEND_VULKAN: {
+  case BACKEND_OPENGL:
+  case BACKEND_VULKAN: {
     replacement.string = "layout(location = __) ";
     replacement.length = strlen(replacement.string);
     return replacement;
@@ -105,11 +107,11 @@ TemplateStringReplacement directive_replacement_location(GraphicsBackend backend
 // turns into
 // layout(set = 0, binding = 0) for vulkan
 // layout(binding = 0) for opengl
-TemplateStringReplacement directive_replacement_set_binding(GraphicsBackend backend, DescriptorType descriptor_type) {
+TemplateStringReplacement directive_replacement_set_binding(Backend backend, DescriptorType descriptor_type) {
   TemplateStringReplacement replacement;
 
   switch (backend) {
-  case GRAPHICS_BACKEND_OPENGL:
+  case BACKEND_OPENGL:
     if (descriptor_type == DESCRIPTOR_TYPE_SAMPLER2D) {
       replacement.string = "";
       replacement.length = 0;
@@ -119,7 +121,7 @@ TemplateStringReplacement directive_replacement_set_binding(GraphicsBackend back
     }
     return replacement;
 
-  case GRAPHICS_BACKEND_VULKAN: {
+  case BACKEND_VULKAN: {
     replacement.string = "layout(set = _, binding = _) ";
     replacement.length = strlen(replacement.string);
     return replacement;
@@ -132,7 +134,7 @@ TemplateStringReplacement directive_replacement_set_binding(GraphicsBackend back
   return replacement;
 }
 
-TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_slice, GraphicsBackend backend) {
+TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_slice, Backend backend) {
 
   TemplateStringReplacement replacement;
   replacement.string = NULL;
@@ -160,7 +162,7 @@ TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_
   return replacement;
 }
 
-GLSLSource replace_string_slices(const ParsedShader *sliced_shader, GraphicsBackend backend) {
+GLSLSource replace_string_slices(const ParsedShader *sliced_shader, Backend backend) {
   u32 compiled_source_length = 0;
   u32 num_string_slices = sliced_shader->num_template_slices;
   const TemplateStringSlice *string_slices = sliced_shader->template_slices;
@@ -199,7 +201,7 @@ GLSLSource replace_string_slices(const ParsedShader *sliced_shader, GraphicsBack
       assert(string_slice->set < 10);
       assert(string_slice->binding < 10);
 
-      if (backend == GRAPHICS_BACKEND_VULKAN) {
+      if (backend == BACKEND_VULKAN) {
         // layout(set = _, binding = _) _ at 13, 26
         current_start[13] = '0' + string_slice->set;
         current_start[26] = '0' + string_slice->binding;
@@ -759,25 +761,27 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
   fprintf(dst, "};\n\n");
 }
 
-inline void codegen_shader_spec(FILE *dst, const CompiledShader *shader) {
-  const ParsedShader *parsed_shader = shader->parsed;
-  const char *stage_suffix = shader_stage_to_string[parsed_shader->stage];
+inline void codegen_shader_spec(FILE *dst, const CompiledShaders *shaders, u32 num_shaders) {
+  for (u32 i = 0; i < num_shaders; i++) {
+    const ParsedShader *parsed = shaders->parsed[i];
+    const char *stage_suffix = shader_stage_to_string[parsed->stage];
 
-  char full_name[256];
-  if (!make_full_shader_name(full_name, sizeof(full_name), shader->parsed->name, stage_suffix)) {
-    return;
+    char full_name[256];
+    if (!make_full_shader_name(full_name, sizeof(full_name), parsed->name, stage_suffix)) {
+      continue;
+    }
+
+    // Struct definition
+    bool is_vertex = parsed->stage == SHADER_STAGE_VERTEX;
+    const char *vertex_layout_name = is_vertex ? parsed->vertex_layout->name : vertex_layout_null_string;
+
+    fprintf(dst, "const ShaderSpec %s_shader_spec = {\n", full_name);
+    fprintf(dst, "  .opengl_glsl = %s_opengl_glsl,\n", full_name);
+    fprintf(dst, "  .spv = %s_spv,\n", full_name);
+    fprintf(dst, "  .spv_size = sizeof(%s_spv),\n", full_name);
+    fprintf(dst, "  .vertex_layout_id = %s,\n", vertex_layout_name);
+    fprintf(dst, "};\n\n");
   }
-
-  // Struct definition
-  bool is_vertex = parsed_shader->stage == SHADER_STAGE_VERTEX;
-  const char *vertex_layout_name = is_vertex ? parsed_shader->vertex_layout->name : vertex_layout_null_string;
-
-  fprintf(dst, "const ShaderSpec %s_shader_spec = {\n", full_name);
-  fprintf(dst, "  .opengl_glsl = %s_opengl_glsl,\n", full_name);
-  fprintf(dst, "  .spv = %s_spv,\n", full_name);
-  fprintf(dst, "  .spv_size = sizeof(%s_spv),\n", full_name);
-  fprintf(dst, "  .vertex_layout_id = %s,\n", vertex_layout_name);
-  fprintf(dst, "};\n\n");
 }
 
 static void codegen_footer(FILE *dst, const ParsedShadersIR *ir) {
@@ -791,7 +795,7 @@ static void codegen_footer(FILE *dst, const ParsedShadersIR *ir) {
 
     char full_name[256];
     if (!make_full_shader_name(full_name, sizeof(full_name), shader_name, stage_suffix)) {
-      return;
+      continue;
     }
 
     fprintf(dst, "  &%s_shader_spec,\n", full_name);
@@ -852,21 +856,43 @@ static void codegen_vertex_layout_enum(FILE *dst, const ParsedShadersIR *ir) {
   fprintf(dst, "\n  NUM_VERTEX_LAYOUT_IDS\n} VertexLayoutID;\n\n");
 }
 
-static bool compile_shaders(const ParsedShadersIR *ir, CompiledShader *compiled_shaders) {
+// returns 0 if found on PATH, -1 if not
+static int check_tool_on_path(const char *tool) {
+  const char *path_env = getenv("PATH");
+  if (!path_env)
+    return -1;
+
+  char buf[256];
+  const char *p = path_env;
+  while (*p) {
+    const char *colon = strchr(p, ':');
+    int dir_len = colon ? (int)(colon - p) : (int)strlen(p);
+    snprintf(buf, sizeof(buf), "%.*s/%s", dir_len, p, tool);
+    if (access(buf, X_OK) == 0)
+      return 0;
+    p += dir_len + (colon ? 1 : 0);
+  }
+  return -1;
+}
+
+static bool compile_shaders(const ParsedShadersIR *ir, CompiledShaders *compileds) {
+  if (check_tool_on_path("glslangValidator") != 0) {
+    fprintf(stderr, "glslangValidator not in PATH. Stopping.\n");
+    return false;
+  }
+
   bool should_codegen = true;
-  for (u32 shaders_idx = 0; shaders_idx < ir->num_parsed_shaders; shaders_idx++) {
-    CompiledShader *compiled = &compiled_shaders[shaders_idx];
-    const ParsedShader *parsed = &ir->parsed_shaders[shaders_idx];
-    compiled->parsed = parsed;
+  for (u32 i = 0; i < ir->num_parsed_shaders; i++) {
+    const ParsedShader *parsed = &ir->parsed_shaders[i];
+    compileds->parsed[i] = parsed;
 
     // Replace string slices
-    for (u32 backend_idx = 0; backend_idx < NUM_GRAPHICS_BACKENDS; backend_idx++) {
-      compiled->sources[backend_idx] = replace_string_slices(parsed, (GraphicsBackend)backend_idx);
-    }
+    compileds->gl_sources[i] = replace_string_slices(parsed, BACKEND_OPENGL);
+    compileds->vk_sources[i] = replace_string_slices(parsed, BACKEND_VULKAN);
 
     // Spirv
-    compiled->spirv_bytes_array = compile_to_spirv(compiled->sources[GRAPHICS_BACKEND_VULKAN], parsed->stage);
-    if (compiled->spirv_bytes_array.bytes == NULL) {
+    compileds->spirv_bytes_arrays[i] = compile_to_spirv(compileds->vk_sources[i], parsed->stage);
+    if (compileds->spirv_bytes_arrays[i].bytes == NULL) {
       printf("SPIR-V compilation for %s failed.\n", parsed->name);
       should_codegen = false;
     }
@@ -942,28 +968,30 @@ static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderProg
   return valid;
 }
 
-static void codegen_compiled_code(FILE *dst, const CompiledShader *shader) {
-  const GLSLSource *glsl_sources = shader->sources;
-  const char *stage_suffix = shader_stage_to_string[shader->parsed->stage];
-  char full_name[256];
-  if (!make_full_shader_name(full_name, sizeof(full_name), shader->parsed->name, stage_suffix)) {
-    return;
+static void codegen_compiled_code(FILE *dst, const CompiledShaders *shaders, u32 num_shaders) {
+  for (u32 i = 0; i < num_shaders; i++) {
+    const ParsedShader *parsed = shaders->parsed[i];
+    const char *stage_suffix = shader_stage_to_string[parsed->stage];
+    char full_name[256];
+    if (!make_full_shader_name(full_name, sizeof(full_name), parsed->name, stage_suffix)) {
+      continue;
+    }
+
+    // Bytes
+    fprintf(dst, "const uint32_t %s_spv[] = {\n", full_name);
+    print_bytes_array(dst, &shaders->spirv_bytes_arrays[i]);
+    fprintf(dst, "};\n\n");
+
+    // OpenGL GLSL
+    fprintf(dst, "static const char* %s_opengl_glsl = \"", full_name);
+    print_c_string_with_newlines(dst, shaders->gl_sources[i].string);
+    fprintf(dst, "\";\n\n");
+
+    // Vulkan GLSL
+    fprintf(dst, "static const char* %s_vulkan_glsl = \"", full_name);
+    print_c_string_with_newlines(dst, shaders->vk_sources[i].string);
+    fprintf(dst, "\";\n\n");
   }
-
-  // Bytes
-  fprintf(dst, "const uint32_t %s_spv[] = {\n", full_name);
-  print_bytes_array(dst, &shader->spirv_bytes_array);
-  fprintf(dst, "};\n\n");
-
-  // OpenGL GLSL
-  fprintf(dst, "static const char* %s_opengl_glsl = \"", full_name);
-  print_c_string_with_newlines(dst, glsl_sources[GRAPHICS_BACKEND_OPENGL].string);
-  fprintf(dst, "\";\n\n");
-
-  // Vulkan GLSL
-  fprintf(dst, "static const char* %s_vulkan_glsl = \"", full_name);
-  print_c_string_with_newlines(dst, glsl_sources[GRAPHICS_BACKEND_VULKAN].string);
-  fprintf(dst, "\";\n\n");
 }
 
 // The real deal!
@@ -980,8 +1008,14 @@ bool codegen(const char *out_path, const ParsedShadersIR *ir) {
   }
 
   // Compile and replace GLSL slices.
-  CompiledShader compiled_shaders[MAX_NUM_SHADERS];
-  bool compile_success = compile_shaders(ir, compiled_shaders);
+  struct timespec t0, t1;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+
+  CompiledShaders compiled_shaders;
+  bool compile_success = compile_shaders(ir, &compiled_shaders);
+
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  printf("SPIRV:  %.1f ms\n", (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) * 1e-6);
   if (!compile_success) {
     fprintf(stderr, "Shader compilation failed. Not writing %s.\n", out_path);
     return false;
@@ -1004,12 +1038,10 @@ bool codegen(const char *out_path, const ParsedShadersIR *ir) {
   generate_vulkan_descriptor_write_templates(dst, ir);
   generate_vulkan_descriptor_pool_size_array(dst, ir);
 
-  codegen_struct_defintions(dst, ir->glsl_structs, ir->num_glsl_structs);
   codegen_shader_spec_struct_definition(dst);
-  for (u32 i = 0; i < ir->num_parsed_shaders; i++) {
-    codegen_compiled_code(dst, &compiled_shaders[i]);
-    codegen_shader_spec(dst, &compiled_shaders[i]);
-  }
+  codegen_struct_defintions(dst, ir->glsl_structs, ir->num_glsl_structs);
+  codegen_compiled_code(dst, &compiled_shaders, ir->num_parsed_shaders);
+  codegen_shader_spec(dst, &compiled_shaders, ir->num_parsed_shaders);
 
   codegen_program_spec_struct_definition(dst);
   for (u32 i = 0; i < num_programs; i++) {
