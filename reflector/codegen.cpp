@@ -216,6 +216,7 @@ GLSLSource replace_string_slices(const ParsedShader *sliced_shader, Backend back
   GLSLSource glsl_source = {
       .length = compiled_source_length,
       .string = compiled_source,
+      .stage = sliced_shader->stage,
   };
   return glsl_source;
 }
@@ -881,23 +882,14 @@ static bool compile_shaders(const ParsedShadersIR *ir, CompiledShaders *compiled
     return false;
   }
 
-  bool should_codegen = true;
   for (u32 i = 0; i < ir->num_parsed_shaders; i++) {
     const ParsedShader *parsed = &ir->parsed_shaders[i];
     compileds->parsed[i] = parsed;
-
-    // Replace string slices
     compileds->gl_sources[i] = replace_string_slices(parsed, BACKEND_OPENGL);
     compileds->vk_sources[i] = replace_string_slices(parsed, BACKEND_VULKAN);
-
-    // Spirv
-    compileds->spirv_bytes_arrays[i] = compile_to_spirv(compileds->vk_sources[i], parsed->stage);
-    if (compileds->spirv_bytes_arrays[i].bytes == NULL) {
-      printf("SPIR-V compilation for %s failed.\n", parsed->name);
-      should_codegen = false;
-    }
   }
 
+  bool should_codegen = compile_to_spirv(compileds->vk_sources, compileds->spirv_bytes_arrays, ir->num_parsed_shaders);
   return should_codegen;
 }
 

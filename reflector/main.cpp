@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 int main(int argc, char **argv) {
 
@@ -78,7 +79,11 @@ int main(int argc, char **argv) {
   }
 
   // 3) Parse shaders
+  struct timespec t0, t1;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
   ParsedShadersIR parsed_shaders_ir = parse_all_shaders_and_populate_global_tables(&shader_to_compile_list);
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  printf("Parse:  %.1f ms\n", (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) * 1e-6);
   if (!parsed_shaders_ir.parsing_successful) {
     printf("Parsing error in shaders, reflector exiting.\n");
     return 1;

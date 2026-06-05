@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#define MAX_NUM_SHADERS 128
+
 using u8 = uint8_t;
 using u16 = uint16_t;
 using u32 = uint32_t;
@@ -50,4 +52,5 @@ static const char *shader_stage_to_enum_string[NUM_SHADER_STAGES] = {
 struct GLSLSource {
   const char *string;
   u32 length;
+  ShaderStage stage;
 };

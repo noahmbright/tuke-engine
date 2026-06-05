@@ -11,32 +11,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-int write_all(int fd, const void *buffer, u32 length) {
-  const u8 *current_position = (const u8 *)buffer;
-  while (length) {
-    ssize_t bytes_written = write(fd, current_position, length);
-    if (bytes_written < 0) {
-      if (errno == EINTR)
-        continue;
-      return -1;
-    }
-
-    current_position += bytes_written;
-    length -= bytes_written;
-  }
-
-  return 0;
-}
-
-int read_bytes_into_array(SpirVBytesArray *out_spirv_bytes) {
-  (void)out_spirv_bytes;
-  return 0;
-}
-
-int create_tempfile(char *filepath_template, u32 template_cap) {
+int create_tempfile(char *filepath_template) {
   // the Xs are replaced by mkstemp and are required
   const char *base = "/tmp/shXXXXXX";
-  if (strlen(base) + 1 > template_cap) {
+  if (strlen(base) + 1 > TEMPLATE_FILE_LENGTH) {
     errno = ENAMETOOLONG;
     return -1;
   }
@@ -50,50 +28,14 @@ int create_tempfile(char *filepath_template, u32 template_cap) {
   return fd;
 }
 
-int invoke_glslValidator(const char *glsl_in_path, const char *spirv_out_path, ShaderStage stage) {
-  // glslangValidator -S <stage> -V -o <out> <in>
-  pid_t pid = fork();
-  if (pid < 0) {
-    return -1;
-  }
-
-  const char *stage_string = shader_stage_to_string[stage];
-
-  if (pid == 0) {
-    // we're the child, we are going to invoke the validator
-    // Child: exec glslangValidator
-    char *const argv[] = {(char *)"glslangValidator",
-                          (char *)"-S",
-                          (char *)stage_string,
-                          (char *)"-V",
-                          (char *)"-o",
-                          (char *)spirv_out_path,
-                          (char *)glsl_in_path,
-                          NULL};
-    execvp("glslangValidator", argv);
-    // If we get here, exec failed
-    perror("execvp glslangValidator");
-    _exit(127);
-  } else {
-    // Parent: wait
-    int status = 0;
-    if (waitpid(pid, &status, 0) < 0)
-      return -1;
-    if (WIFEXITED(status)) {
-      return WEXITSTATUS(status);
-    }
-    // Abnormal termination (signal, etc.)
-    return -1;
-  }
-}
-
 static int read_file_to_heap(const char *path, u8 **out_buf, size_t *out_len) {
   *out_buf = NULL;
   *out_len = 0;
 
   int fd = open(path, O_RDONLY);
-  if (fd < 0)
+  if (fd < 0) {
     return -1;
+  }
 
   struct stat st;
   if (fstat(fd, &st) < 0) {
@@ -117,14 +59,16 @@ static int read_file_to_heap(const char *path, u8 **out_buf, size_t *out_len) {
   while (off < len) {
     ssize_t n = read(fd, buf + off, len - off);
     if (n < 0) {
-      if (errno == EINTR)
+      if (errno == EINTR) {
         continue;
+      }
       free(buf);
       close(fd);
       return -1;
     }
-    if (n == 0)
+    if (n == 0) {
       break; // EOF (unexpected but handled)
+    }
     off += (size_t)n;
   }
   close(fd);
@@ -142,7 +86,7 @@ static int read_file_to_heap(const char *path, u8 **out_buf, size_t *out_len) {
 
 // Could potentially optimize this with cleverer buffering.
 // Could avoid text copy by searching for boundaries and doing fwrite.
-void dump_source_with_line_numbers(const char *source_string) {
+static void dump_source_with_line_numbers(const char *source_string) {
   const u32 BUF_SIZE = 1024;
   char buf[BUF_SIZE];
 
@@ -163,85 +107,135 @@ void dump_source_with_line_numbers(const char *source_string) {
   }
 }
 
-SpirVBytesArray compile_to_spirv(GLSLSource glsl_source, ShaderStage stage) {
-  SpirVBytesArray bytes_array;
-  bytes_array.length = 0;
-  bytes_array.bytes = NULL;
+// Scatter.
+// Make tempfiles, write GLSL source to them, spawn glslValidator on them in one loop.
+static void start_spirv_compilation(CompileJob *jobs, const GLSLSource *sources, u32 num_sources) {
+  for (u32 i = 0; i < num_sources; i++) {
+    char *glsl_path = jobs[i].glsl_path;
+    char *spirv_path = jobs[i].spirv_path;
+    jobs[i].glsl_source_str = sources[i].string;
 
-  // algorithm:
-  // 1) write glsl to glsl source tempfile
-  // 2) invoke glslandValidator on the glsl source tempfile, writing a spirv bytes tempfile
-  //    - action for me is invoke glsl, glsl does the writing
-  // 3) read the compiled bytes back from the spirv bytes tempfile, return allocated buffer and length
+    // Make temp for GLSL source that we will invoke the compiler on.
+    int glsl_fd = create_tempfile(glsl_path);
+    if (glsl_fd < 0) {
+      perror("mkstemp input");
+      return;
+    }
 
-  const u32 template_file_length = 64;
+    // Write GLSL to input file
+    const u8 *cur_pos = (const u8 *)sources[i].string;
+    u32 bytes_left = sources[i].length;
+    while (bytes_left) {
+      ssize_t bytes_written = write(glsl_fd, cur_pos, bytes_left);
+      if (bytes_written < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
 
-  // 1) write glsl to tempfile
-  // make temp
-  char glsl_source_path[template_file_length];
-  int glsl_source_temp_fd = create_tempfile(glsl_source_path, template_file_length);
-  if (glsl_source_temp_fd < 0) {
-    perror("mkstemp input");
-    return bytes_array;
+        perror("write GLSL");
+        close(glsl_fd);
+        unlink(glsl_path);
+        return;
+      }
+
+      cur_pos += bytes_written;
+      bytes_left -= bytes_written;
+    }
+
+    // Ensure data reaches disk before compiler reads it (paranoid but safe).
+    fsync(glsl_fd);
+    close(glsl_fd);
+
+    // Make a tempfile for the compiled bytecode.
+    int spirv_fd = create_tempfile(spirv_path);
+    close(spirv_fd);
+    if (spirv_fd < 0) {
+      perror("mkstemp output");
+      return;
+    }
+
+    // Invoke compiler
+    pid_t pid = fork();
+    if (pid < 0) {
+      perror("fork");
+      return;
+    }
+
+    if (pid == 0) {
+      // we're the child, we are going to invoke the validator
+      // Child: exec glslangValidator
+      // glslangValidator -S <stage> -V -o <out> <in>
+      char *stage_str = (char *)shader_stage_to_string[sources[i].stage];
+      char *const argv[] = {
+          (char *)"glslangValidator", (char *)"-S", stage_str, (char *)"-V", (char *)"-o", spirv_path, glsl_path, NULL
+      };
+      execvp("glslangValidator", argv);
+
+      // If we get here, exec failed
+      perror("execvp glslangValidator");
+      _exit(127);
+    } else {
+      jobs[i].pid = pid;
+    }
+  }
+}
+
+// Gather
+static bool finish_spirv_compilation(const CompileJob *jobs, SpirVBytesArray *bytes_arrays, u32 num_jobs) {
+  for (u32 i = 0; i < num_jobs; i++) {
+    int status = 0;
+    // TODO reap zombies properly
+    if (waitpid(jobs[i].pid, &status, 0) < 0) {
+      perror("waitpid");
+      return false;
+    }
+    if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+      fprintf(stderr, "glslangValidator exited %d\n", WEXITSTATUS(status));
+      dump_source_with_line_numbers(jobs[i].glsl_source_str);
+      return false;
+    }
+    if (!WIFEXITED(status)) {
+      fprintf(stderr, "glslangValidator killed by signal %d\n", WTERMSIG(status));
+      return false;
+    }
+
+    const char *glsl_path = jobs[i].glsl_path;
+    const char *spirv_path = jobs[i].spirv_path;
+
+    // Read SPIR-V
+    u8 *bytes = NULL;
+    size_t len = 0;
+    if (read_file_to_heap(spirv_path, &bytes, &len) != 0) {
+      perror("read SPIR-V");
+      unlink(glsl_path);
+      unlink(spirv_path);
+      return false;
+    }
+
+    // Validate 4-byte word alignment
+    if ((len & 3u) != 0u) {
+      fprintf(stderr, "SPIR-V length not multiple of 4: %zu\n", len);
+      free(bytes);
+      unlink(glsl_path);
+      unlink(spirv_path);
+      return false;
+    }
+
+    // Cleanup temp files
+    unlink(glsl_path);
+    unlink(spirv_path);
+
+    // Success — hand ownership to caller
+    bytes_arrays[i].bytes = bytes;
+    bytes_arrays[i].length = (u32)len;
   }
 
-  // write temp
-  int write_glsl_source_rc = write_all(glsl_source_temp_fd, glsl_source.string, glsl_source.length);
-  // Write source to input file
-  if (write_glsl_source_rc != 0) {
-    perror("write GLSL");
-    close(glsl_source_temp_fd);
-    unlink(glsl_source_path);
-    return bytes_array;
-  }
-  // Ensure data reaches disk before compiler reads it (paranoid but safe).
-  fsync(glsl_source_temp_fd);
-  close(glsl_source_temp_fd);
+  return true;
+}
 
-  // 2) compile with validator
-  // make a tempfile where the compiled bytecode goes
-  // make temp
-  char spirv_bytecode_path[template_file_length];
-  int spirv_bytecode_temp_fd = create_tempfile(spirv_bytecode_path, template_file_length);
-  if (spirv_bytecode_temp_fd < 0) {
-    perror("mkstemp output");
-    return bytes_array;
-  }
-
-  // invoke compiler
-  int glslangValidator_rc = invoke_glslValidator(glsl_source_path, spirv_bytecode_path, stage);
-  if (glslangValidator_rc != 0) {
-    dump_source_with_line_numbers(glsl_source.string);
-    return bytes_array;
-  }
-
-  // TODO hereafter copied and needs reviewed
-  // Read SPIR-V
-  u8 *bytes = NULL;
-  size_t len = 0;
-  if (read_file_to_heap(spirv_bytecode_path, &bytes, &len) != 0) {
-    perror("read SPIR-V");
-    unlink(glsl_source_path);
-    unlink(spirv_bytecode_path);
-    return bytes_array;
-  }
-
-  // Validate 4-byte word alignment
-  if ((len & 3u) != 0u) {
-    fprintf(stderr, "SPIR-V length not multiple of 4: %zu\n", len);
-    free(bytes);
-    unlink(glsl_source_path);
-    unlink(spirv_bytecode_path);
-    return bytes_array;
-  }
-
-  // Cleanup temp files
-  unlink(glsl_source_path);
-  unlink(spirv_bytecode_path);
-
-  // Success — hand ownership to caller
-  bytes_array.bytes = bytes;
-  bytes_array.length = (u32)len;
-
-  return bytes_array;
+bool compile_to_spirv(const GLSLSource *sources, SpirVBytesArray *bytes_arrays, u32 num_sources) {
+  CompileJob jobs[MAX_NUM_SHADERS];
+  start_spirv_compilation(jobs, sources, num_sources);
+  bool success = finish_spirv_compilation(jobs, bytes_arrays, num_sources);
+  return success;
 }
