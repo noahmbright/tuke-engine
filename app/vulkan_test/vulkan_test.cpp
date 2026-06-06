@@ -1,7 +1,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include "vulkan_test.h"
-#include "c_reflector_bringup.h"
 #include "camera.h"
 #include "generated_shader_utils.h"
 #include "glfw_vulkan.h"
@@ -17,7 +16,6 @@ int main() {
   VulkanContext ctx = create_vulkan_context("Disastrous Vulkan Test", window_info);
   VkDescriptorPool descriptor_pool =
       create_descriptor_pool(ctx.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
-  init_generated_shader_vk_modules(ctx.device);
   ViewportState viewport_state = create_viewport_state_xy(ctx.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {
       {.color = {{0.01, 0.01, 0.01, 1.0}}}, {.depthStencil = {.depth = 1.0f, .stencil = 0}}
@@ -145,13 +143,29 @@ int main() {
       SHADER_HANDLE_COMMON_INSTANCED_QUAD_FRAG, mvp_pipeline_layout
   );
 
-  PipelineConfig cube_pipeline_config = create_default_graphics_pipeline_config(
-      offscreen_framebuffer.render_pass, shader_modules[SHADER_HANDLE_COMMON_CUBE_VERT],
-      shader_modules[SHADER_HANDLE_COMMON_CUBE_FRAG],
-      &generated_vulkan_vertex_layouts[common_cube_vert_shader_spec.vertex_layout_id], cube_pipeline_layout
-  );
-  cube_pipeline_config.cull_mode = VK_CULL_MODE_FRONT_BIT;
+  // Really need to pare this down. All this ceremony is so I can override cull mode
+  const ShaderSpec *cube_vert_spec = generated_shader_specs[SHADER_HANDLE_COMMON_CUBE_VERT];
+  const ShaderSpec *cube_frag_spec = generated_shader_specs[SHADER_HANDLE_COMMON_CUBE_FRAG];
+  VkShaderModule cube_vert = create_shader_module(ctx.device, cube_vert_spec->spv, cube_vert_spec->spv_size);
+  VkShaderModule cube_frag = create_shader_module(ctx.device, cube_frag_spec->spv, cube_frag_spec->spv_size);
+  PipelineConfig cube_pipeline_config = {
+      .vertex_shader = cube_vert,
+      .fragment_shader = cube_frag,
+      .stage_count = 2,
+      .vertex_input_state_create_info = &generated_vulkan_vertex_layouts[cube_vert_spec->vertex_layout_id],
+      .render_pass = offscreen_framebuffer.render_pass,
+      .pipeline_layout = cube_pipeline_layout,
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      .primitive_restart_enabled = VK_FALSE,
+      .polygon_mode = VK_POLYGON_MODE_FILL,
+      .cull_mode = VK_CULL_MODE_FRONT_BIT,
+      .front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .sample_count_flag = VK_SAMPLE_COUNT_1_BIT,
+      .blend_mode = BLEND_MODE_ALPHA,
+  };
   VkPipeline cube_pipeline = create_graphics_pipeline(ctx.device, &cube_pipeline_config, ctx.pipeline_cache);
+  vkDestroyShaderModule(ctx.device, cube_vert, NULL);
+  vkDestroyShaderModule(ctx.device, cube_frag, NULL);
 
   VkPipeline fullscreen_quad_pipeline = shader_handles_to_graphics_pipeline(
       &ctx, ctx.render_pass, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG,
@@ -324,8 +338,6 @@ int main() {
     destroy_vulkan_texture(ctx.device, &textures[i]);
   }
 
-  free_generated_shader_vk_modules(ctx.device);
-
   destroy_color_depth_framebuffer(ctx.device, &offscreen_framebuffer);
   destroy_descriptor_set_handle(ctx.device, &simple_descriptor);
   destroy_descriptor_set_handle(ctx.device, &mvp_descriptor);
@@ -346,6 +358,7 @@ int main() {
   destroy_uniform_buffer(&ctx, &global_uniform_buffer);
   vkDestroyDescriptorPool(ctx.device, descriptor_pool, NULL);
   destroy_buffer_manager(&buffer_manager);
+
   destroy_vulkan_context(&ctx);
 
   return 0;

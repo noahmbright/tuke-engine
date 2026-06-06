@@ -1,35 +1,41 @@
 #pragma once
 
+// TODO would like to get this include out, and include a source of typedefs from elsewhere.
+// This header is the general one. I will have per app defs and this will break down.
+#include "shaders.h"
+
 // TODO need to include vulkan base after generated headers because opengl cruft
 //      Do I even want to include both of these every time? Where can I be smart and
 //      pick only what I'm using?
-//      I also think these APIs are kind of ugly
-#include "c_reflector_bringup.h"
 #include "opengl_base.h"
 #include "vulkan/vulkan_base.h"
 
-VkPipeline shader_handles_to_graphics_pipeline(
-    const VulkanContext *context,
+inline VkPipeline shader_handles_to_graphics_pipeline(
+    const VulkanContext *ctx,
     VkRenderPass render_pass,
-    ShaderHandle vertex_shader_handle,
-    ShaderHandle fragment_shader_handle,
+    ShaderHandle vert_handle,
+    ShaderHandle frag_handle,
     VkPipelineLayout pipeline_layout
-);
+) {
+  const ShaderSpec *vert_spec = generated_shader_specs[vert_handle];
+  VkShaderModule vertex_shader = create_shader_module(ctx->device, vert_spec->spv, vert_spec->spv_size);
+  assert(vertex_shader != VK_NULL_HANDLE);
 
-// inline helpers
-// init generated modules
-inline void init_generated_shader_vk_modules(VkDevice device) {
-  for (uint32_t i = 0; i < NUM_SHADER_HANDLES; i++) {
-    shader_modules[i] =
-        create_shader_module(device, generated_shader_specs[i]->spv, generated_shader_specs[i]->spv_size);
-  }
-}
+  const ShaderSpec *frag_spec = generated_shader_specs[frag_handle];
+  VkShaderModule frag_shader = create_shader_module(ctx->device, frag_spec->spv, frag_spec->spv_size);
+  assert(frag_shader != VK_NULL_HANDLE);
 
-// destroy generated modules
-inline void free_generated_shader_vk_modules(VkDevice device) {
-  for (u32 i = 0; i < NUM_SHADER_HANDLES; i++) {
-    vkDestroyShaderModule(device, shader_modules[i], NULL);
-  }
+  const VkPipelineVertexInputStateCreateInfo *vertex_input_state =
+      &generated_vulkan_vertex_layouts[vert_spec->vertex_layout_id];
+
+  VkPipeline pipeline = create_default_graphics_pipeline(
+      ctx, render_pass, vertex_shader, frag_shader, vertex_input_state, pipeline_layout
+  );
+
+  vkDestroyShaderModule(ctx->device, vertex_shader, NULL);
+  vkDestroyShaderModule(ctx->device, frag_shader, NULL);
+
+  return pipeline;
 }
 
 inline void init_gl_vertex_layout(VertexLayoutID vertex_layout_id, GLuint vao, GLuint *vbos, u32 num_vbos, GLuint ebo) {

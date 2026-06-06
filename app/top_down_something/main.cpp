@@ -1,10 +1,10 @@
-#include "c_reflector_bringup.h"
 #include "camera.h"
 #include "generated_shader_utils.h"
 #include "opengl_base.h"
 #include "scene_manager.h"
 #include "tilemap.h"
 #include "tuke_engine.h"
+
 #include <OpenGL/OpenGL.h>
 #include <stdio.h>
 
@@ -47,9 +47,6 @@ int main() {
       SHADER_HANDLE_TOPDOWN_OVERWORLD_OVERLAY_VERT, SHADER_HANDLE_TOPDOWN_OVERWORLD_OVERLAY_FRAG
   );
 
-  u32 glyphs_program =
-      shader_handles_to_gl_program(SHADER_HANDLE_COMMON_ASCII16X16_VERT, SHADER_HANDLE_COMMON_ASCII16X16_FRAG);
-
   u32 vision_cone_program = shader_handles_to_gl_program(
       SHADER_HANDLE_TOPDOWN_OVERWORLD_VISION_CONE_VERT, SHADER_HANDLE_TOPDOWN_OVERWORLD_VISION_CONE_FRAG
   );
@@ -58,7 +55,6 @@ int main() {
   gl_renderer_push_program(&global_state.renderer, SHADER_ID_PLAYER, player_program);
   gl_renderer_push_program(&global_state.renderer, SHADER_ID_FULLSCREEN_QUAD, fullscreen_quad_program);
   gl_renderer_push_program(&global_state.renderer, SHADER_ID_OVERWORLD_OVERLAY, overworld_overlay_program);
-  gl_renderer_push_program(&global_state.renderer, SHADER_ID_GLYPHS, glyphs_program);
   gl_renderer_push_program(&global_state.renderer, SHADER_ID_VISION_CONE, vision_cone_program);
 
   // Meshes
@@ -91,9 +87,7 @@ int main() {
 
   GLMaterial player_material = create_gl_material(player_program);
   u32 player_model_ubo = create_gl_ubo(sizeof(PlayerModel), GL_DYNAMIC_DRAW);
-  gl_material_add_uniform(
-      &player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_OVERWORLD_PLAYER_MODEL, "PlayerModel"
-  );
+  gl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_PLAYER_MODEL, "PlayerModel");
   gl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
   GLTexture arrow_texture = create_gl_texture_from_image("textures/right_arrow.jpg");

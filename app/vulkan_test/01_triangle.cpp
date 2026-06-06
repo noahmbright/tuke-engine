@@ -1,4 +1,3 @@
-#include "c_reflector_bringup.h"
 #include "generated_shader_utils.h"
 #include "glfw_vulkan.h"
 #include "tuke_engine.h"
@@ -18,7 +17,6 @@ int main() {
   // I need to make this hot reload amenable.
   // I want cleaner enums from the reflection system. That stuff is all helpful but verbose.
   //    Also my ego doesn't want to throw the whole thing away :(
-  init_generated_shader_vk_modules(ctx.device);
   ViewportState viewport_state = create_viewport_state_xy(ctx.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {
       {.color = {{0.01, 0.01, 0.01, 1.0}}}, {.depthStencil = {.depth = 1.0f, .stencil = 0}}
@@ -86,10 +84,6 @@ int main() {
   //    PipelineLayouts, Pipelines, Buffers, Descriptor sets, etc.
   VkResult result = vkDeviceWaitIdle(ctx.device);
   VK_CHECK(result, "Failed to wait idle");
-
-  // TODO Without this free thing, validation layers go crazy here. Maybe I want to
-  // get rid of the all or nothing style and lazily init the ones I need.
-  free_generated_shader_vk_modules(ctx.device);
 
   vkDestroyPipelineLayout(ctx.device, pipeline_layout, NULL);
   vkDestroyPipeline(ctx.device, pipeline, NULL);

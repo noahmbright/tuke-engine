@@ -265,28 +265,19 @@ typedef struct {
 typedef enum { BLEND_MODE_OPAQUE, BLEND_MODE_ALPHA } BlendMode;
 
 typedef struct {
-  // pipeline create info
-  VkPipelineShaderStageCreateInfo stages[MAX_SHADER_STAGE_COUNT];
-  u32 stage_count;
+  VkShaderModule vertex_shader;
+  VkShaderModule fragment_shader;
+  u32 stage_count; // Reserving in case I add tesselation shaders in 20 years.
   const VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info;
   VkRenderPass render_pass;
   VkPipelineLayout pipeline_layout;
-
-  // input assembly
   VkPrimitiveTopology topology;
-  VkBool32 primitive_restart_enabled;
-
-  // rasterization_state
+  VkBool32 primitive_restart_enabled; // TODO not sure what this is, maybe will rip out
   VkPolygonMode polygon_mode;
   VkCullModeFlags cull_mode;
   VkFrontFace front_face;
-
-  // multisample state
   VkSampleCountFlagBits sample_count_flag;
-
-  // color blend state
   BlendMode blend_mode;
-
   VkExtent2D swapchain_extent;
 } PipelineConfig;
 
@@ -478,14 +469,6 @@ VkPipeline create_default_graphics_pipeline(
     VkPipelineLayout pipeline_layout
 );
 
-PipelineConfig create_default_graphics_pipeline_config(
-    VkRenderPass render_pass,
-    VkShaderModule vertex_shader,
-    VkShaderModule fragment_shader,
-    const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
-    VkPipelineLayout pipeline_layout
-);
-
 VkPipelineLayout
 create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts, u32 set_layout_count);
 
@@ -546,8 +529,6 @@ UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager, u32 size
 
 // Vertex Buffers
 VkVertexInputBindingDescription create_instanced_vertex_binding_description(u32 binding, u32 stride);
-VkVertexInputAttributeDescription
-create_vertex_attribute_description(u32 location, u32 binding, VkFormat format, u32 offset);
 VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u32 stride);
 
 u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties);

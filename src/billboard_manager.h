@@ -1,13 +1,8 @@
 #pragma once
 
-#include "c_reflector_bringup.h"
-#include "camera.h"
 #include "generated_shader_utils.h"
 #include "opengl_base.h"
 #include "tuke_engine.h"
-
-#include "glm/vec2.hpp"
-#include "glm/vec3.hpp"
 
 // https://www.opengl-tutorial.org/intermediate-tutorials/billboards-particles/billboards/
 //
@@ -96,8 +91,9 @@ inline BillboardManager create_billboard_manager(u32 capacity, u32 vp_ubo) {
   billboard_manager.shader.vao = create_vao();
   billboard_manager.shader.vbo = allocate_vbo(capacity * sizeof(Billboard), GL_DYNAMIC_DRAW);
 
-  init_gl_vertex_layout(VERTEX_LAYOUT_BINDING0INSTANCE_VEC3_VEC2_FLOAT, billboard_manager.shader.vao,
-                        &billboard_manager.shader.vbo, 1, 0);
+  init_gl_vertex_layout(
+      VERTEX_LAYOUT_BINDING0INSTANCE_VEC3_VEC2_FLOAT, billboard_manager.shader.vao, &billboard_manager.shader.vbo, 1, 0
+  );
 
   return billboard_manager;
 }

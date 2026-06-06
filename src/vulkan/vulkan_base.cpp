@@ -1162,63 +1162,6 @@ VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u
   return description;
 }
 
-VkVertexInputAttributeDescription
-create_vertex_attribute_description(u32 location, u32 binding, VkFormat format, u32 offset) {
-  VkVertexInputAttributeDescription description = {
-      .location = location,
-      .binding = binding,
-      .format = format,
-      .offset = offset,
-  };
-  return description;
-}
-
-static VkPipelineShaderStageCreateInfo
-create_shader_stage_info(VkShaderModule module, VkShaderStageFlagBits stage, const char *entry_point) {
-  VkPipelineShaderStageCreateInfo shader_stage_create_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .stage = stage,
-      .module = module,
-      .pName = entry_point,
-      .pSpecializationInfo = NULL,
-  };
-  return shader_stage_create_info;
-}
-
-// TODO not a fan of these default APIs.
-PipelineConfig create_default_graphics_pipeline_config(
-    VkRenderPass render_pass,
-    VkShaderModule vertex_shader,
-    VkShaderModule fragment_shader,
-    const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
-    VkPipelineLayout pipeline_layout
-) {
-
-  VkPipelineShaderStageCreateInfo pipeline_shader_create_info_vertex =
-      create_shader_stage_info(vertex_shader, VK_SHADER_STAGE_VERTEX_BIT, "main");
-  VkPipelineShaderStageCreateInfo pipeline_shader_create_info_fragment =
-      create_shader_stage_info(fragment_shader, VK_SHADER_STAGE_FRAGMENT_BIT, "main");
-
-  PipelineConfig pipeline_config = {
-      .stages[0] = pipeline_shader_create_info_vertex,
-      .stages[1] = pipeline_shader_create_info_fragment,
-      .stage_count = 2,
-      .vertex_input_state_create_info = vertex_input_state,
-      .render_pass = render_pass,
-      .pipeline_layout = pipeline_layout,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .primitive_restart_enabled = VK_FALSE,
-      .polygon_mode = VK_POLYGON_MODE_FILL,
-      .cull_mode = VK_CULL_MODE_NONE,
-      .front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .sample_count_flag = VK_SAMPLE_COUNT_1_BIT,
-      .blend_mode = BLEND_MODE_ALPHA,
-  };
-  return pipeline_config;
-}
-
 // May want this to be create_instance_graphics(), or something. Or need to have
 // VulkanWindowInfo be something that can equally well describe compute pipelines.
 VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_info) {
@@ -1566,69 +1509,6 @@ ViewportState create_viewport_state_xy(VkExtent2D swapchain_extent, u32 x, u32 y
   return create_viewport_state_offset(swapchain_extent, offset);
 }
 
-// TODO Will need some updates here when I want to do shadow mapping
-//      Set depthClampEnable = VK_TRUE for shadow support
-//      Understand how depthBias* is used for shadow mapping
-VkPipelineRasterizationStateCreateInfo
-create_rasterization_state(VkPolygonMode polygon_mode, VkCullModeFlags cull_mode, VkFrontFace front_face) {
-  VkPipelineRasterizationStateCreateInfo rasterization_state_ci = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .depthClampEnable = VK_FALSE,
-      .rasterizerDiscardEnable = VK_FALSE,
-      .polygonMode = polygon_mode,
-      .cullMode = cull_mode,
-      .frontFace = front_face,
-      .depthBiasEnable = VK_FALSE,
-      .depthBiasConstantFactor = 0.0f,
-      .depthBiasClamp = 0.0f,
-      .depthBiasSlopeFactor = 0.0f,
-      .lineWidth = 1.0f,
-  };
-  return rasterization_state_ci;
-}
-
-VkPipelineMultisampleStateCreateInfo create_multisample_state(VkSampleCountFlagBits sample_count_flag) {
-  VkPipelineMultisampleStateCreateInfo multisample_state_create_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .rasterizationSamples = sample_count_flag,
-      // TODO if sample count flag is not VK_SAMPLE_COUNT_1_BIT, make this true?
-      .sampleShadingEnable = VK_FALSE,
-      .minSampleShading = 1.0f,
-      .pSampleMask = NULL,
-      // TODO understand alpha to coverage
-      .alphaToCoverageEnable = VK_FALSE,
-      .alphaToOneEnable = VK_FALSE,
-  };
-  return multisample_state_create_info;
-}
-
-VkPipelineDepthStencilStateCreateInfo create_depth_stencil_state() {
-
-  VkStencilOpState empty_stencil_op_state;
-  memset(&empty_stencil_op_state, 0, sizeof(empty_stencil_op_state));
-
-  VkPipelineDepthStencilStateCreateInfo depth_stencil_state_create_info = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .depthTestEnable = VK_TRUE,
-      .depthWriteEnable = VK_TRUE,
-      .depthCompareOp = VK_COMPARE_OP_LESS,
-      .depthBoundsTestEnable = VK_FALSE,
-      .stencilTestEnable = VK_FALSE,
-      .front = empty_stencil_op_state,
-      .back = empty_stencil_op_state,
-      .minDepthBounds = 0.0f,
-      .maxDepthBounds = 1.0f,
-  };
-
-  return depth_stencil_state_create_info;
-}
-
 VkPipelineColorBlendAttachmentState create_color_blend_attachment_state(BlendMode blend_mode) {
   VkBool32 blending_enabled = (blend_mode == BLEND_MODE_ALPHA) ? VK_TRUE : VK_FALSE;
 
@@ -1658,15 +1538,36 @@ VkPipelineColorBlendAttachmentState create_color_blend_attachment_state(BlendMod
   return state;
 }
 
-// TODO Validate shader stages if you want strict pipeline guarantees
-// TODO Print/log pipeline cache usage for debugging
 // TODO Need flexibility for dynamic rendering vs render passes. More architecture to do.
+//      - Pipeline config takes a render pass
 VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *config, VkPipelineCache pipeline_cache) {
   assert(config->stage_count <= MAX_SHADER_STAGE_COUNT);
   assert(
       config->vertex_input_state_create_info && "create_graphics_pipeline: vertex_input_state_create_info is NULL. Did "
                                                 "you mean to fill out this structure manually?"
   );
+
+  VkPipelineShaderStageCreateInfo vert_stage_ci = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .stage = VK_SHADER_STAGE_VERTEX_BIT,
+      .module = config->vertex_shader,
+      .pName = "main",
+      .pSpecializationInfo = NULL,
+  };
+
+  VkPipelineShaderStageCreateInfo frag_stage_ci = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+      .module = config->fragment_shader,
+      .pName = "main",
+      .pSpecializationInfo = NULL,
+  };
+
+  const VkPipelineShaderStageCreateInfo stages[] = {vert_stage_ci, frag_stage_ci};
 
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkPipelineInputAssemblyStateCreateInfo.html
   VkPipelineInputAssemblyStateCreateInfo input_assembly_state = {
@@ -1690,10 +1591,55 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .pScissors = &viewport_state.scissor,
   };
 
-  VkPipelineRasterizationStateCreateInfo rasterization_state =
-      create_rasterization_state(config->polygon_mode, config->cull_mode, config->front_face);
-  VkPipelineMultisampleStateCreateInfo multisample_state_ci = create_multisample_state(config->sample_count_flag);
-  VkPipelineDepthStencilStateCreateInfo depth_stencil_state_ci = create_depth_stencil_state();
+  // TODO Will need some updates here when I want to do shadow mapping
+  //      Set depthClampEnable = VK_TRUE for shadow support
+  //      Understand how depthBias* is used for shadow mapping
+  VkPipelineRasterizationStateCreateInfo rasterization_state_ci = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .depthClampEnable = VK_FALSE,
+      .rasterizerDiscardEnable = VK_FALSE,
+      .polygonMode = config->polygon_mode,
+      .cullMode = config->cull_mode,
+      .frontFace = config->front_face,
+      .depthBiasEnable = VK_FALSE,
+      .depthBiasConstantFactor = 0.0f,
+      .depthBiasClamp = 0.0f,
+      .depthBiasSlopeFactor = 0.0f,
+      .lineWidth = 1.0f,
+  };
+
+  VkPipelineMultisampleStateCreateInfo multisample_state_ci = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .rasterizationSamples = config->sample_count_flag,
+      // TODO if sample count flag is not VK_SAMPLE_COUNT_1_BIT, make this true?
+      .sampleShadingEnable = VK_FALSE,
+      .minSampleShading = 1.0f,
+      .pSampleMask = NULL,
+      // TODO understand alpha to coverage
+      .alphaToCoverageEnable = VK_FALSE,
+      .alphaToOneEnable = VK_FALSE,
+  };
+
+  VkStencilOpState empty_stencil_op_state;
+  memset(&empty_stencil_op_state, 0, sizeof(empty_stencil_op_state));
+  VkPipelineDepthStencilStateCreateInfo depth_stencil_state_ci = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+      .depthTestEnable = VK_TRUE,
+      .depthWriteEnable = VK_TRUE,
+      .depthCompareOp = VK_COMPARE_OP_LESS,
+      .depthBoundsTestEnable = VK_FALSE,
+      .stencilTestEnable = VK_FALSE,
+      .front = empty_stencil_op_state,
+      .back = empty_stencil_op_state,
+      .minDepthBounds = 0.0f,
+      .maxDepthBounds = 1.0f,
+  };
 
   const u32 num_color_blend_attachments = 1;
   VkPipelineColorBlendAttachmentState color_blend_state = create_color_blend_attachment_state(config->blend_mode);
@@ -1706,6 +1652,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .attachmentCount = num_color_blend_attachments,
       .pAttachments = &color_blend_state,
   };
+
   f32 blend_constants[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   memcpy(color_blend_state_ci.blendConstants, blend_constants, sizeof(blend_constants));
 
@@ -1726,12 +1673,12 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .pNext = 0,
       .flags = 0,
       .stageCount = config->stage_count,
-      .pStages = config->stages,
+      .pStages = stages,
       .pVertexInputState = config->vertex_input_state_create_info,
       .pInputAssemblyState = &input_assembly_state,
       .pTessellationState = NULL, // TOOD?
       .pViewportState = &viewport_state_ci,
-      .pRasterizationState = &rasterization_state,
+      .pRasterizationState = &rasterization_state_ci,
       .pMultisampleState = &multisample_state_ci,
       .pDepthStencilState = &depth_stencil_state_ci,
       .pColorBlendState = &color_blend_state_ci,
@@ -1750,7 +1697,6 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
   return graphics_pipeline;
 }
 
-// TODO want to pull out these defaulted cases because it's not obvious what is and is not default.
 VkPipeline create_default_graphics_pipeline(
     const VulkanContext *context,
     VkRenderPass render_pass,
@@ -1760,9 +1706,22 @@ VkPipeline create_default_graphics_pipeline(
     VkPipelineLayout pipeline_layout
 ) {
 
-  PipelineConfig config = create_default_graphics_pipeline_config(
-      render_pass, vertex_shader, fragment_shader, vertex_input_state, pipeline_layout
-  );
+  PipelineConfig config = {
+      .vertex_shader = vertex_shader,
+      .fragment_shader = fragment_shader,
+      .stage_count = 2,
+      .vertex_input_state_create_info = vertex_input_state,
+      .render_pass = render_pass,
+      .pipeline_layout = pipeline_layout,
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      .primitive_restart_enabled = VK_FALSE,
+      .polygon_mode = VK_POLYGON_MODE_FILL,
+      .cull_mode = VK_CULL_MODE_NONE,
+      .front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .sample_count_flag = VK_SAMPLE_COUNT_1_BIT,
+      .blend_mode = BLEND_MODE_ALPHA,
+  };
+
   return create_graphics_pipeline(context->device, &config, context->pipeline_cache);
 }
 

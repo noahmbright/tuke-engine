@@ -1,5 +1,4 @@
 #include "codegen.h"
-#include "filesystem_utils.h"
 #include "parser.h"
 #include "reflection_data.h"
 #include "reflector.h"
@@ -802,8 +801,6 @@ static void codegen_footer(FILE *dst, const ParsedShadersIR *ir) {
     fprintf(dst, "  &%s_shader_spec,\n", full_name);
   }
   fprintf(dst, "};\n\n");
-
-  fprintf(dst, "extern VkShaderModule shader_modules[NUM_SHADER_HANDLES];\n");
 }
 
 static void codegen_buffer_label_enum(FILE *dst, const ParsedShadersIR *ir) {

@@ -11,7 +11,6 @@
 // EVENTUALLY need some serialization scheme for things like weapon unlocks
 
 #include "billboard_manager.h"
-#include "c_reflector_bringup.h"
 #include "generated_shader_utils.h"
 #include "glm/common.hpp"
 #include "opengl_base.h"
@@ -446,8 +445,9 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   enemy_manager->enemies[0].position.x = x_amplitude * sinf(theta);
   enemy_manager->render_data[0].pos.x = x_amplitude * sinf(theta);
   glBindBuffer(GL_ARRAY_BUFFER, data->enemy_mesh.vbos[0]);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(EnemyRenderData) * enemy_manager->num_live_enemies,
-                  &enemy_manager->render_data);
+  glBufferSubData(
+      GL_ARRAY_BUFFER, 0, sizeof(EnemyRenderData) * enemy_manager->num_live_enemies, &enemy_manager->render_data
+  );
 
   // Spawn bullets from enemy[0] - need some general bullet spawning data wrapper
   f32 spawn_interval = 0.1;
@@ -468,8 +468,9 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   // Move bullets
   update_bullets(bullet_manager, dt);
   glBindBuffer(GL_ARRAY_BUFFER, data->bullet_mesh.vbos[0]);
-  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(BulletRenderData) * bullet_manager->num_live_bullets,
-                  &bullet_manager->render_data);
+  glBufferSubData(
+      GL_ARRAY_BUFFER, 0, sizeof(BulletRenderData) * bullet_manager->num_live_bullets, &bullet_manager->render_data
+  );
 
   // Collision detection
   if (player->invincibility_time <= 0.0) {
@@ -526,30 +527,35 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
   bullet_hell_camera.position.z = 15.0f;
 
   // Player
-  u32 player_program = shader_handles_to_gl_program(SHADER_HANDLE_TOPDOWN_BULLET_HELL_PLAYER_VERT,
-                                                    SHADER_HANDLE_TOPDOWN_BULLET_HELL_PLAYER_FRAG);
+  u32 player_program = shader_handles_to_gl_program(
+      SHADER_HANDLE_TOPDOWN_BULLET_HELL_PLAYER_VERT, SHADER_HANDLE_TOPDOWN_BULLET_HELL_PLAYER_FRAG
+  );
 
   u32 player_model_ubo = create_gl_ubo(sizeof(PlayerModel), GL_DYNAMIC_DRAW);
   u32 player_frag_ubo = create_gl_ubo(sizeof(BulletHellPlayerFrag), GL_DYNAMIC_DRAW);
 
   GLMaterial player_material = create_gl_material(player_program);
-  gl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_BULLET_HELL_PLAYER_MODEL,
-                          "PlayerModel");
+  gl_material_add_uniform(
+      &player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_BULLET_HELL_PLAYER_MODEL, "PlayerModel"
+  );
   gl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
-  GLMesh bullet_player_mesh = create_gl_mesh_with_vertex_layout(player_vertices, sizeof(player_vertices), 6,
-                                                                VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
+  GLMesh bullet_player_mesh = create_gl_mesh_with_vertex_layout(
+      player_vertices, sizeof(player_vertices), 6, VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW
+  );
   GLMaterial bullet_player_material = create_gl_material(player_program);
-  gl_material_add_uniform(&player_material, player_frag_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_BULLET_HELL_PLAYER_FRAG,
-                          "BulletHellPlayerFrag");
+  gl_material_add_uniform(
+      &player_material, player_frag_ubo, UNIFORM_BUFFER_LABEL_TOPDOWN_BULLET_HELL_PLAYER_FRAG, "BulletHellPlayerFrag"
+  );
   gl_material_add_uniform(&player_material, player_model_ubo, UNIFORM_BUFFER_LABEL_PLAYER_MODEL, "PlayerModel");
   gl_material_add_uniform(&player_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
   // Arena
   u32 arena_program = shader_handles_to_gl_program(SHADER_HANDLE_TOPDOWN_ARENA_VERT, SHADER_HANDLE_TOPDOWN_ARENA_FRAG);
 
-  GLMesh arena_mesh = create_gl_mesh_with_vertex_layout(arena_vertices, sizeof(arena_vertices), 6,
-                                                        VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW);
+  GLMesh arena_mesh = create_gl_mesh_with_vertex_layout(
+      arena_vertices, sizeof(arena_vertices), 6, VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW
+  );
   GLMaterial arena_material = create_gl_material(arena_program);
   gl_material_add_uniform(&arena_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
@@ -581,8 +587,9 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
   gl_material_add_uniform(&enemy_material, vp_ubo, UNIFORM_BUFFER_LABEL_CAMERA_VP, "VPUniform");
 
   // Screen Overlay
-  u32 overlay_program = shader_handles_to_gl_program(SHADER_HANDLE_TOPDOWN_BULLET_HELL_OVERLAY_VERT,
-                                                     SHADER_HANDLE_TOPDOWN_BULLET_HELL_OVERLAY_FRAG);
+  u32 overlay_program = shader_handles_to_gl_program(
+      SHADER_HANDLE_TOPDOWN_BULLET_HELL_OVERLAY_VERT, SHADER_HANDLE_TOPDOWN_BULLET_HELL_OVERLAY_FRAG
+  );
   u32 overlay_ubo = create_gl_ubo(sizeof(BulletHellData), GL_DYNAMIC_DRAW);
   gl_bind_ubo_to_block(overlay_program, overlay_ubo, UNIFORM_BUFFER_LABEL_BULLET_HELL_DATA, "BulletHellData");
 
@@ -605,10 +612,9 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
           {
               .boost_factor = 2.0f,
           },
-      .slow_motion =
-          {
-              .time_dilation_factor = 0.5f,
-          },
+      .slow_motion = {
+          .time_dilation_factor = 0.5f,
+      },
   };
 
   // Make Scene

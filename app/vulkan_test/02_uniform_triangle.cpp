@@ -1,4 +1,4 @@
-#include "shaders.h"
+#include "generated_shader_utils.h"
 
 #include "glfw_vulkan.h"
 #include "glm/ext/matrix_transform.hpp"
@@ -6,24 +6,6 @@
 #include "vulkan/vulkan_base.h"
 #include "window.h"
 #include <vulkan/vulkan_core.h>
-
-static VkPipeline shader_handles_to_graphics_pipeline(
-    const VulkanContext *context,
-    VkRenderPass render_pass,
-    ShaderHandle vertex_shader_handle,
-    ShaderHandle fragment_shader_handle,
-    VkPipelineLayout pipeline_layout
-) {
-  VkShaderModule vertex_shader = shader_modules[vertex_shader_handle];
-  VkShaderModule fragment_shader = shader_modules[fragment_shader_handle];
-  assert(vertex_shader != VK_NULL_HANDLE);
-  const VkPipelineVertexInputStateCreateInfo *vertex_input_state =
-      &generated_vulkan_vertex_layouts[generated_shader_specs[vertex_shader_handle]->vertex_layout_id];
-
-  return create_default_graphics_pipeline(
-      context, render_pass, vertex_shader, fragment_shader, vertex_input_state, pipeline_layout
-  );
-}
 
 TriangleTransformation simulate(f64 t) {
   TriangleTransformation tt;
@@ -36,13 +18,6 @@ int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
   VulkanWindowInfo window_info = create_glfw_vulkan_window_info(window);
   VulkanContext ctx = create_vulkan_context("Test 02: Uniform Triangle", window_info);
-
-  // This needs moved into the backend.
-  // Only doing this here while migrating generated headers is causing conflicts.
-  for (uint32_t i = 0; i < NUM_SHADER_HANDLES; i++) {
-    const ShaderSpec *spec = generated_shader_specs[i];
-    shader_modules[i] = create_shader_module(ctx.device, spec->spv, spec->spv_size);
-  }
 
   ViewportState viewport_state = create_viewport_state_xy(ctx.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {
@@ -140,6 +115,17 @@ int main() {
     // with the correct buffers for this frame index.
     end_frame(&ctx, cmd);
   }
+
+  vkDeviceWaitIdle(ctx.device);
+
+  vkDestroyPipelineLayout(ctx.device, pipeline_layout, NULL);
+  vkDestroyRenderPass(ctx.device, rp, NULL);
+  vkDestroyDescriptorSetLayout(ctx.device, descriptor_set_layout, NULL);
+  vkDestroyPipeline(ctx.device, pipeline, NULL);
+  destroy_uniform_buffer(&ctx, &ub);
+  vkDestroyDescriptorPool(ctx.device, descriptor_pool, NULL);
+
+  destroy_vulkan_context(&ctx);
 
   return 0;
 }

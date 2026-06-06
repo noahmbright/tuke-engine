@@ -1,4 +1,3 @@
-#include "c_reflector_bringup.h"
 #include "generated_shader_utils.h"
 
 #include "camera.h"
@@ -177,7 +176,6 @@ State setup_state(const char *title) {
   VulkanWindowInfo window_info = create_glfw_vulkan_window_info(state.window);
   state.context = create_vulkan_context(title, window_info);
   VulkanContext *ctx = &state.context;
-  init_generated_shader_vk_modules(ctx->device);
 
   VulkanImageData image_datas[NUM_TEXTURES];
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
