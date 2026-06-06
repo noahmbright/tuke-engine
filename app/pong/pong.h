@@ -111,7 +111,6 @@ struct Material {
 };
 
 inline void destroy_material(VulkanContext *ctx, Material *material) {
-
   vkDestroyPipelineLayout(ctx->device, material->pipeline_layout, NULL);
   vkDestroyPipeline(ctx->device, material->pipeline, NULL);
 }
@@ -160,7 +159,7 @@ struct State {
 
   glm::vec2 arena_dimensions;
 
-  VulkanContext context;
+  VulkanContext ctx;
   VulkanTexture textures[NUM_TEXTURES];
   VkSampler sampler;
   DescriptorSetHandle descriptor_set_handles[NUM_DESCRIPTOR_HANDLES];

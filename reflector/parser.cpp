@@ -1,12 +1,10 @@
 #include "parser.h"
 #include "filesystem_utils.h"
-#include "reflection_data.h"
 #include "reflector.h"
 
 #include <assert.h>
-#include <cstdio>
-#include <cstring>
 #include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 
 static bool labels_match(const char *a, const char *b, u32 a_len, u32 b_len) {

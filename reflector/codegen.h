@@ -1,9 +1,21 @@
 #pragma once
 
 #include "parser.h"
-#include "reflection_data.h"
-#include "subprocess.h"
-#include <stdio.h>
+#include "reflector.h"
+
+#define TEMPLATE_FILE_LENGTH 128
+
+typedef struct {
+  const u8 *bytes;
+  u32 length;
+} SpirVBytesArray;
+
+typedef struct {
+  const char *glsl_source_str;
+  char glsl_path[TEMPLATE_FILE_LENGTH];
+  char spirv_path[TEMPLATE_FILE_LENGTH];
+  pid_t pid;
+} CompileJob;
 
 typedef struct {
   const char *string;
@@ -25,8 +37,6 @@ typedef struct {
   const ParsedShader *parsed_frag;
   const ParsedShader *parsed_comp;
 } ShaderProgram;
-
-GLSLSource replace_string_slices(const ParsedShader *sliced_shader, Backend backend);
 
 // Return value is whether codegen was successful or not.
 bool codegen(const char *output_filepath, const ParsedShadersIR *parsed_shaders_ir);

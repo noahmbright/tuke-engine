@@ -56,7 +56,6 @@ file(GLOB_RECURSE REFLECTOR_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/reflector/filesystem_utils.cpp
     ${CMAKE_SOURCE_DIR}/reflector/parser.cpp
     ${CMAKE_SOURCE_DIR}/reflector/codegen.cpp
-    ${CMAKE_SOURCE_DIR}/reflector/subprocess.cpp
 )
 
 # Reflector

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "filesystem_utils.h"
-#include "reflection_data.h"
 #include "reflector.h"
 
 #include <stdio.h>
@@ -20,7 +19,7 @@
 static const char *RED = "\033[31m";
 static const char *RESET = "\033[0m";
 
-enum TokenType {
+typedef enum {
   TOKEN_TYPE_POUND,
   TOKEN_TYPE_DOUBLE_L_BRACE,
   TOKEN_TYPE_DOUBLE_R_BRACE,
@@ -79,7 +78,7 @@ enum TokenType {
   TOKEN_TYPE_NUMBER,
 
   NUM_TOKEN_TYPES
-};
+} TokenType;
 
 static const char *token_type_to_string[NUM_TOKEN_TYPES] = {
     [TOKEN_TYPE_POUND] = "#",
@@ -137,7 +136,7 @@ static const char *token_type_to_string[NUM_TOKEN_TYPES] = {
     [TOKEN_TYPE_NUMBER] = "a number literal",
 };
 
-enum DirectiveType {
+typedef enum {
   DIRECTIVE_TYPE_VERSION,
   DIRECTIVE_TYPE_SET_BINDING,
   DIRECTIVE_TYPE_LOCATION,
@@ -145,11 +144,11 @@ enum DirectiveType {
   DIRECTIVE_TYPE_VERTEX_INDEX,
   DIRECTIVE_TYPE_INSTANCE_INDEX,
   DIRECTIVE_TYPE_GLSL_SOURCE // not really a directive, but the stuff that comes between the directives
-};
+} DirectiveType;
 
 // template string slices start on the first { of {{ and end on the first char of the next token
 // or they start on the first token after the {{ and end on the first } of the }}
-struct TemplateStringSlice {
+typedef struct {
   const char *start, *end;
   DirectiveType type;
   // fat struct with all the possible fields that could be needed for any of my
@@ -158,7 +157,7 @@ struct TemplateStringSlice {
   u32 set;
   u32 binding;
   DescriptorType descriptor_type;
-};
+} TemplateStringSlice;
 
 inline TemplateStringSlice new_template_string_slice(const char *start) {
   TemplateStringSlice template_string_slice;
@@ -190,7 +189,7 @@ inline void log_string_slices(const TemplateStringSlice *template_string_slices,
   }
 }
 
-struct SetBindingDirectiveParse {
+typedef struct {
   const char *next_glsl_source_start;
   GLSLStruct glsl_struct;
 
@@ -204,21 +203,21 @@ struct SetBindingDirectiveParse {
   u32 set_label_name_length;
 
   bool was_successful;
-};
+} SetBindingDirectiveParse;
 
-struct LocationDirectiveParse {
+typedef struct {
   const char *next_glsl_source_start;
   VertexAttribute vertex_attribute;
   bool found_repeat_attribute;
   u32 repeated_attribute_location;
-};
+} LocationDirectiveParse;
 
 // Token definitions
-struct Token {
+typedef struct {
   TokenType type;
   const char *start;
   u32 text_length;
-};
+} Token;
 
 inline Token new_token(TokenType type, const char *start) {
   Token token;
@@ -237,11 +236,11 @@ inline Token new_text_token(TokenType type, const char *text, u32 text_length) {
 };
 
 // TokenVector implementation/declarations
-struct TokenVector {
+typedef struct {
   u32 size;
   u32 capacity;
   Token *tokens;
-};
+} TokenVector;
 
 inline TokenVector new_token_vector() {
   TokenVector token_vector;
@@ -280,15 +279,15 @@ inline void token_vector_free(TokenVector *token_vector) {
 }
 
 // parser state and APIs
-struct Parser {
+typedef struct {
   const char *source;
   u64 source_length;
   TokenVector tokens;
   u32 token_index;
-};
+} Parser;
 
 // ParsedShader not responsible for freeing name - belongs to ShaderToCompile
-struct ParsedShader {
+typedef struct {
   ShaderStage stage;
   const char *name; // name is a malloc'd string owned by ShaderToCompile
 
@@ -304,7 +303,7 @@ struct ParsedShader {
   // TODO will accumulate descriptors globally, and then eventually use this so
   // ShaderSpecs can tell users what layouts they use
   // DescriptorSetLayout *_descriptor_set_layouts_[MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER];
-};
+} ParsedShader;
 
 // the IR contains the shaders after parsing, which all have their slices and pointers to their descriptor sets and
 // vertex layouts
@@ -313,7 +312,7 @@ struct ParsedShader {
 // ShaderToCompileList is generated in the beginning of the main function, which owns all source strings. It is freed
 // at the end of the main function. ParsedShadersIR contains slices into it, so as long as ShaderToCompileList is
 // freed after codegen, ParsedShadersIR will remain valid
-struct ParsedShadersIR {
+typedef struct {
   bool parsing_successful;
 
   ParsedShader parsed_shaders[MAX_NUM_SHADERS];
@@ -329,17 +328,17 @@ struct ParsedShadersIR {
 
   GLSLStruct glsl_structs[MAX_NUM_GLSL_STRUCTS];
   u32 num_glsl_structs;
-};
+} ParsedShadersIR;
 
-struct StructSearchResult {
+typedef struct {
   const GLSLStruct *matching_struct;
   bool found_mismatch;
-};
+} StructSearchResult;
 
-struct BindingSearchResult {
+typedef struct {
   const DescriptorBinding *matching_binding;
   DescriptorBinding *added_binding;
   bool found_mismatch;
-};
+} BindingSearchResult;
 
 ParsedShadersIR parse_all_shaders_and_populate_global_tables(const ShaderToCompileList *shader_to_compile_list);

@@ -17,7 +17,7 @@ static const char *texture_names[NUM_TEXTURES] = {
 };
 
 void init_buffers(State *state) {
-  VulkanContext *ctx = &state->context;
+  VulkanContext *ctx = &state->ctx;
 
   // big vertex/index buffers
   BufferUploadQueue buffer_upload_queue = create_buffer_upload_queue();
@@ -39,7 +39,7 @@ void init_buffers(State *state) {
 
 // currently, global VP is premultiplied proj * view
 void init_descriptor_sets(State *state) {
-  VulkanContext *ctx = &state->context;
+  VulkanContext *ctx = &state->ctx;
 
   // global VP
   DescriptorSetBuilder global_vp_builder = create_descriptor_set_builder(ctx);
@@ -88,11 +88,11 @@ void init_background_material(State *state) {
 
   VkDescriptorSetLayout layouts[2] = {vp_handle->descriptor_set_layout, background_handle->descriptor_set_layout};
 
-  state->background_material.pipeline_layout = create_pipeline_layout(state->context.device, layouts, 2);
+  state->background_material.pipeline_layout = create_pipeline_layout(state->ctx.device, layouts, 2);
 
   state->background_material.pipeline = shader_handles_to_graphics_pipeline(
-      &state->context, state->context.render_pass, SHADER_HANDLE_PONG_BACKGROUND_VERT,
-      SHADER_HANDLE_PONG_BACKGROUND_FRAG, state->background_material.pipeline_layout
+      &state->ctx, state->ctx.render_pass, SHADER_HANDLE_PONG_BACKGROUND_VERT, SHADER_HANDLE_PONG_BACKGROUND_FRAG,
+      state->background_material.pipeline_layout
   );
 
   mat->render_call.instance_count = 1;
@@ -120,10 +120,10 @@ void init_paddles_material(State *state) {
 
   VkDescriptorSetLayout layouts[2] = {vp_handle->descriptor_set_layout, paddle_handle->descriptor_set_layout};
 
-  state->paddle_material.pipeline_layout = create_pipeline_layout(state->context.device, layouts, 2);
+  state->paddle_material.pipeline_layout = create_pipeline_layout(state->ctx.device, layouts, 2);
 
   state->paddle_material.pipeline = shader_handles_to_graphics_pipeline(
-      &state->context, state->context.render_pass, SHADER_HANDLE_PONG_PADDLE_VERT, SHADER_HANDLE_PONG_PADDLE_FRAG,
+      &state->ctx, state->ctx.render_pass, SHADER_HANDLE_PONG_PADDLE_VERT, SHADER_HANDLE_PONG_PADDLE_FRAG,
       state->paddle_material.pipeline_layout
   );
 
@@ -174,8 +174,8 @@ State setup_state(const char *title) {
 
   state.window = create_window(true /* is_vulkan */);
   VulkanWindowInfo window_info = create_glfw_vulkan_window_info(state.window);
-  state.context = create_vulkan_context(title, window_info);
-  VulkanContext *ctx = &state.context;
+  state.ctx = create_vulkan_context(title, window_info);
+  VulkanContext *ctx = &state.ctx;
 
   VulkanImageData image_datas[NUM_TEXTURES];
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
@@ -235,9 +235,8 @@ State setup_state(const char *title) {
 
   // TODO make camera matrices only on camera movement
   // TODO buffer only on resize
-  const CameraMatrices camera_matrices = create_camera_matrices(
-      &state.camera, state.context.window_framebuffer_width, state.context.window_framebuffer_height
-  );
+  const CameraMatrices camera_matrices =
+      create_camera_matrices(&state.camera, state.ctx.window_framebuffer_width, state.ctx.window_framebuffer_height);
   glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
 
   // uniform buffer structure: camera vp, background model, paddle model
@@ -274,7 +273,7 @@ State setup_state(const char *title) {
 }
 
 void destroy_state(State *state) {
-  VulkanContext *ctx = &state->context;
+  VulkanContext *ctx = &state->ctx;
 
   vkDeviceWaitIdle(ctx->device);
 
@@ -299,7 +298,7 @@ void destroy_state(State *state) {
 }
 
 void render(State *state) {
-  VulkanContext *ctx = &state->context;
+  VulkanContext *ctx = &state->ctx;
 
   begin_frame(ctx);
 
@@ -518,8 +517,8 @@ void handle_collisions(State *state, const f32 dt) {
 
 void update_screen_shake(State *state, f32 dt) {
 
-  i32 width = state->context.window_framebuffer_width;
-  i32 height = state->context.window_framebuffer_height;
+  i32 width = state->ctx.window_framebuffer_width;
+  i32 height = state->ctx.window_framebuffer_height;
 
   CameraMatrices camera_matrices;
   state->screen_shake.time_elapsed += dt;
