@@ -17,7 +17,7 @@ struct ShaderToCompile {
   const char *source;
   u64 source_length;
   const char *name;
-  u32 name_length;
+  u32 name_len;
 };
 
 struct ShaderToCompileList {
@@ -30,6 +30,5 @@ void validate_in_path(const char *raw_path, char *out_path);
 void free_shader_to_compile_list(ShaderToCompileList *shader_to_compile_list);
 void push_subdirectory(SubdirectoryList *subdirectory_list, const char *s);
 void walk_dirs(const char *path, SubdirectoryList *subdirectory_list);
-ShaderToCompileList collect_shaders_to_compile(
-    const SubdirectoryList *subdirectory_list, const char *shaders_root, const char *output_path
-);
+ShaderToCompileList
+collect_shaders_to_compile(const SubdirectoryList *subdir_list, const char *shaders_root, const char *output_path);

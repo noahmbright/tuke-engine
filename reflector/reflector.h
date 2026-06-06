@@ -246,7 +246,7 @@ struct GLSLStructMemberList {
 
 struct GLSLStruct {
   const char *type_name;
-  u32 type_name_length;
+  u32 type_name_len;
 
   const char *discovered_shader_name;
   u32 discovered_shader_name_length;
@@ -257,7 +257,7 @@ struct GLSLStruct {
 inline void log_glsl_struct(FILE *destination, const GLSLStruct *glsl_struct) {
   fprintf(
       destination, "Logging GLSLStruct with %u members %.*s:\n", glsl_struct->member_list.num_members,
-      glsl_struct->type_name_length, glsl_struct->type_name
+      glsl_struct->type_name_len, glsl_struct->type_name
   );
   for (u32 i = 0; i < glsl_struct->member_list.num_members; i++) {
     GLSLStructMember current_member = glsl_struct->member_list.members[i];
@@ -302,7 +302,7 @@ struct DescriptorBinding {
   // u32 name_length;
 
   const char *discovered_shader_name;
-  u32 discovered_shader_name_length;
+  u32 discovered_shader_name_len;
 };
 
 struct DescriptorSetLayout {

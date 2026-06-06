@@ -67,7 +67,8 @@ int main(int argc, char **argv) {
   walk_dirs(input_dir_path, &subdirectory_list);
 
   // 2) Collect shaders
-  ShaderToCompileList shader_to_compile_list = collect_shaders_to_compile(&subdirectory_list, input_dir_path, output_path);
+  ShaderToCompileList shader_to_compile_list =
+      collect_shaders_to_compile(&subdirectory_list, input_dir_path, output_path);
   if (shader_to_compile_list.num_shaders == 0) {
     printf("Got no shaders to compile, not recompiling.\n");
     return 0;
@@ -81,7 +82,7 @@ int main(int argc, char **argv) {
   // 3) Parse shaders
   struct timespec t0, t1;
   clock_gettime(CLOCK_MONOTONIC, &t0);
-  ParsedShadersIR parsed_shaders_ir = parse_all_shaders_and_populate_global_tables(&shader_to_compile_list);
+  ParsedShadersIR parsed_shaders_ir = parse_shaders(&shader_to_compile_list);
   clock_gettime(CLOCK_MONOTONIC, &t1);
   printf("Parse:  %.1f ms\n", (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) * 1e-6);
   if (!parsed_shaders_ir.parsing_successful) {

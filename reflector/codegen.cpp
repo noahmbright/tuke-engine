@@ -893,7 +893,7 @@ static void codegen_struct_defintions(FILE *dst, const GLSLStruct *glsl_structs,
       const GLSLStructMember *member = &glsl_struct->member_list.members[j];
       if (member->array_length > 1) {
         fprintf(
-            dst, "const uint32_t %.*s_%.*s_array_size = %u;\n", glsl_struct->type_name_length, glsl_struct->type_name,
+            dst, "const uint32_t %.*s_%.*s_array_size = %u;\n", glsl_struct->type_name_len, glsl_struct->type_name,
             member->identifier_length, member->identifier, member->array_length
         );
       }
@@ -927,7 +927,7 @@ static void codegen_struct_defintions(FILE *dst, const GLSLStruct *glsl_structs,
       fprintf(dst, "  unsigned char _padding[%u];\n", struct_alignment_size_difference);
     }
 
-    fprintf(dst, "} %.*s;\n\n", glsl_struct->type_name_length, glsl_struct->type_name);
+    fprintf(dst, "} %.*s;\n\n", glsl_struct->type_name_len, glsl_struct->type_name);
   }
 }
 
@@ -982,15 +982,17 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
 
   // Struct definition
   const char *vertex_layout_name = program->parsed_vert->vertex_layout->name;
+  // clang-format off
   fprintf(dst, "const ProgramSpec %s_program_spec = {\n", program->name);
   fprintf(dst, "  .vert_opengl_glsl = %s_opengl_glsl,\n", vert_name);
   fprintf(dst, "  .frag_opengl_glsl = %s_opengl_glsl,\n", frag_name);
-  fprintf(dst, "  .vert_spv = %s_spv,\n", vert_name);
-  fprintf(dst, "  .vert_spv_size = sizeof(%s_spv),\n", vert_name);
-  fprintf(dst, "  .frag_spv = %s_spv,\n", frag_name);
-  fprintf(dst, "  .frag_spv_size = sizeof(%s_spv),\n", frag_name);
-  fprintf(dst, "  .vertex_layout_id = %s,\n", vertex_layout_name);
+  fprintf(dst, "  .vert_spv         = %s_spv,\n",         vert_name);
+  fprintf(dst, "  .vert_spv_size    = sizeof(%s_spv),\n", vert_name);
+  fprintf(dst, "  .frag_spv         = %s_spv,\n",         frag_name);
+  fprintf(dst, "  .frag_spv_size    = sizeof(%s_spv),\n", frag_name);
+  fprintf(dst, "  .vertex_layout_id = %s,\n",             vertex_layout_name);
   fprintf(dst, "};\n\n");
+  // clang-format on
 }
 
 inline void codegen_shader_spec(FILE *dst, const CompiledShaders *shaders, u32 num_shaders) {
@@ -1007,12 +1009,14 @@ inline void codegen_shader_spec(FILE *dst, const CompiledShaders *shaders, u32 n
     bool is_vertex = parsed->stage == SHADER_STAGE_VERTEX;
     const char *vertex_layout_name = is_vertex ? parsed->vertex_layout->name : vertex_layout_null_string;
 
-    fprintf(dst, "const ShaderSpec %s_shader_spec = {\n", full_name);
-    fprintf(dst, "  .opengl_glsl = %s_opengl_glsl,\n", full_name);
-    fprintf(dst, "  .spv = %s_spv,\n", full_name);
-    fprintf(dst, "  .spv_size = sizeof(%s_spv),\n", full_name);
-    fprintf(dst, "  .vertex_layout_id = %s,\n", vertex_layout_name);
+    // clang-format off
+    fprintf(dst, "const ShaderSpec %s_shader_spec = {\n",   full_name);
+    fprintf(dst, "  .opengl_glsl      = %s_opengl_glsl,\n", full_name);
+    fprintf(dst, "  .spv              = %s_spv,\n",         full_name);
+    fprintf(dst, "  .spv_size         = sizeof(%s_spv),\n", full_name);
+    fprintf(dst, "  .vertex_layout_id = %s,\n",             vertex_layout_name);
     fprintf(dst, "};\n\n");
+    // clang-format on
   }
 }
 
@@ -1118,7 +1122,15 @@ static bool compile_shaders(const ParsedShadersIR *ir, CompiledShaders *compiled
     compileds->vk_sources[i] = replace_string_slices(parsed, BACKEND_VULKAN);
   }
 
+  // Start timers
+  struct timespec t0, t1;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+
   bool should_codegen = compile_to_spirv(compileds->vk_sources, compileds->spirv_bytes_arrays, ir->num_parsed_shaders);
+
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  printf("SPIRV:  %.1f ms\n", (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) * 1e-6);
+
   return should_codegen;
 }
 
@@ -1230,14 +1242,8 @@ bool codegen(const char *out_path, const ParsedShadersIR *ir) {
   }
 
   // Compile and replace GLSL slices.
-  struct timespec t0, t1;
-  clock_gettime(CLOCK_MONOTONIC, &t0);
-
   CompiledShaders compiled_shaders;
   bool compile_success = compile_shaders(ir, &compiled_shaders);
-
-  clock_gettime(CLOCK_MONOTONIC, &t1);
-  printf("SPIRV:  %.1f ms\n", (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) * 1e-6);
   if (!compile_success) {
     fprintf(stderr, "Shader compilation failed. Not writing %s.\n", out_path);
     return false;
@@ -1261,7 +1267,7 @@ bool codegen(const char *out_path, const ParsedShadersIR *ir) {
   generate_vulkan_descriptor_pool_size_array(dst, ir);
 
   codegen_shader_spec_struct_definition(dst);
-  codegen_struct_defintions(dst, ir->glsl_structs, ir->num_glsl_structs);
+  codegen_struct_defintions(dst, ir->structs, ir->num_structs);
   codegen_compiled_code(dst, &compiled_shaders, ir->num_parsed_shaders);
   codegen_shader_spec(dst, &compiled_shaders, ir->num_parsed_shaders);
 

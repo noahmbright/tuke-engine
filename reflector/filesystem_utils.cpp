@@ -312,7 +312,7 @@ ShaderToCompileList collect_shaders_to_compile(
           .source = shader_source,
           .source_length = source_length,
           .name = shader_name,
-          .name_length = shader_name_length,
+          .name_len = shader_name_length,
       };
     } // nested loop over files in subdir
     closedir(subdirectory);

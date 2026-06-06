@@ -33,9 +33,13 @@ typedef struct {
 // Deduplicate across vertex/fragment stages.
 typedef struct {
   const char *name; // malloc'd and owned by shader to compile
+
   const ParsedShader *parsed_vert;
   const ParsedShader *parsed_frag;
   const ParsedShader *parsed_comp;
+
+  const char *descriptor_set_names[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];
+  u32 num_descriptor_sets;
 } ShaderProgram;
 
 // Return value is whether codegen was successful or not.

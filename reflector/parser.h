@@ -11,8 +11,7 @@
 #define MAX_NUM_STRING_SLICES 64
 #define MAX_NUM_VERTEX_LAYOUTS 32
 #define MAX_NUM_DESCRIPTOR_SET_LISTS 32
-#define MAX_NUM_DESCRIPTOR_SET_LAYOUTS 16
-#define MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER 8
+#define MAX_NUM_DESCRIPTOR_SET_LAYOUTS 16 //
 #define MAX_NUM_GLSL_STRUCTS 64
 #define MAX_NUM_BINDING_SLOTS 128
 
@@ -159,17 +158,6 @@ typedef struct {
   DescriptorType descriptor_type;
 } TemplateStringSlice;
 
-inline TemplateStringSlice new_template_string_slice(const char *start) {
-  TemplateStringSlice template_string_slice;
-  template_string_slice.start = start;
-  template_string_slice.end = NULL;
-  template_string_slice.location = 0;
-  template_string_slice.set = 0;
-  template_string_slice.binding = 0;
-
-  return template_string_slice;
-}
-
 inline void log_string_slices(const TemplateStringSlice *template_string_slices, u32 num_string_slices) {
   for (u32 i = 0; i < num_string_slices; i++) {
     TemplateStringSlice slice = template_string_slices[i];
@@ -286,7 +274,6 @@ typedef struct {
   u32 token_index;
 } Parser;
 
-// ParsedShader not responsible for freeing name - belongs to ShaderToCompile
 typedef struct {
   ShaderStage stage;
   const char *name; // name is a malloc'd string owned by ShaderToCompile
@@ -294,15 +281,13 @@ typedef struct {
   TemplateStringSlice template_slices[MAX_NUM_STRING_SLICES];
   u32 num_template_slices;
 
-  // vertex input layout
   const VertexLayout *vertex_layout;
   VertexAttributeRate binding_rates[MAX_NUM_VERTEX_BINDINGS];
   u16 binding_strides[MAX_NUM_VERTEX_BINDINGS];
   u8 binding_count;
 
-  // TODO will accumulate descriptors globally, and then eventually use this so
-  // ShaderSpecs can tell users what layouts they use
-  // DescriptorSetLayout *_descriptor_set_layouts_[MAX_NUM_DESCRIPTOR_SET_LAYOUTS_PER_SHADER];
+  DescriptorSetLayout *descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];
+  u32 num_descriptor_set_layouts;
 } ParsedShader;
 
 // the IR contains the shaders after parsing, which all have their slices and pointers to their descriptor sets and
@@ -326,8 +311,8 @@ typedef struct {
   VertexLayout vertex_layouts[MAX_NUM_VERTEX_LAYOUTS];
   u32 num_vertex_layouts;
 
-  GLSLStruct glsl_structs[MAX_NUM_GLSL_STRUCTS];
-  u32 num_glsl_structs;
+  GLSLStruct structs[MAX_NUM_GLSL_STRUCTS];
+  u32 num_structs;
 } ParsedShadersIR;
 
 typedef struct {
@@ -335,10 +320,4 @@ typedef struct {
   bool found_mismatch;
 } StructSearchResult;
 
-typedef struct {
-  const DescriptorBinding *matching_binding;
-  DescriptorBinding *added_binding;
-  bool found_mismatch;
-} BindingSearchResult;
-
-ParsedShadersIR parse_all_shaders_and_populate_global_tables(const ShaderToCompileList *shader_to_compile_list);
+ParsedShadersIR parse_shaders(const ShaderToCompileList *shader_to_compile_list);
