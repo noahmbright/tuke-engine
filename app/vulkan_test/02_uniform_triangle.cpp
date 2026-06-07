@@ -2,6 +2,7 @@
 
 #include "glfw_vulkan.h"
 #include "glm/ext/matrix_transform.hpp"
+#include "shaders.h"
 #include "tuke_engine.h"
 #include "vulkan/vulkan_base.h"
 #include "window.h"
@@ -29,7 +30,7 @@ int main() {
   VkFormat depth_format = find_depth_format(ctx.physical_device);
   VkRenderPass rp = create_color_depth_render_pass(ctx.device, ctx.surface_format.format, depth_format);
 
-  VkDescriptorPool descriptor_pool =
+  VkDescriptorPool pool =
       create_descriptor_pool(ctx.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
 
   // Made a mistake with the wrong upload size here - used the wrong struct in the name.
@@ -37,11 +38,16 @@ int main() {
   UniformWrite handle = push_uniform(&ub_manager, sizeof(TriangleTransformation));
   UniformBuffer ub = create_uniform_buffer(&ctx, ub_manager.current_offset);
 
-  // REAL FOCUS Descriptor Sets
-  const ProgramSpec program = common_uniform_bringup_program_spec;
-  VkDescriptorSetLayout descriptor_set_layout =
-      create_descriptor_set_layout(ctx.device, program.binding_lists[0], program.binding_list_lens[0]);
-  VkDescriptorSet descriptor_set = create_descriptor_set(ctx.device, &descriptor_set_layout, descriptor_pool);
+  VkDescriptorSetLayout layouts[NUM_DESCRIPTOR_SET_LAYOUTS];
+  set_descriptor_set_layouts(&ctx, layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
+
+  VkPipeline pipeline;
+  VkPipelineLayout pipeline_layout;
+  init_program_spec(&ctx, rp, &common_uniform_bringup_program_spec, &pipeline, &pipeline_layout);
+
+  // Making this descriptor set should also be handled in the backend.
+  // I don't want to deal with the spec or layout IDs more than once.
+  VkDescriptorSet descriptor_set = create_descriptor_set(ctx.device, &layouts[LAYOUT_ID_TRIANGLE_TRANSFORMATION], pool);
 
   // Know binding, descriptor count, and type from generated layout bindings - from reflection
   VkWriteDescriptorSet *write = TRIANGLE_TRANSFORMATION_write_templates;
@@ -58,14 +64,6 @@ int main() {
   u32 write_count = 1;
   u32 copy_count = 0;
   vkUpdateDescriptorSets(ctx.device, write_count, write, copy_count, NULL);
-
-  u32 num_desc_set_layouts = 1;
-  VkPipelineLayout pipeline_layout = create_pipeline_layout(ctx.device, &descriptor_set_layout, num_desc_set_layouts);
-  // END FOCUS
-
-  VkPipeline pipeline = shader_handles_to_graphics_pipeline(
-      &ctx, rp, SHADER_HANDLE_COMMON_UNIFORM_BRINGUP_VERT, SHADER_HANDLE_COMMON_UNIFORM_BRINGUP_FRAG, pipeline_layout
-  );
 
   // Still don't like configuring these manually. This is like the fundamental issue.
   // Made a mistake in configuring descriptor sets.
@@ -117,13 +115,11 @@ int main() {
   }
 
   vkDeviceWaitIdle(ctx.device);
-
-  vkDestroyPipelineLayout(ctx.device, pipeline_layout, NULL);
   vkDestroyRenderPass(ctx.device, rp, NULL);
-  vkDestroyDescriptorSetLayout(ctx.device, descriptor_set_layout, NULL);
+  vkDestroyPipelineLayout(ctx.device, pipeline_layout, NULL);
   vkDestroyPipeline(ctx.device, pipeline, NULL);
   destroy_uniform_buffer(&ctx, &ub);
-  vkDestroyDescriptorPool(ctx.device, descriptor_pool, NULL);
+  vkDestroyDescriptorPool(ctx.device, pool, NULL);
 
   destroy_vulkan_context(&ctx);
 

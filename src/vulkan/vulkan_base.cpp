@@ -60,53 +60,54 @@ void destroy_swapchain(VulkanContext *context) {
   memset(storage, 0, sizeof(SwapchainStorage));
 }
 
-void destroy_vulkan_context(VulkanContext *context) {
-  VkResult result = vkDeviceWaitIdle(context->device);
+void destroy_vulkan_context(VulkanContext *ctx) {
+  VkResult result = vkDeviceWaitIdle(ctx->device);
   VK_CHECK(result, "Failed to wait idle");
 
-  vkDestroyPipelineCache(context->device, context->pipeline_cache, NULL);
-  vkDestroyCommandPool(context->device, context->transient_command_pool, NULL);
-  vkDestroyCommandPool(context->device, context->graphics_command_pool, NULL);
-  if (context->present_queue_index_is_different_than_graphics) {
-    vkDestroyCommandPool(context->device, context->present_command_pool, NULL);
+  // Descriptors set layouts, then pipeline layouts, then pipelines
+  reset_descriptor_set_layouts(ctx);
+  vkDestroyPipelineCache(ctx->device, ctx->pipeline_cache, NULL);
+
+  // Command pools
+  vkDestroyCommandPool(ctx->device, ctx->transient_command_pool, NULL);
+  vkDestroyCommandPool(ctx->device, ctx->graphics_command_pool, NULL);
+  if (ctx->present_queue_index_is_different_than_graphics) {
+    vkDestroyCommandPool(ctx->device, ctx->present_command_pool, NULL);
   }
-  if (context->compute_queue_index_is_different_than_graphics) {
-    vkDestroyCommandPool(context->device, context->compute_command_pool, NULL);
+  if (ctx->compute_queue_index_is_different_than_graphics) {
+    vkDestroyCommandPool(ctx->device, ctx->compute_command_pool, NULL);
   }
 
   // sync primitives
   for (i32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    vkDestroySemaphore(context->device, context->frame_sync_objects[i].image_available_semaphore, NULL);
-    vkDestroySemaphore(context->device, context->frame_sync_objects[i].render_finished_semaphore, NULL);
-    vkDestroyFence(context->device, context->frame_sync_objects[i].in_flight_fence, NULL);
+    vkDestroySemaphore(ctx->device, ctx->frame_sync_objects[i].image_available_semaphore, NULL);
+    vkDestroySemaphore(ctx->device, ctx->frame_sync_objects[i].render_finished_semaphore, NULL);
+    vkDestroyFence(ctx->device, ctx->frame_sync_objects[i].in_flight_fence, NULL);
   }
 
-  destroy_swapchain(context);
+  destroy_swapchain(ctx);
 
-  vkDestroyRenderPass(context->device, context->render_pass, NULL);
-  vkDestroyDevice(context->device, NULL);
-  vkDestroySurfaceKHR(context->instance, context->surface, NULL);
+  vkDestroyRenderPass(ctx->device, ctx->render_pass, NULL);
+  vkDestroyDevice(ctx->device, NULL);
+  vkDestroySurfaceKHR(ctx->instance, ctx->surface, NULL);
 
 #ifdef TUKE_DISABLE_VULKAN_VALIDATION
 #else
   PFN_vkDestroyDebugUtilsMessengerEXT fpDestroyDebugUtilsMessengerEXT =
-      (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(context->instance, "vkDestroyDebugUtilsMessengerEXT");
+      (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(ctx->instance, "vkDestroyDebugUtilsMessengerEXT");
   if (fpDestroyDebugUtilsMessengerEXT) {
-    fpDestroyDebugUtilsMessengerEXT(context->instance, context->debug_messenger, NULL);
+    fpDestroyDebugUtilsMessengerEXT(ctx->instance, ctx->debug_messenger, NULL);
   }
 #endif
-  vkDestroyInstance(context->instance, NULL);
+  vkDestroyInstance(ctx->instance, NULL);
 }
 
-// TODO Enable debug messenger extension, add macros for disabling in release
-// mode
 VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
     VkDebugUtilsMessageTypeFlagsEXT message_type,
     const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
     void *user_data
 ) {
-
   (void)message_type;
   (void)callback_data;
   (void)user_data;
@@ -2035,7 +2036,6 @@ VulkanTexture create_vulkan_texture(
 // TODO return type - would I prefer to return an array of textures, or do I
 // want to be able to refer to textures by name?
 // I could pass an array of structs containing a VulkanTexture and a path
-// Also could do hashing
 void load_vulkan_textures(
     VulkanContext *ctx, const VulkanImageData *image_datas, u32 num_images, VulkanTexture *out_textures
 ) {
@@ -2098,6 +2098,19 @@ VkSampler create_sampler(VkDevice device) {
   return sampler;
 }
 
+void reset_descriptor_set_layouts(VulkanContext *ctx) {
+  for (u32 i = 0; i < ctx->num_descriptor_set_layouts; i++) {
+    vkDestroyDescriptorSetLayout(ctx->device, ctx->descriptor_set_layouts[i], NULL);
+    ctx->descriptor_set_layouts[i] = VK_NULL_HANDLE;
+  }
+}
+
+void set_descriptor_set_layouts(VulkanContext *ctx, VkDescriptorSetLayout *layouts, u32 num_layouts) {
+  ctx->descriptor_set_layouts = layouts;
+  ctx->num_descriptor_set_layouts = num_layouts;
+  memset(ctx->descriptor_set_layouts, 0, num_layouts * sizeof(VkDescriptorSetLayout));
+}
+
 VkDescriptorSetLayout
 create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count) {
   VkDescriptorSetLayoutCreateInfo descriptor_set_layout_ci = {
@@ -2137,8 +2150,6 @@ DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {
   return builder;
 };
 
-// this binding handle would describe which binding, array of uniform
-// size, and what shader stage the uniform is used in
 void add_uniform_buffer_descriptor_set(
     DescriptorSetBuilder *builder,
     const UniformBuffer *uniform_buffer,
@@ -2185,9 +2196,6 @@ void add_uniform_buffer_descriptor_set(
   };
 }
 
-// TODO why did I put these TODOs here? As in this location? Not sure what they have to do with image descriptor sets.
-// TODO check for proper transitions - still don't understand transitions
-// TODO check how to pass immutable samplers through here
 void add_image_descriptor_set(
     DescriptorSetBuilder *builder,
     VkImageView image_view,
@@ -2221,7 +2229,7 @@ void add_image_descriptor_set(
   builder->descriptor_writes[builder->write_descriptor_count++] = {
       .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
       .pNext = NULL,
-      .dstSet = VK_NULL_HANDLE, // This is unclear - this eventually needs to be set
+      .dstSet = VK_NULL_HANDLE,
       .dstBinding = binding,
       .dstArrayElement = 0,
       .descriptorCount = descriptor_count,
@@ -2232,7 +2240,6 @@ void add_image_descriptor_set(
   };
 }
 
-// TODO kill this thing
 DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescriptorPool descriptor_pool) {
   // Layout
   VkDescriptorSetLayoutCreateInfo descriptor_set_layout_ci = {

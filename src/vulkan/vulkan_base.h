@@ -166,7 +166,7 @@ typedef struct {
   VkQueue compute_queue;
 
   // Populated by vkAcquireNextImageKHR so we can get the right framebuffer images.
-  // TODO might want to get this and pass around instead of caching.
+  // TODO might want to get this out and pass around instead of caching.
   u32 image_index;
 
   VkSwapchainKHR swapchain;
@@ -205,6 +205,11 @@ typedef struct {
   // These bools stored so we know to destroy the queue differently on teardown.
   bool compute_queue_index_is_different_than_graphics;
   bool present_queue_index_is_different_than_graphics;
+
+  // Descriptor Set Layouts must outlive pipeline layouts, which need to outlive pipelines.
+  // Layouts are only touched at creation and destruction.
+  VkDescriptorSetLayout *descriptor_set_layouts;
+  u32 num_descriptor_set_layouts;
 } VulkanContext;
 
 typedef struct {
@@ -520,6 +525,8 @@ VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u
 u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties);
 
 // Descriptor Sets
+void set_descriptor_set_layouts(VulkanContext *ctx, VkDescriptorSetLayout *layouts, u32 num_layouts);
+void reset_descriptor_set_layouts(VulkanContext *ctx);
 VkDescriptorPool
 create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets);
 VkDescriptorSetLayout

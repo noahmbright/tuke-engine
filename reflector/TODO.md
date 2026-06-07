@@ -51,3 +51,6 @@ Per-program: which `DescriptorSetLayoutIDs` it uses, which `VertexLayoutID`, bot
 - Add `const char *source_path` to `ShaderSpec` for hot reload.
 - Validate that matching bindings across shaders sharing a SET_LABEL have the same struct type
   name, not just the same shape.
+- Remove the set number from the `SET_BINDING` DSL syntax and parser. The value is parsed and
+  immediately discarded — set index is now derived from layout position in the program. Strip it
+  from `parse_set_binding_directive`, update all `.vert.in` / `.frag.in` files accordingly.

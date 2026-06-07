@@ -9,6 +9,7 @@
 //      pick only what I'm using?
 #include "opengl_base.h"
 #include "vulkan/vulkan_base.h"
+#include <vulkan/vulkan_core.h>
 
 inline VkPipeline shader_handles_to_graphics_pipeline(
     const VulkanContext *ctx,
@@ -36,6 +37,41 @@ inline VkPipeline shader_handles_to_graphics_pipeline(
   vkDestroyShaderModule(ctx->device, frag_shader, NULL);
 
   return pipeline;
+}
+
+// TODO would like this render pass removed
+inline void init_program_spec(
+    VulkanContext *ctx,
+    VkRenderPass render_pass,
+    const ProgramSpec *spec,
+    VkPipeline *out_pipeline,
+    VkPipelineLayout *out_pipeline_layout
+) {
+  VkDevice dev = ctx->device;
+
+  VkShaderModule vert_mod = create_shader_module(dev, spec->vert_spv, spec->vert_spv_size);
+  assert(vert_mod != VK_NULL_HANDLE);
+
+  VkShaderModule frag_mod = create_shader_module(dev, spec->frag_spv, spec->frag_spv_size);
+  assert(frag_mod != VK_NULL_HANDLE);
+
+  assert(spec->num_descriptor_set_layouts <= 16);
+  VkDescriptorSetLayout temp_layouts[16] = {};
+  for (u32 i = 0; i < spec->num_descriptor_set_layouts; i++) {
+    VkDescriptorSetLayout *layout = &ctx->descriptor_set_layouts[spec->binding_list_ids[i]];
+    if (*layout == VK_NULL_HANDLE) {
+      *layout = create_descriptor_set_layout(dev, spec->binding_lists[i], spec->binding_list_lens[i]);
+    }
+    temp_layouts[i] = *layout;
+  }
+
+  const VkPipelineVertexInputStateCreateInfo *vertex_layout = &generated_vulkan_vertex_layouts[spec->vertex_layout_id];
+  *out_pipeline_layout = create_pipeline_layout(dev, temp_layouts, spec->num_descriptor_set_layouts);
+  *out_pipeline =
+      create_default_graphics_pipeline(ctx, render_pass, vert_mod, frag_mod, vertex_layout, *out_pipeline_layout);
+
+  vkDestroyShaderModule(dev, vert_mod, NULL);
+  vkDestroyShaderModule(dev, frag_mod, NULL);
 }
 
 inline void init_gl_vertex_layout(VertexLayoutID vertex_layout_id, GLuint vao, GLuint *vbos, u32 num_vbos, GLuint ebo) {

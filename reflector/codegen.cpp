@@ -488,6 +488,7 @@ static void codegen_program_spec_struct_definition(FILE *dst) {
 
   fprintf(dst, "  const VkDescriptorSetLayoutBinding *binding_lists[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
   fprintf(dst, "  uint32_t binding_list_lens[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
+  fprintf(dst, "  DescriptorSetLayoutID binding_list_ids[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
   fprintf(dst, "  uint32_t num_descriptor_set_layouts;\n");
 
   fprintf(dst, "} ProgramSpec;\n");
@@ -820,6 +821,7 @@ static void generate_vulkan_descriptor_write_templates(FILE *dst, const ParsedSh
   for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
     const DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
 
+    // TODO should make this const eventually
     fprintf(dst, "static VkWriteDescriptorSet %.*s_write_templates[] = {\n", layout->name_length, layout->name);
     for (u32 j = 0; j < MAX_NUM_DESCRIPTOR_BINDINGS; j++) {
       const DescriptorBinding *binding = &layout->bindings[j];
@@ -998,6 +1000,7 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
 
   fprintf(dst, "  .vertex_layout_id = %s,\n",             vertex_layout_name);
 
+  // Binding Lists
   fprintf(dst, "  .binding_lists = {\n");
   for(u32 i = 0; i < program->num_descriptor_set_layouts; i++) {
     const DescriptorSetLayout *layout = program->descriptor_set_layouts[i];
@@ -1007,11 +1010,19 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
   }
   fprintf(dst, "  },\n");
 
+  // Binding List Lens
   fprintf(dst, "  .binding_list_lens = {");
   for(u32 i = 0; i < program->num_descriptor_set_layouts; i++) {
     fprintf( dst, "%u, ", program->descriptor_set_layouts[i]->num_bindings);
   }
   fprintf(dst, "},\n");
+
+  // Binding List IDs
+  fprintf(dst, "  .binding_list_ids = {\n");
+  for(u32 i = 0; i < program->num_descriptor_set_layouts; i++) {
+    fprintf(dst, "    LAYOUT_ID_%s,\n", program->descriptor_set_layouts[i]->name);
+  }
+  fprintf(dst, "  },\n");
 
   fprintf(dst, "  .num_descriptor_set_layouts = %u,\n",   program->num_descriptor_set_layouts);
 
@@ -1090,9 +1101,9 @@ static void codegen_shader_handle_enum(FILE *dst, const ParsedShadersIR *ir) {
 static void codegen_descriptor_set_enum(FILE *dst, const ParsedShadersIR *ir) {
   fprintf(dst, "typedef enum {\n");
   for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
-    fprintf(dst, "  %s,\n", ir->descriptor_set_layouts[i].name);
+    fprintf(dst, "  LAYOUT_ID_%s,\n", ir->descriptor_set_layouts[i].name);
   }
-  fprintf(dst, "\n  NUM_DESCRIPTOR_SET_LAYOUTS\n} DescriptorSetLayoutIDs;\n\n");
+  fprintf(dst, "\n  NUM_DESCRIPTOR_SET_LAYOUTS\n} DescriptorSetLayoutID;\n\n");
 }
 
 // Only going to call this after validating that we have matching vert/frag pairs.
