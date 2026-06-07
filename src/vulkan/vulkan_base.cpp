@@ -1863,6 +1863,7 @@ create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_
 
 // TODO VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
 //      ^ What does this mean?
+// Could just have this allocate more room than I could ever hope to use.
 VkDescriptorPool
 create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets) {
 

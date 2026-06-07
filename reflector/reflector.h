@@ -10,6 +10,7 @@
 #define MAX_NUM_DESCRIPTOR_BINDINGS 8
 #define MAX_VERTEX_LAYOUT_NAME_LENGTH 128
 #define MAX_DESCRIPTOR_SET_LAYOUT_NAME_LENGTH 256
+#define MAX_NUM_DESCRIPTOR_SET_LAYOUTS 16
 
 using u8 = uint8_t;
 using u16 = uint16_t;
@@ -238,33 +239,31 @@ struct GLSLStructMember {
   GLSLType type; // type encodes alignment, which can vary with backend or usage
 };
 
-struct GLSLStructMemberList {
-  GLSLStructMember members[MAX_NUM_STRUCT_MEMBERS];
-  u32 num_members;
-  u32 size;
-};
-
 struct GLSLStruct {
   const char *type_name;
   u32 type_name_len;
 
   const char *discovered_shader_name;
-  u32 discovered_shader_name_length;
+  u32 discovered_shader_name_len;
 
-  GLSLStructMemberList member_list;
+  GLSLStructMember members[MAX_NUM_STRUCT_MEMBERS];
+  u32 num_members;
+  u32 size_in_bytes;
 };
 
-inline void log_glsl_struct(FILE *destination, const GLSLStruct *glsl_struct) {
+inline void log_glsl_struct(FILE *dst, const GLSLStruct *glsl_struct) {
   fprintf(
-      destination, "Logging GLSLStruct with %u members %.*s:\n", glsl_struct->member_list.num_members,
-      glsl_struct->type_name_len, glsl_struct->type_name
+      dst, "Logging GLSLStruct with %u members %.*s:\n", glsl_struct->num_members, glsl_struct->type_name_len,
+      glsl_struct->type_name
   );
-  for (u32 i = 0; i < glsl_struct->member_list.num_members; i++) {
-    GLSLStructMember current_member = glsl_struct->member_list.members[i];
-    fprintf(
-        destination, "\t%s %.*s\n", glsl_type_to_string[current_member.type], (int)current_member.identifier_length,
-        current_member.identifier
-    );
+  for (u32 i = 0; i < glsl_struct->num_members; i++) {
+    GLSLStructMember member = glsl_struct->members[i];
+    const char *type = glsl_type_to_string[member.type];
+    fprintf(dst, "    %s %.*s", type, member.identifier_length, member.identifier);
+    if (member.array_length > 0) {
+      fprintf(dst, "[%u]", member.array_length);
+    }
+    fprintf(dst, "\n");
   }
 }
 
@@ -292,9 +291,6 @@ struct DescriptorBinding {
   u32 descriptor_count; // For uniform/texture arrays
   u32 stage_flags;
 
-  // TODO there are the layouts, and then there are the writes.
-  // Writes depend on things like uniform struct/image sizes.
-  // I need to cleanly separate these stages.
   const GLSLStruct *glsl_struct; // For uniforms
 
   // Descriptors all give an identifier, the name of the texture or uniform instance

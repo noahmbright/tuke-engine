@@ -6,7 +6,7 @@
 
 {{ LOCATION 0 }} out vec4 FragColor;
 
-{{ SET_BINDING 0 1 SET_LABEL GLOBAL }} uniform LightPosition {
+{{ SET_BINDING 0 1 SET_LABEL CUBE }} uniform LightPosition {
     vec4 position;
 } light_position;
 

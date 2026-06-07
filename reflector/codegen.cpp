@@ -247,8 +247,8 @@ static u32 align_up(u32 offset, u32 alignment) { return (offset + alignment - 1)
 static u32 compute_glsl_struct_size(const GLSLStruct *glsl_struct) {
   u32 max_alignment = 0;
   u32 size = 0;
-  for (u32 i = 0; i < glsl_struct->member_list.num_members; i++) {
-    const GLSLStructMember *member = &glsl_struct->member_list.members[i];
+  for (u32 i = 0; i < glsl_struct->num_members; i++) {
+    const GLSLStructMember *member = &glsl_struct->members[i];
     u32 alignment = glsl_type_to_alignment[member->type];
     if (alignment > max_alignment)
       max_alignment = alignment;
@@ -393,49 +393,43 @@ TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_
   return replacement;
 }
 
-GLSLSource replace_string_slices(const ParsedShader *sliced_shader, Backend backend) {
+GLSLSource replace_string_slices(const ParsedShader *parsed, Backend backend) {
+  // First pass, get replacements and accumulate lengths.
   u32 compiled_source_length = 0;
-  u32 num_string_slices = sliced_shader->num_template_slices;
-  const TemplateStringSlice *string_slices = sliced_shader->template_slices;
-  TemplateStringReplacement replacements[MAX_NUM_STRING_SLICES];
-  memset(&replacements, 0, sizeof(replacements));
-
-  // first pass, get replacements and accumulate lengths
-  for (u32 i = 0; i < num_string_slices; i++) {
-    const TemplateStringSlice *string_slice = &string_slices[i];
-    replacements[i] = perform_replacement(string_slice, backend);
+  TemplateStringReplacement replacements[MAX_NUM_STRING_SLICES] = {};
+  for (u32 i = 0; i < parsed->num_slices; i++) {
+    replacements[i] = perform_replacement(&parsed->slices[i], backend);
     compiled_source_length += replacements[i].length;
   }
-
-  u32 source_index = 0;
   char *compiled_source = (char *)malloc(sizeof(char) * (compiled_source_length + 1));
 
-  for (u32 i = 0; i < num_string_slices; i++) {
-    const TemplateStringSlice *string_slice = &string_slices[i];
+  u32 source_index = 0;
+  for (u32 i = 0; i < parsed->num_slices; i++) {
+    const TemplateStringSlice *slice = &parsed->slices[i];
     const TemplateStringReplacement *replacement = &replacements[i];
 
     char *current_start = compiled_source + source_index;
     memcpy(current_start, replacement->string, replacement->length);
 
-    if (string_slice->type == DIRECTIVE_TYPE_LOCATION) {
-      assert(string_slice->location < 100);
-      if (string_slice->location < 10) {
+    if (slice->type == DIRECTIVE_TYPE_LOCATION) {
+      assert(slice->location < 100);
+      if (slice->location < 10) {
         // layout(location = __)
         // first _ is [18]
         current_start[18] = ' ';
-        current_start[19] = '0' + string_slice->location;
+        current_start[19] = '0' + slice->location;
       } else {
-        current_start[18] = '0' + string_slice->location / 10;
-        current_start[19] = '0' + string_slice->location % 10;
+        current_start[18] = '0' + slice->location / 10;
+        current_start[19] = '0' + slice->location % 10;
       }
-    } else if (string_slice->type == DIRECTIVE_TYPE_SET_BINDING) {
-      assert(string_slice->set < 10);
-      assert(string_slice->binding < 10);
+    } else if (slice->type == DIRECTIVE_TYPE_SET_BINDING) {
+      assert(slice->set < 10);
+      assert(slice->binding < 10);
 
       if (backend == BACKEND_VULKAN) {
         // layout(set = _, binding = _) _ at 13, 26
-        current_start[13] = '0' + string_slice->set;
-        current_start[26] = '0' + string_slice->binding;
+        current_start[13] = '0' + slice->set;
+        current_start[26] = '0' + slice->binding;
       }
     }
 
@@ -447,7 +441,7 @@ GLSLSource replace_string_slices(const ParsedShader *sliced_shader, Backend back
   GLSLSource glsl_source = {
       .length = compiled_source_length,
       .string = compiled_source,
-      .stage = sliced_shader->stage,
+      .stage = parsed->stage,
   };
   return glsl_source;
 }
@@ -466,6 +460,7 @@ static void codegen_compiled_shader_header(FILE *dst) {
 
   fprintf(dst, "#define MAX_NUM_VERTEX_BINDINGS %u\n", MAX_NUM_VERTEX_BINDINGS);
   fprintf(dst, "#define MAX_NUM_VERTEX_ATTRIBUTES %u\n", MAX_NUM_VERTEX_ATTRIBUTES);
+  fprintf(dst, "#define MAX_NUM_DESCRIPTOR_SET_LAYOUTS %u\n", MAX_NUM_DESCRIPTOR_SET_LAYOUTS);
   fprintf(dst, "\n");
 }
 
@@ -483,11 +478,18 @@ static void codegen_program_spec_struct_definition(FILE *dst) {
   fprintf(dst, "typedef struct {\n");
   fprintf(dst, "  const char* vert_opengl_glsl;\n");
   fprintf(dst, "  const char* frag_opengl_glsl;\n");
+
   fprintf(dst, "  const uint32_t* vert_spv;\n");
   fprintf(dst, "  const uint32_t vert_spv_size;\n");
   fprintf(dst, "  const uint32_t* frag_spv;\n");
   fprintf(dst, "  const uint32_t frag_spv_size;\n");
+
   fprintf(dst, "  VertexLayoutID vertex_layout_id;\n");
+
+  fprintf(dst, "  const VkDescriptorSetLayoutBinding *binding_lists[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
+  fprintf(dst, "  uint32_t binding_list_lens[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
+  fprintf(dst, "  uint32_t num_descriptor_set_layouts;\n");
+
   fprintf(dst, "} ProgramSpec;\n");
   fprintf(dst, "\n");
 }
@@ -789,18 +791,19 @@ static void generate_vulkan_descriptor_set_binding_lists(FILE *dst, const Parsed
 
       // Support for descriptor types is limited currently.
       // Would really like to better understand how to separate samplers from images.
-      // Might just move type string into its own routine now.
       const char *type_string = binding.type == DESCRIPTOR_TYPE_UNIFORM ? "VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER"
                                                                         : "VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER";
       const char *flags_string = get_stage_flags_string(binding.stage_flags);
 
+      // clang-format off
       fprintf(dst, "  {\n");
-      fprintf(dst, "    .binding = %u,\n", j);
-      fprintf(dst, "    .descriptorType = %s,\n", type_string);
-      fprintf(dst, "    .descriptorCount = %u,\n", binding.descriptor_count);
-      fprintf(dst, "    .stageFlags = %s,\n", flags_string);
+      fprintf(dst, "    .binding = %u,\n",              j);
+      fprintf(dst, "    .descriptorType = %s,\n",       type_string);
+      fprintf(dst, "    .descriptorCount = %u,\n",      binding.descriptor_count);
+      fprintf(dst, "    .stageFlags = %s,\n",           flags_string);
       fprintf(dst, "    .pImmutableSamplers = NULL,\n");
       fprintf(dst, "  },\n");
+      // clang-format on
     }
 
     fprintf(dst, "};\n");
@@ -889,8 +892,8 @@ static void codegen_struct_defintions(FILE *dst, const GLSLStruct *glsl_structs,
     // precompute stuff
     u32 max_alignment = 0;
     u32 struct_size = 0;
-    for (u32 j = 0; j < glsl_struct->member_list.num_members; j++) {
-      const GLSLStructMember *member = &glsl_struct->member_list.members[j];
+    for (u32 j = 0; j < glsl_struct->num_members; j++) {
+      const GLSLStructMember *member = &glsl_struct->members[j];
       if (member->array_length > 1) {
         fprintf(
             dst, "const uint32_t %.*s_%.*s_array_size = %u;\n", glsl_struct->type_name_len, glsl_struct->type_name,
@@ -908,8 +911,8 @@ static void codegen_struct_defintions(FILE *dst, const GLSLStruct *glsl_structs,
     // codegen
     // All structs must be aligned to 16 bytes... I think.
     fprintf(dst, "typedef struct alignas(16) {\n");
-    for (u32 j = 0; j < glsl_struct->member_list.num_members; j++) {
-      const GLSLStructMember *member = &glsl_struct->member_list.members[j];
+    for (u32 j = 0; j < glsl_struct->num_members; j++) {
+      const GLSLStructMember *member = &glsl_struct->members[j];
       fprintf(
           dst, "  alignas(%u) %s %.*s", glsl_type_to_alignment[member->type], glsl_type_to_c_type[member->type],
           member->identifier_length, member->identifier
@@ -984,13 +987,34 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
   const char *vertex_layout_name = program->parsed_vert->vertex_layout->name;
   // clang-format off
   fprintf(dst, "const ProgramSpec %s_program_spec = {\n", program->name);
+
   fprintf(dst, "  .vert_opengl_glsl = %s_opengl_glsl,\n", vert_name);
   fprintf(dst, "  .frag_opengl_glsl = %s_opengl_glsl,\n", frag_name);
+
   fprintf(dst, "  .vert_spv         = %s_spv,\n",         vert_name);
   fprintf(dst, "  .vert_spv_size    = sizeof(%s_spv),\n", vert_name);
   fprintf(dst, "  .frag_spv         = %s_spv,\n",         frag_name);
   fprintf(dst, "  .frag_spv_size    = sizeof(%s_spv),\n", frag_name);
+
   fprintf(dst, "  .vertex_layout_id = %s,\n",             vertex_layout_name);
+
+  fprintf(dst, "  .binding_lists = {\n");
+  for(u32 i = 0; i < program->num_descriptor_set_layouts; i++) {
+    const DescriptorSetLayout *layout = program->descriptor_set_layouts[i];
+    fprintf(
+        dst, "    %.*s_descriptor_set_layout_bindings,\n", layout->name_length, layout->name
+    );
+  }
+  fprintf(dst, "  },\n");
+
+  fprintf(dst, "  .binding_list_lens = {");
+  for(u32 i = 0; i < program->num_descriptor_set_layouts; i++) {
+    fprintf( dst, "%u, ", program->descriptor_set_layouts[i]->num_bindings);
+  }
+  fprintf(dst, "},\n");
+
+  fprintf(dst, "  .num_descriptor_set_layouts = %u,\n",   program->num_descriptor_set_layouts);
+
   fprintf(dst, "};\n\n");
   // clang-format on
 }
@@ -1134,7 +1158,7 @@ static bool compile_shaders(const ParsedShadersIR *ir, CompiledShaders *compiled
   return should_codegen;
 }
 
-static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderProgram *names, u32 *num_names) {
+static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderProgram *programs, u32 *num_names) {
   u32 found_names = 0;
   bool valid = true;
 
@@ -1144,49 +1168,68 @@ static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderProg
     bool new_frag = (shader->stage == SHADER_STAGE_FRAGMENT);
     bool new_comp = (shader->stage == SHADER_STAGE_COMPUTE);
 
-    ShaderProgram *entry = NULL;
+    ShaderProgram *prog = NULL;
     for (u32 i = 0; i < found_names; i++) {
-      if (strcmp(shader->name, names[i].name) != 0) {
+      if (strcmp(shader->name, programs[i].name) != 0) {
         continue;
       }
-      entry = &names[i];
-      bool old_vert = (entry->parsed_vert != NULL);
-      bool old_frag = (entry->parsed_frag != NULL);
-      bool old_comp = (entry->parsed_comp != NULL);
 
-      // Check stage compatibility.
+      prog = &programs[i];
+      bool old_vert = (prog->parsed_vert != NULL);
+      bool old_frag = (prog->parsed_frag != NULL);
+      bool old_comp = (prog->parsed_comp != NULL);
+
       if ((new_vert && old_vert) || (new_frag && old_frag) || (new_comp && old_comp)) {
         fprintf(stderr, "Shader %s has a duplicate stage.\n", shader->name);
         valid = false;
       }
-      if (new_comp && (old_vert || old_frag)) {
+
+      bool old_graphics_new_comp = new_comp && (old_vert || old_frag);
+      bool new_graphics_old_comp = (new_vert || new_frag) && old_comp;
+      if (old_graphics_new_comp || new_graphics_old_comp) {
         fprintf(stderr, "Shader %s mixes compute with vertex/fragment stages.\n", shader->name);
         valid = false;
       }
-      if ((new_vert || new_frag) && old_comp) {
-        fprintf(stderr, "Shader %s mixes vertex/fragment with compute stage.\n", shader->name);
-        valid = false;
-      }
-      break;
-    }
 
-    if (!entry) {
-      entry = &names[found_names++];
-      entry->name = shader->name;
+      break;
+    } // End loop over heretofore found programs
+
+    if (!prog) {
+      prog = &programs[found_names++];
+      prog->name = shader->name;
     }
 
     if (new_vert) {
-      entry->parsed_vert = shader;
+      prog->parsed_vert = shader;
     } else if (new_frag) {
-      entry->parsed_frag = shader;
+      prog->parsed_frag = shader;
     } else if (new_comp) {
-      entry->parsed_comp = shader;
+      prog->parsed_comp = shader;
     }
-  }
+
+    // Push new descriptor set layouts to the program.
+    // Can use pointer equality because everything is stored in the statically allocated IR's arrays.
+    for (u32 new_idx = 0; new_idx < shader->num_descriptor_set_layouts; new_idx++) {
+      const DescriptorSetLayout *new_layout = shader->descriptor_set_layouts[new_idx];
+
+      bool layout_is_new = true;
+      for (u32 old_idx = 0; old_idx < prog->num_descriptor_set_layouts; old_idx++) {
+        const DescriptorSetLayout *old_layout = prog->descriptor_set_layouts[old_idx];
+        if (old_layout == new_layout) {
+          layout_is_new = false;
+          break;
+        }
+      }
+
+      if (layout_is_new) {
+        prog->descriptor_set_layouts[prog->num_descriptor_set_layouts++] = new_layout;
+      }
+    }
+  } // End loop over all shaders
 
   // Validate names are either compute OR both vertex and fragment.
   for (u32 i = 0; i < found_names; i++) {
-    ShaderProgram *entry = &names[i];
+    ShaderProgram *entry = &programs[i];
     if (entry->parsed_comp) {
       continue;
     }

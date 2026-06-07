@@ -38,8 +38,8 @@ typedef struct {
   const ParsedShader *parsed_frag;
   const ParsedShader *parsed_comp;
 
-  const char *descriptor_set_names[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];
-  u32 num_descriptor_sets;
+  const DescriptorSetLayout *descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LISTS];
+  u32 num_descriptor_set_layouts;
 } ShaderProgram;
 
 // Return value is whether codegen was successful or not.

@@ -29,23 +29,23 @@ int main() {
   VkFormat depth_format = find_depth_format(ctx.physical_device);
   VkRenderPass rp = create_color_depth_render_pass(ctx.device, ctx.surface_format.format, depth_format);
 
-  // REAL FOCUS Descriptor Sets
   VkDescriptorPool descriptor_pool =
       create_descriptor_pool(ctx.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
-
-  const VkDescriptorSetLayoutBinding *bindings = TRIANGLE_TRANSFORMATION_descriptor_set_layout_bindings;
-  u32 binding_count = TRIANGLE_TRANSFORMATION_num_descriptor_set_layout_bindings;
-  VkDescriptorSetLayout descriptor_set_layout = create_descriptor_set_layout(ctx.device, bindings, binding_count);
-  VkDescriptorSet descriptor_set = create_descriptor_set(ctx.device, &descriptor_set_layout, descriptor_pool);
-
-  // Know binding, descriptor count, and type from generated layout bindings - from reflection
-  VkWriteDescriptorSet *write = TRIANGLE_TRANSFORMATION_write_templates;
-  write->dstSet = descriptor_set;
 
   // Made a mistake with the wrong upload size here - used the wrong struct in the name.
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   UniformWrite handle = push_uniform(&ub_manager, sizeof(TriangleTransformation));
   UniformBuffer ub = create_uniform_buffer(&ctx, ub_manager.current_offset);
+
+  // REAL FOCUS Descriptor Sets
+  const ProgramSpec program = common_uniform_bringup_program_spec;
+  VkDescriptorSetLayout descriptor_set_layout =
+      create_descriptor_set_layout(ctx.device, program.binding_lists[0], program.binding_list_lens[0]);
+  VkDescriptorSet descriptor_set = create_descriptor_set(ctx.device, &descriptor_set_layout, descriptor_pool);
+
+  // Know binding, descriptor count, and type from generated layout bindings - from reflection
+  VkWriteDescriptorSet *write = TRIANGLE_TRANSFORMATION_write_templates;
+  write->dstSet = descriptor_set;
 
   // These are needed for a write to particular buffer - runtime info.
   VkDescriptorBufferInfo descriptor_buffer_info = {

@@ -11,7 +11,6 @@
 #define MAX_NUM_STRING_SLICES 64
 #define MAX_NUM_VERTEX_LAYOUTS 32
 #define MAX_NUM_DESCRIPTOR_SET_LISTS 32
-#define MAX_NUM_DESCRIPTOR_SET_LAYOUTS 16 //
 #define MAX_NUM_GLSL_STRUCTS 64
 #define MAX_NUM_BINDING_SLOTS 128
 
@@ -278,8 +277,8 @@ typedef struct {
   ShaderStage stage;
   const char *name; // name is a malloc'd string owned by ShaderToCompile
 
-  TemplateStringSlice template_slices[MAX_NUM_STRING_SLICES];
-  u32 num_template_slices;
+  TemplateStringSlice slices[MAX_NUM_STRING_SLICES];
+  u32 num_slices;
 
   const VertexLayout *vertex_layout;
   VertexAttributeRate binding_rates[MAX_NUM_VERTEX_BINDINGS];
@@ -290,9 +289,9 @@ typedef struct {
   u32 num_descriptor_set_layouts;
 } ParsedShader;
 
-// the IR contains the shaders after parsing, which all have their slices and pointers to their descriptor sets and
-// vertex layouts
-// it also holds the global list of descriptor sets and vertex layouts that the slices shaders point into
+// The IR contains the shaders after parsing, which have their slices and pointers to their descriptor sets and vertex
+// layouts.
+// It also holds the global list of descriptor sets and vertex layouts that the slices shaders point into
 //
 // ShaderToCompileList is generated in the beginning of the main function, which owns all source strings. It is freed
 // at the end of the main function. ParsedShadersIR contains slices into it, so as long as ShaderToCompileList is
@@ -314,10 +313,5 @@ typedef struct {
   GLSLStruct structs[MAX_NUM_GLSL_STRUCTS];
   u32 num_structs;
 } ParsedShadersIR;
-
-typedef struct {
-  const GLSLStruct *matching_struct;
-  bool found_mismatch;
-} StructSearchResult;
 
 ParsedShadersIR parse_shaders(const ShaderToCompileList *shader_to_compile_list);
