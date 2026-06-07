@@ -1698,7 +1698,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
 }
 
 VkPipeline create_default_graphics_pipeline(
-    const VulkanContext *context,
+    const VulkanContext *ctx,
     VkRenderPass render_pass,
     VkShaderModule vertex_shader,
     VkShaderModule fragment_shader,
@@ -1722,7 +1722,7 @@ VkPipeline create_default_graphics_pipeline(
       .blend_mode = BLEND_MODE_ALPHA,
   };
 
-  return create_graphics_pipeline(context->device, &config, context->pipeline_cache);
+  return create_graphics_pipeline(ctx->device, &config, ctx->pipeline_cache);
 }
 
 // Waits for a fence, resets, and updates the context's currently tracked image
@@ -1844,13 +1844,13 @@ void submit_and_present(const VulkanContext *ctx, VkCommandBuffer cmd) {
 }
 
 VkPipelineLayout
-create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts, u32 set_layout_count) {
+create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *set_layouts, u32 set_layout_count) {
   VkPipelineLayoutCreateInfo pipeline_layout_ci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
       .setLayoutCount = set_layout_count,
-      .pSetLayouts = descriptor_set_layouts,
+      .pSetLayouts = set_layouts,
       .pushConstantRangeCount = 0, // TODO push constants
       .pPushConstantRanges = NULL,
   };
@@ -1864,6 +1864,7 @@ create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_
 // TODO VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
 //      ^ What does this mean?
 // Could just have this allocate more room than I could ever hope to use.
+// Would save on recompiles and make hot loading easier.
 VkDescriptorPool
 create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets) {
 
@@ -1882,82 +1883,48 @@ create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, 
   return descriptor_pool;
 }
 
-StagingArena create_staging_arena(const VulkanContext *context, u32 total_size) {
-  VulkanBuffer staging_buffer = create_buffer(context, BUFFER_TYPE_STAGING, total_size);
-  StagingArena staging_arena = {
-      .buffer = staging_buffer,
-      .total_size = total_size,
-      .offset = 0,
-      .num_copy_regions = 0,
-  };
-  memset(staging_arena.copy_regions, 0, sizeof(staging_arena.copy_regions));
-  return staging_arena;
-}
-
-// TODO An explicit API to get rid of
-// written_data_offset is the offset of the staged data in *data, i.e. the
-// src_offset when the staging buffer is the src
-u32 stage_data_explicit(
-    const VulkanContext *context, StagingArena *arena, const void *data, u32 size, VkBuffer destination, u32 dst_offset
-) {
-
+static void
+stage_data(const VulkanContext *ctx, StagingArena *arena, const void *data, u32 size, VkBuffer dst, u32 dst_offset) {
   assert(arena->offset + size <= arena->total_size);
   assert(arena->num_copy_regions < MAX_COPY_REGIONS);
 
-  u32 written_data_offset = arena->offset;
-
-  VkBufferCopy copy_region;
-  copy_region.srcOffset = arena->offset;
-  copy_region.dstOffset = dst_offset;
-  copy_region.size = size;
+  VkBufferCopy copy_region = {
+      .srcOffset = arena->offset,
+      .dstOffset = dst_offset,
+      .size = size,
+  };
 
   arena->copy_regions[arena->num_copy_regions] = copy_region;
-  arena->destination_buffers[arena->num_copy_regions] = destination;
-  arena->num_copy_regions++;
+  arena->dst_buffers[arena->num_copy_regions++] = dst;
 
-  write_to_vulkan_buffer(context, data, size, arena->offset, arena->buffer);
-
+  write_to_vulkan_buffer(ctx, data, size, arena->offset, arena->buffer);
   arena->offset += size;
-  return written_data_offset;
 }
 
-u32 stage_data_auto(
-    const VulkanContext *context, StagingArena *arena, const void *data, u32 size, VkBuffer destination
-) {
-  return stage_data_explicit(context, arena, data, size, destination, arena->offset);
-}
-
-void flush_staging_arena(const VulkanContext *context, StagingArena *arena) {
-
-  VkCommandBuffer command_buffer = begin_single_use_command_buffer(context);
-
+static void flush_staging_arena(const VulkanContext *context, StagingArena *arena) {
   if (arena->num_copy_regions == 0) {
     return;
   }
 
-  VkBuffer current_destination = arena->destination_buffers[0];
-  u32 current_batch_start = 0;
+  VkCommandBuffer cmd = begin_single_use_command_buffer(context);
+  VkBuffer current_destination = arena->dst_buffers[0];
+  u32 start = 0;
 
   for (u32 i = 1; i < arena->num_copy_regions; i++) {
-    if (arena->destination_buffers[i] == current_destination) {
+    if (arena->dst_buffers[i] == current_destination) {
       continue;
     }
 
-    vkCmdCopyBuffer(
-        command_buffer, arena->buffer.buffer, current_destination, i - current_batch_start,
-        arena->copy_regions + current_batch_start
-    );
-
-    current_destination = arena->destination_buffers[i];
-    current_batch_start = i;
+    vkCmdCopyBuffer(cmd, arena->buffer.buffer, current_destination, i - start, arena->copy_regions + start);
+    current_destination = arena->dst_buffers[i];
+    start = i;
   }
 
   vkCmdCopyBuffer(
-      command_buffer, arena->buffer.buffer, current_destination, arena->num_copy_regions - current_batch_start,
-      arena->copy_regions + current_batch_start
+      cmd, arena->buffer.buffer, current_destination, arena->num_copy_regions - start, arena->copy_regions + start
   );
 
-  end_single_use_command_buffer(context, command_buffer);
+  end_single_use_command_buffer(context, cmd);
 }
 
 UniformBuffer create_uniform_buffer(const VulkanContext *context, u32 buffer_size) {
@@ -2148,11 +2115,11 @@ create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding
 }
 
 VkDescriptorSet
-create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *set_layouts, VkDescriptorPool descriptor_pool) {
+create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *set_layouts, VkDescriptorPool pool) {
   VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
       .pNext = NULL,
-      .descriptorPool = descriptor_pool,
+      .descriptorPool = pool,
       .descriptorSetCount = 1,
       .pSetLayouts = set_layouts,
   };
@@ -2265,9 +2232,7 @@ void add_image_descriptor_set(
   };
 }
 
-// TODO decouple layouts from descriptor sets
-// I make a layout for every descriptor set, but I should be able to
-// create sets from mixtures of layouts
+// TODO kill this thing
 DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescriptorPool descriptor_pool) {
   // Layout
   VkDescriptorSetLayoutCreateInfo descriptor_set_layout_ci = {
@@ -2385,14 +2350,24 @@ const BufferHandle *upload_data(BufferUploadQueue *queue, BufferType buffer_type
   return handle;
 }
 
-BufferManager flush_buffers(VulkanContext *context, BufferUploadQueue *queue) {
+BufferManager flush_buffers(VulkanContext *ctx, BufferUploadQueue *queue) {
   assert(queue->num_slices > 0);
   u64 total_size = queue->vertex_buffer_offset + queue->index_buffer_offset;
+
+  VulkanBuffer staging_buffer = create_buffer(ctx, BUFFER_TYPE_STAGING, total_size);
+  StagingArena staging_arena = {
+      .buffer = staging_buffer,
+      .total_size = total_size,
+      .offset = 0,
+      .num_copy_regions = 0,
+      .copy_regions = {},
+  };
+
   BufferManager manager = {
-      .context = context,
-      .vertex_buffer = create_buffer(context, BUFFER_TYPE_VERTEX, queue->vertex_buffer_offset),
-      .index_buffer = create_buffer(context, BUFFER_TYPE_INDEX, queue->index_buffer_offset),
-      .staging_arena = create_staging_arena(context, total_size),
+      .context = ctx,
+      .vertex_buffer = create_buffer(ctx, BUFFER_TYPE_VERTEX, queue->vertex_buffer_offset),
+      .index_buffer = create_buffer(ctx, BUFFER_TYPE_INDEX, queue->index_buffer_offset),
+      .staging_arena = staging_arena,
   };
 
   for (u32 i = 0; i < queue->num_slices; i++) {
@@ -2410,11 +2385,10 @@ BufferManager flush_buffers(VulkanContext *context, BufferUploadQueue *queue) {
       assert(false);
     }
 
-    // TODO not a fan of these *_explicit APIs. Want to be more all or nothing obvious about what is/ is not done.
-    stage_data_explicit(context, &manager.staging_arena, handle.data, handle.size, destination, handle.offset);
+    stage_data(ctx, &manager.staging_arena, handle.data, handle.size, destination, handle.offset);
   }
 
-  flush_staging_arena(context, &manager.staging_arena);
+  flush_staging_arena(ctx, &manager.staging_arena);
   return manager;
 }
 

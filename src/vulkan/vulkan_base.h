@@ -293,8 +293,8 @@ typedef enum {
 
 typedef struct {
   VulkanBuffer buffer;
-  u32 total_size;
-  VkBuffer destination_buffers[MAX_COPY_REGIONS];
+  u64 total_size;
+  VkBuffer dst_buffers[MAX_COPY_REGIONS];
   VkBufferCopy copy_regions[MAX_COPY_REGIONS];
   u32 num_copy_regions;
   u32 offset;
@@ -506,20 +506,6 @@ VkRenderPass create_render_pass(
 VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat color_format, VkFormat depth_format);
 VkRenderPass create_color_render_pass(VkDevice device, VkFormat format);
 
-VkDescriptorPool
-create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets);
-
-// Staging Buffer
-StagingArena create_staging_arena(const VulkanContext *ctx, u32 total_size);
-u32 stage_data_explicit(
-    const VulkanContext *ctx, StagingArena *arena, const void *data, u32 size, VkBuffer dst, u32 dst_offset
-);
-u32 stage_data_auto(const VulkanContext *ctx, StagingArena *arena, const void *data, u32 size, VkBuffer dst);
-
-#define STAGE_ARRAY(ctx, arena, array, destination) (stage_data_auto(ctx, arena, array, sizeof(array), destination))
-
-void flush_staging_arena(const VulkanContext *ctx, StagingArena *arena);
-
 // Uniforms
 UniformBuffer create_uniform_buffer(const VulkanContext *ctx, u32 buffer_size);
 void destroy_uniform_buffer(const VulkanContext *ctx, UniformBuffer *uniform_buffer);
@@ -534,6 +520,8 @@ VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u
 u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties);
 
 // Descriptor Sets
+VkDescriptorPool
+create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets);
 VkDescriptorSetLayout
 create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count);
 VkDescriptorSet
@@ -576,9 +564,8 @@ VkFramebuffer create_framebuffer(
 );
 
 // TODO Backend only?
-ColorDepthFramebuffer create_color_depth_framebuffer(
-    const VulkanContext *ctx, VkExtent2D extent, VkFormat color_format, VkFormat depth_format
-);
+ColorDepthFramebuffer
+create_color_depth_framebuffer(const VulkanContext *ctx, VkExtent2D extent, VkFormat color_fmt, VkFormat depth_fmt);
 void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *color_depth_framebuffer);
 
 // Images/Textures - May want to have this transitioning business be entirely backend
