@@ -56,6 +56,7 @@ typedef int32_t i32;
 #define MAX_DESCRIPTOR_COPIES (4)
 #define MAX_DESCRIPTOR_BUFFER_INFOS (4)
 #define MAX_DESCRIPTOR_IMAGE_INFOS (4)
+#define POOL_SIZE_DESCRIPTOR_COUNT (1024)
 
 #define MAX_BUFFER_UPLOADS (32)
 
@@ -184,8 +185,8 @@ typedef struct {
   u8 current_frame_index;
 
   // TODO should these be per swapchain image or per frame in flight?
-  VkCommandBuffer graphics_command_buffers[NUM_SWAPCHAIN_IMAGES];
-  VkCommandBuffer compute_command_buffers[NUM_SWAPCHAIN_IMAGES];
+  VkCommandBuffer graphics_cmd_buffers[NUM_SWAPCHAIN_IMAGES];
+  VkCommandBuffer compute_cmd_buffers[NUM_SWAPCHAIN_IMAGES];
 
   VkPipelineCache pipeline_cache;
 
@@ -196,11 +197,12 @@ typedef struct {
   QueueFamilyIndices queue_family_indices;
   VkPhysicalDevice physical_device;
   VkPhysicalDeviceProperties physical_device_properties;
+  VkDescriptorPool descriptor_pool;
 
-  VkCommandPool graphics_command_pool;
-  VkCommandPool compute_command_pool;
-  VkCommandPool present_command_pool;
-  VkCommandPool transient_command_pool;
+  VkCommandPool graphics_cmd_pool;
+  VkCommandPool compute_cmd_pool;
+  VkCommandPool present_cmd_pool;
+  VkCommandPool transient_cmd_pool;
 
   // These bools stored so we know to destroy the queue differently on teardown.
   bool compute_queue_index_is_different_than_graphics;
@@ -364,9 +366,14 @@ typedef struct {
 } VulkanTexture;
 
 typedef struct {
+  // Data stuff
   u32 num_vertices;
   u32 instance_count;
-  VkPipeline graphics_pipeline;
+  u32 num_indices;
+  bool is_indexed;
+
+  // Vulkan Stuff
+  VkPipeline pipeline;
   VkPipelineLayout pipeline_layout;
 
   u32 num_descriptor_sets;
@@ -377,9 +384,7 @@ typedef struct {
   VkBuffer vertex_buffers[MAX_VERTEX_BINDINGS];
 
   VkDeviceSize index_buffer_offset;
-  u32 num_indices;
   VkBuffer index_buffer;
-  bool is_indexed;
 } RenderCall;
 
 typedef struct {
@@ -424,6 +429,30 @@ typedef struct {
   VkImageView depth_image_view;
 } ColorDepthFramebuffer;
 
+typedef struct {
+  u32 num_vertices;
+  u32 instance_count;
+  u32 num_indices;
+
+  u32 num_vertex_buffers;
+  VkBuffer vertex_buffers[MAX_VERTEX_BINDINGS];
+  VkDeviceSize vertex_buffer_offsets[MAX_VERTEX_BINDINGS];
+
+  VkDeviceSize index_buffer_offset;
+  VkBuffer index_buffer;
+} VulkanMesh;
+
+typedef struct {
+  VkPipeline pipeline;
+  VkPipelineLayout pipeline_layout;
+  VkDescriptorSet descriptor_sets[MAX_DESCRIPTOR_SETS];
+  u32 num_descriptor_sets;
+} VulkanMaterial;
+
+////////////////////////////////////////////////////////////////
+//////////////////////// PUBLIC API ////////////////////////////
+////////////////////////////////////////////////////////////////
+
 // Init/destroy
 VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_info);
 void destroy_vulkan_context(VulkanContext *);
@@ -443,8 +472,8 @@ const BufferHandle *upload_data(BufferUploadQueue *queue, BufferType buffer_type
 BufferManager flush_buffers(VulkanContext *ctx, BufferUploadQueue *queue);
 void destroy_buffer_manager(BufferManager *buffer_manager);
 
-// these macros are specifically for arrays, e.g., f32 array[], with the [];
-// will fail on pointers to arrays of data
+// These macros are specifically for arrays, e.g., f32 array[], with the [];
+// They will fail on pointers
 #define UPLOAD_VERTEX_ARRAY(queue, array) (upload_data(&queue, BUFFER_TYPE_VERTEX, (void *)array, sizeof(array)))
 #define UPLOAD_INDEX_ARRAY(queue, array) (upload_data(&queue, BUFFER_TYPE_INDEX, (void *)array, sizeof(array)))
 
@@ -453,7 +482,7 @@ void write_to_streaming_buffer(CoherentStreamingBuffer *coherent_streaming_buffe
 
 // Homeless??
 void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call);
-VkFormat find_depth_format(VkPhysicalDevice physical_device);
+void render_mesh_material(VkCommandBuffer cmd, const VulkanMesh *mesh, const VulkanMaterial *mat);
 
 // Command buffers
 VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *ctx);
@@ -527,8 +556,7 @@ u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemory
 // Descriptor Sets
 void set_descriptor_set_layouts(VulkanContext *ctx, VkDescriptorSetLayout *layouts, u32 num_layouts);
 void reset_descriptor_set_layouts(VulkanContext *ctx);
-VkDescriptorPool
-create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets);
+VkDescriptorPool create_descriptor_pool(VkDevice device);
 VkDescriptorSetLayout
 create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count);
 VkDescriptorSet
@@ -562,6 +590,8 @@ void destroy_descriptor_set_handle(VkDevice device, DescriptorSetHandle *handle)
 
 // Framebuffers
 // Generally need a better understanding of lifetime management/ownership for these
+VkFormat find_depth_format(VkPhysicalDevice physical_device);
+
 VkFramebuffer create_framebuffer(
     VkDevice device,
     VkRenderPass render_pass,
@@ -575,7 +605,8 @@ ColorDepthFramebuffer
 create_color_depth_framebuffer(const VulkanContext *ctx, VkExtent2D extent, VkFormat color_fmt, VkFormat depth_fmt);
 void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *color_depth_framebuffer);
 
-// Images/Textures - May want to have this transitioning business be entirely backend
+// Images/Textures
+// Want to have this transitioning business be entirely backend
 void transition_image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout);
 VulkanTexture create_vulkan_texture(
     VulkanContext *ctx, VulkanImageData image_data, VulkanBuffer staging_buffer, void *ptr_to_mapped_memory

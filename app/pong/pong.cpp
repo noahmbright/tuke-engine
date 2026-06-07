@@ -96,7 +96,7 @@ void init_background_material(State *state) {
   );
 
   mat->render_call.instance_count = 1;
-  mat->render_call.graphics_pipeline = mat->pipeline;
+  mat->render_call.pipeline = mat->pipeline;
   mat->render_call.pipeline_layout = mat->pipeline_layout;
   mat->render_call.num_descriptor_sets = 2;
   mat->render_call.descriptor_sets[0] = vp_handle->descriptor_set;
@@ -129,7 +129,7 @@ void init_paddles_material(State *state) {
 
   RenderCall *c = &mat->render_call;
   c->instance_count = InstanceDataUBO_model_array_size;
-  c->graphics_pipeline = mat->pipeline;
+  c->pipeline = mat->pipeline;
   c->pipeline_layout = mat->pipeline_layout;
   c->num_descriptor_sets = 2;
   c->descriptor_sets[0] = vp_handle->descriptor_set;
@@ -191,10 +191,7 @@ State setup_state(const char *title) {
 
   // TODO this sampler never changes - look into wiring immutable samplers
   state.sampler = create_sampler(ctx->device);
-
-  state.descriptor_pool =
-      create_descriptor_pool(ctx->device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
-
+  state.descriptor_pool = create_descriptor_pool(ctx->device);
   init_descriptor_sets(&state);
 
   state.clear_values[0].color = {{0.0, 1.0, 0.0, 1.0}};

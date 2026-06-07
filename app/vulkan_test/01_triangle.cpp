@@ -39,7 +39,7 @@ int main() {
   RenderCall render_call = {
       .num_vertices = 3,
       .instance_count = 1,
-      .graphics_pipeline = pipeline,
+      .pipeline = pipeline,
       .pipeline_layout = pipeline_layout,
       .is_indexed = false,
   };

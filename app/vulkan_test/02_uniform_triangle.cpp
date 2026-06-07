@@ -22,7 +22,10 @@ int main() {
 
   ViewportState viewport_state = create_viewport_state_xy(ctx.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {
-      {.color = {{0.01, 0.01, 0.01, 1.0}}}, {.depthStencil = {.depth = 1.0f, .stencil = 0}}
+      {.color = {{0.10, 0.01, 0.10, 1.0}}},
+      {
+          .depthStencil = {.depth = 1.0f, .stencil = 0},
+      }
   };
 
   // This is a first step in seeing what I need to move to get render pass out of the context
@@ -30,13 +33,13 @@ int main() {
   VkFormat depth_format = find_depth_format(ctx.physical_device);
   VkRenderPass rp = create_color_depth_render_pass(ctx.device, ctx.surface_format.format, depth_format);
 
-  VkDescriptorPool pool =
-      create_descriptor_pool(ctx.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
-
   // Made a mistake with the wrong upload size here - used the wrong struct in the name.
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   UniformWrite handle = push_uniform(&ub_manager, sizeof(TriangleTransformation));
-  UniformBuffer ub = create_uniform_buffer(&ctx, ub_manager.current_offset);
+  UniformBuffer ubs[MAX_FRAMES_IN_FLIGHT];
+  for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    ubs[i] = create_uniform_buffer(&ctx, ub_manager.current_offset);
+  }
 
   VkDescriptorSetLayout layouts[NUM_DESCRIPTOR_SET_LAYOUTS];
   set_descriptor_set_layouts(&ctx, layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
@@ -45,37 +48,38 @@ int main() {
   VkPipelineLayout pipeline_layout;
   init_program_spec(&ctx, rp, &common_uniform_bringup_program_spec, &pipeline, &pipeline_layout);
 
-  // Making this descriptor set should also be handled in the backend.
-  // I don't want to deal with the spec or layout IDs more than once.
-  VkDescriptorSet descriptor_set = create_descriptor_set(ctx.device, &layouts[LAYOUT_ID_TRIANGLE_TRANSFORMATION], pool);
-
   // Know binding, descriptor count, and type from generated layout bindings - from reflection
-  VkWriteDescriptorSet *write = TRIANGLE_TRANSFORMATION_write_templates;
-  write->dstSet = descriptor_set;
-
   // These are needed for a write to particular buffer - runtime info.
-  VkDescriptorBufferInfo descriptor_buffer_info = {
-      .buffer = ub.vulkan_buffer.buffer,
-      .offset = handle.offset,
-      .range = handle.size,
-  };
-  write->pBufferInfo = &descriptor_buffer_info;
+  VkWriteDescriptorSet *write = TRIANGLE_TRANSFORMATION_write_templates;
 
-  u32 write_count = 1;
-  u32 copy_count = 0;
-  vkUpdateDescriptorSets(ctx.device, write_count, write, copy_count, NULL);
+  VulkanMaterial mats[MAX_FRAMES_IN_FLIGHT];
 
-  // Still don't like configuring these manually. This is like the fundamental issue.
-  // Made a mistake in configuring descriptor sets.
-  // Should have descriptor stuff lumped together.
-  RenderCall render_call = {
+  for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    VkDescriptorSet descriptor_set =
+        create_descriptor_set(ctx.device, &layouts[LAYOUT_ID_TRIANGLE_TRANSFORMATION], ctx.descriptor_pool);
+    write->dstSet = descriptor_set;
+    VkDescriptorBufferInfo descriptor_buffer_info = {
+        .buffer = ubs[i].vulkan_buffer.buffer,
+        .offset = handle.offset,
+        .range = handle.size,
+    };
+    write->pBufferInfo = &descriptor_buffer_info;
+
+    mats[i] = {
+        .pipeline = pipeline,
+        .pipeline_layout = pipeline_layout,
+        .descriptor_sets = {descriptor_set},
+        .num_descriptor_sets = 1,
+    };
+
+    u32 write_count = 1;
+    u32 copy_count = 0;
+    vkUpdateDescriptorSets(ctx.device, write_count, write, copy_count, NULL);
+  }
+
+  VulkanMesh mesh = {
       .num_vertices = 3,
       .instance_count = 1,
-      .graphics_pipeline = pipeline,
-      .pipeline_layout = pipeline_layout,
-      .num_descriptor_sets = 1,
-      .descriptor_sets = {descriptor_set},
-      .is_indexed = false,
   };
 
   f64 t_total = 0;
@@ -99,13 +103,9 @@ int main() {
     VkFramebuffer fb = ctx.framebuffers[ctx.image_index];
     begin_render_pass(&ctx, cmd, rp, fb, clear_values, NUM_ATTACHMENTS, viewport_state);
 
-    // Probably need an array of pointers to per frame data in the VulkanContext.
-    // Maybe the app could own. Just put pointers in the context for flexibility.
-    // These are the things that go between begin and end frame()
-
     // This is a single draw action. Probably want some scheme for queuing this in the context
-    write_to_uniform_buffer(&ub, &tt, handle);
-    render_mesh(cmd, &render_call);
+    write_to_uniform_buffer(&ubs[ctx.current_frame_index], &tt, handle);
+    render_mesh_material(cmd, &mesh, &mats[ctx.current_frame_index]);
     vkCmdEndRenderPass(cmd);
 
     // end_frame() should empty that queue.
@@ -118,8 +118,9 @@ int main() {
   vkDestroyRenderPass(ctx.device, rp, NULL);
   vkDestroyPipelineLayout(ctx.device, pipeline_layout, NULL);
   vkDestroyPipeline(ctx.device, pipeline, NULL);
-  destroy_uniform_buffer(&ctx, &ub);
-  vkDestroyDescriptorPool(ctx.device, pool, NULL);
+  for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    destroy_uniform_buffer(&ctx, &ubs[i]);
+  }
 
   destroy_vulkan_context(&ctx);
 

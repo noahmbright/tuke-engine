@@ -15,16 +15,6 @@ STBHandle load_texture_metadata(const char *path);
 void free_stb_handle(STBHandle *handle);
 u32 load_texture_opengl(const char *path); // TODO this is ugly, impure API leakage cruft
 
-inline u32 clamp_u32(u32 x, u32 min, u32 max) {
-  if (x < min) {
-    return min;
-  }
-  if (x > max) {
-    return max;
-  }
-  return x;
-}
-
 inline f32 clamp_f32(f32 x, f32 min, f32 max) {
   if (x < min) {
     return min;

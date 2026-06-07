@@ -14,8 +14,7 @@ int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
   VulkanWindowInfo window_info = create_glfw_vulkan_window_info(window);
   VulkanContext ctx = create_vulkan_context("Disastrous Vulkan Test", window_info);
-  VkDescriptorPool descriptor_pool =
-      create_descriptor_pool(ctx.device, generated_pool_sizes, pool_size_count, max_descriptor_sets);
+  VkDescriptorPool descriptor_pool = create_descriptor_pool(ctx.device);
   ViewportState viewport_state = create_viewport_state_xy(ctx.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {
       {.color = {{0.01, 0.01, 0.01, 1.0}}}, {.depthStencil = {.depth = 1.0f, .stencil = 0}}
@@ -175,7 +174,7 @@ int main() {
   RenderCall triangle_render_call = {
       .num_vertices = 3,
       .instance_count = 1,
-      .graphics_pipeline = triangle_pipeline,
+      .pipeline = triangle_pipeline,
       .num_vertex_buffers = 1,
       .vertex_buffer_offsets[0] = triangle_vertices_slice->offset,
       .vertex_buffers[0] = vertex_buffer->buffer,
@@ -188,7 +187,7 @@ int main() {
   RenderCall square_render_call = {
       .num_vertices = 6,
       .instance_count = 1,
-      .graphics_pipeline = square_pipeline,
+      .pipeline = square_pipeline,
       .num_vertex_buffers = 1,
       .vertex_buffer_offsets[0] = square_slice->offset,
       .vertex_buffers[0] = vertex_buffer->buffer,
@@ -201,7 +200,7 @@ int main() {
   RenderCall cube_render_call = {
       .num_vertices = 36,
       .instance_count = 1,
-      .graphics_pipeline = cube_pipeline,
+      .pipeline = cube_pipeline,
       .num_vertex_buffers = 1,
       .vertex_buffer_offsets[0] = cube_slice->offset,
       .vertex_buffers[0] = vertex_buffer->buffer,
@@ -214,7 +213,7 @@ int main() {
   RenderCall instanced_render_call = {
       .num_indices = 6,
       .instance_count = instanced_quad_count,
-      .graphics_pipeline = instanced_quad_pipeline,
+      .pipeline = instanced_quad_pipeline,
       .num_vertex_buffers = 2,
       .vertex_buffer_offsets[0] = unit_square_position_slice->offset,
       .vertex_buffer_offsets[1] = quad_position_slice->offset,
@@ -231,7 +230,7 @@ int main() {
   RenderCall fullscreen_quad_render_call = {
       .num_vertices = 3,
       .instance_count = 1,
-      .graphics_pipeline = fullscreen_quad_pipeline,
+      .pipeline = fullscreen_quad_pipeline,
       .num_vertex_buffers = 0,
       .pipeline_layout = fullscreen_quad_pipeline_layout,
       .num_descriptor_sets = 1,

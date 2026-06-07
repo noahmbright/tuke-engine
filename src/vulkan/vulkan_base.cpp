@@ -1,26 +1,16 @@
 #include "vulkan_base.h"
 
-#include "vulkan/vulkan_beta.h"
-#include "vulkan/vulkan_core.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <vulkan/vulkan_beta.h>
+#include <vulkan/vulkan_core.h>
 
-static inline u32 clamp_u32(u32 x, u32 min, u32 max) {
-  if (x < min) {
-    return min;
-  }
-  if (x > max) {
-    return max;
-  }
-  return x;
-}
 void update_frame_index(VulkanContext *context) {
   context->current_frame_index = (context->current_frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
-// If you're multithreading submissions, use a mutex or lockless ring buffer per queue.
 void destroy_swapchain(VulkanContext *context) {
   SwapchainStorage *storage = &context->swapchain_storage;
 
@@ -69,13 +59,13 @@ void destroy_vulkan_context(VulkanContext *ctx) {
   vkDestroyPipelineCache(ctx->device, ctx->pipeline_cache, NULL);
 
   // Command pools
-  vkDestroyCommandPool(ctx->device, ctx->transient_command_pool, NULL);
-  vkDestroyCommandPool(ctx->device, ctx->graphics_command_pool, NULL);
+  vkDestroyCommandPool(ctx->device, ctx->transient_cmd_pool, NULL);
+  vkDestroyCommandPool(ctx->device, ctx->graphics_cmd_pool, NULL);
   if (ctx->present_queue_index_is_different_than_graphics) {
-    vkDestroyCommandPool(ctx->device, ctx->present_command_pool, NULL);
+    vkDestroyCommandPool(ctx->device, ctx->present_cmd_pool, NULL);
   }
   if (ctx->compute_queue_index_is_different_than_graphics) {
-    vkDestroyCommandPool(ctx->device, ctx->compute_command_pool, NULL);
+    vkDestroyCommandPool(ctx->device, ctx->compute_cmd_pool, NULL);
   }
 
   // sync primitives
@@ -87,6 +77,7 @@ void destroy_vulkan_context(VulkanContext *ctx) {
 
   destroy_swapchain(ctx);
 
+  vkDestroyDescriptorPool(ctx->device, ctx->descriptor_pool, NULL);
   vkDestroyRenderPass(ctx->device, ctx->render_pass, NULL);
   vkDestroyDevice(ctx->device, NULL);
   vkDestroySurfaceKHR(ctx->instance, ctx->surface, NULL);
@@ -487,6 +478,16 @@ VkSurfaceFormatKHR get_surface_format(VkPhysicalDevice physical_device, VkSurfac
   return surface_format;
 }
 
+static u32 clamp_u32(u32 x, u32 min, u32 max) {
+  if (x < min) {
+    return min;
+  }
+  if (x > max) {
+    return max;
+  }
+  return x;
+}
+
 VkExtent2D get_swapchain_extent(u32 width, u32 height, VkSurfaceCapabilitiesKHR surface_capabilities) {
   if (surface_capabilities.currentExtent.width != UINT32_MAX) {
     return surface_capabilities.currentExtent;
@@ -587,9 +588,7 @@ VkSwapchainKHR create_swapchain(
   return swapchain;
 }
 
-void transition_image_layout(
-    VkCommandBuffer command_buffer, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout
-) {
+void transition_image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout) {
   VkImageMemoryBarrier image_memory_barrier{
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       .pNext = NULL,
@@ -688,7 +687,7 @@ void transition_image_layout(
   }
 
   // TODO what are all these arguments?
-  vkCmdPipelineBarrier(command_buffer, src_stage, dst_stage, 0, 0, NULL, 0, NULL, 1, &image_memory_barrier);
+  vkCmdPipelineBarrier(cmd, src_stage, dst_stage, 0, 0, NULL, 0, NULL, 1, &image_memory_barrier);
 }
 
 VkImageView create_default_image_view(
@@ -799,11 +798,11 @@ DepthBuffer create_depth_buffer(VulkanContext *context, VkFormat depth_format) {
   depth_buffer.device_memory = allocate_and_bind_image_memory(context, depth_buffer.image);
   depth_buffer.image_view = create_default_image_view(context, depth_buffer.image, depth_format, aspect);
 
-  VkCommandBuffer command_buffer = begin_single_use_command_buffer(context);
+  VkCommandBuffer cmd = begin_single_use_command_buffer(context);
   VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
   VkImageLayout new_layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-  transition_image_layout(command_buffer, depth_buffer.image, old_layout, new_layout);
-  end_single_use_command_buffer(context, command_buffer);
+  transition_image_layout(cmd, depth_buffer.image, old_layout, new_layout);
+  end_single_use_command_buffer(context, cmd);
 
   return depth_buffer;
 }
@@ -1089,8 +1088,7 @@ void create_frame_sync_objects(VkDevice device, FrameSyncObjects *frame_sync_obj
   }
 }
 
-// Command pool creation is cheap, and recording commands from multiple threads requires a pool
-// per thread.
+// Command pool creation is cheap, and recording commands from multiple threads requires a pool per thread.
 VkCommandPool create_command_pool(VkDevice device, u32 queue_family_index, bool transient) {
   // Command buffers allocated from pools with reset_flag may be reset using vkResetCommandBuffer -
   // and may not be reset with vkResetCommandBuffer if not
@@ -1166,85 +1164,84 @@ VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u
 // May want this to be create_instance_graphics(), or something. Or need to have
 // VulkanWindowInfo be something that can equally well describe compute pipelines.
 VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_info) {
-  VulkanContext context;
+  VulkanContext ctx;
 
-  context.instance = create_instance(title, window_info);
+  ctx.instance = create_instance(title, window_info);
 #ifdef TUKE_DISABLE_VULKAN_VALIDATION
   context.debug_messenger = VK_NULL_HANDLE;
 #else
-  context.debug_messenger = create_debug_messenger(context.instance);
+  ctx.debug_messenger = create_debug_messenger(ctx.instance);
 #endif
-  context.surface = window_info.create_surface(context.instance, window_info.window);
+  ctx.surface = window_info.create_surface(ctx.instance, window_info.window);
 
   // pick_physical_device() initializes context.queue_family_indices through a side effect.
-  context.physical_device = pick_physical_device(context.instance, context.surface, &context.queue_family_indices);
-  vkGetPhysicalDeviceProperties(context.physical_device, &context.physical_device_properties);
+  ctx.physical_device = pick_physical_device(ctx.instance, ctx.surface, &ctx.queue_family_indices);
+  vkGetPhysicalDeviceProperties(ctx.physical_device, &ctx.physical_device_properties);
 
-  const QueueFamilyIndices indices = context.queue_family_indices;
-  context.present_queue_index_is_different_than_graphics = (indices.graphics_family != indices.present_family);
-  context.compute_queue_index_is_different_than_graphics = (indices.graphics_family != indices.compute_family);
+  const QueueFamilyIndices indices = ctx.queue_family_indices;
+  ctx.present_queue_index_is_different_than_graphics = (indices.graphics_family != indices.present_family);
+  ctx.compute_queue_index_is_different_than_graphics = (indices.graphics_family != indices.compute_family);
 
-  context.device = create_device(context.queue_family_indices, context.physical_device);
-  context.surface_format = get_surface_format(context.physical_device, context.surface);
+  ctx.device = create_device(ctx.queue_family_indices, ctx.physical_device);
+  ctx.surface_format = get_surface_format(ctx.physical_device, ctx.surface);
+  ctx.descriptor_pool = create_descriptor_pool(ctx.device);
 
-  create_frame_sync_objects(context.device, context.frame_sync_objects);
-  context.current_frame_index = 0;
+  create_frame_sync_objects(ctx.device, ctx.frame_sync_objects);
+  ctx.current_frame_index = 0;
 
   // boolean argument is is_transient command pool
-  context.transient_command_pool = create_command_pool(context.device, indices.graphics_family, true);
-  context.graphics_command_pool = create_command_pool(context.device, indices.graphics_family, false);
+  ctx.transient_cmd_pool = create_command_pool(ctx.device, indices.graphics_family, true);
+  ctx.graphics_cmd_pool = create_command_pool(ctx.device, indices.graphics_family, false);
 
-  if (context.compute_queue_index_is_different_than_graphics) {
-    context.compute_command_pool = create_command_pool(context.device, indices.compute_family, false);
+  if (ctx.compute_queue_index_is_different_than_graphics) {
+    ctx.compute_cmd_pool = create_command_pool(ctx.device, indices.compute_family, false);
   } else {
-    context.compute_command_pool = context.graphics_command_pool;
+    ctx.compute_cmd_pool = ctx.graphics_cmd_pool;
   }
 
-  if (context.present_queue_index_is_different_than_graphics) {
-    context.present_command_pool = create_command_pool(context.device, indices.present_family, false);
+  if (ctx.present_queue_index_is_different_than_graphics) {
+    ctx.present_cmd_pool = create_command_pool(ctx.device, indices.present_family, false);
   } else {
-    context.present_command_pool = context.graphics_command_pool;
+    ctx.present_cmd_pool = ctx.graphics_cmd_pool;
   }
 
   // swapchain creation needs to happen after the transient command pool is
   // allocated because depth buffer creation requires an image transition
-  VkSurfaceCapabilitiesKHR surface_capabilities = get_surface_capabilities(context.physical_device, context.surface);
-  context.swapchain_extent = get_swapchain_extent(window_info.width, window_info.height, surface_capabilities);
-  context.swapchain = create_swapchain(
-      context.device, context.physical_device, context.surface, context.queue_family_indices, context.surface_format,
-      surface_capabilities, context.swapchain_extent
+  VkSurfaceCapabilitiesKHR surface_capabilities = get_surface_capabilities(ctx.physical_device, ctx.surface);
+  ctx.swapchain_extent = get_swapchain_extent(window_info.width, window_info.height, surface_capabilities);
+  ctx.swapchain = create_swapchain(
+      ctx.device, ctx.physical_device, ctx.surface, ctx.queue_family_indices, ctx.surface_format, surface_capabilities,
+      ctx.swapchain_extent
   );
 
-  vkGetDeviceQueue(context.device, indices.graphics_family, 0, &context.graphics_queue);
-  vkGetDeviceQueue(context.device, indices.present_family, 0, &context.present_queue);
-  vkGetDeviceQueue(context.device, indices.compute_family, 0, &context.compute_queue);
-  VkFormat depth_format = find_depth_format(context.physical_device);
-  context.swapchain_storage = create_swapchain_storage(&context, depth_format);
+  vkGetDeviceQueue(ctx.device, indices.graphics_family, 0, &ctx.graphics_queue);
+  vkGetDeviceQueue(ctx.device, indices.present_family, 0, &ctx.present_queue);
+  vkGetDeviceQueue(ctx.device, indices.compute_family, 0, &ctx.compute_queue);
+  VkFormat depth_format = find_depth_format(ctx.physical_device);
+  ctx.swapchain_storage = create_swapchain_storage(&ctx, depth_format);
 
   // TODO sync this with init_framebuffers()
   // don't need a depth attachment here
-  context.render_pass = create_color_depth_render_pass(context.device, context.surface_format.format, depth_format);
-  init_framebuffers(&context);
+  ctx.render_pass = create_color_depth_render_pass(ctx.device, ctx.surface_format.format, depth_format);
+  init_framebuffers(&ctx);
 
   // Regular command buffers need to be created after the swapchain, which depends on the transient command buffers.
   allocate_command_buffers(
-      context.device, context.graphics_command_pool, context.swapchain_storage.image_count,
-      context.graphics_command_buffers
+      ctx.device, ctx.graphics_cmd_pool, ctx.swapchain_storage.image_count, ctx.graphics_cmd_buffers
   );
 
   allocate_command_buffers(
-      context.device, context.compute_command_pool, context.swapchain_storage.image_count,
-      context.compute_command_buffers
+      ctx.device, ctx.compute_cmd_pool, ctx.swapchain_storage.image_count, ctx.compute_cmd_buffers
   );
 
-  context.pipeline_cache = create_pipeline_cache(context.device);
+  ctx.pipeline_cache = create_pipeline_cache(ctx.device);
 
   VkResult result = vkWaitForFences(
-      context.device, 1, &context.frame_sync_objects[context.current_frame_index].in_flight_fence, VK_TRUE, UINT64_MAX
+      ctx.device, 1, &ctx.frame_sync_objects[ctx.current_frame_index].in_flight_fence, VK_TRUE, UINT64_MAX
   );
   VK_CHECK(result, "Failed to wait for fences");
 
-  return context;
+  return ctx;
 }
 
 u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties) {
@@ -1421,12 +1418,12 @@ void destroy_vulkan_buffer(const VulkanContext *context, VulkanBuffer buffer) {
 VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context) {
   assert(context);
   assert(context->device != VK_NULL_HANDLE);
-  assert(context->transient_command_pool != VK_NULL_HANDLE);
+  assert(context->transient_cmd_pool != VK_NULL_HANDLE);
 
   VkCommandBufferAllocateInfo allocate_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
       .pNext = 0,
-      .commandPool = context->transient_command_pool,
+      .commandPool = context->transient_cmd_pool,
       .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
       .commandBufferCount = 1,
   };
@@ -1470,7 +1467,7 @@ void end_single_use_command_buffer(const VulkanContext *context, VkCommandBuffer
   result = vkQueueWaitIdle(context->graphics_queue);
   VK_CHECK(result, "Failed to wait for queue idle");
 
-  vkFreeCommandBuffers(context->device, context->transient_command_pool, 1, &command_buffer);
+  vkFreeCommandBuffers(context->device, context->transient_cmd_pool, 1, &command_buffer);
 }
 
 VkShaderModule create_shader_module(VkDevice device, const u32 *code, u32 code_size) {
@@ -1761,7 +1758,7 @@ void begin_frame(VulkanContext *ctx) {
 // TODO do I want this to be an internal implementation detail, unexposed to the user?
 //      Leaning yes.
 VkCommandBuffer begin_command_buffer(const VulkanContext *context) {
-  VkCommandBuffer command_buffer = context->graphics_command_buffers[context->image_index];
+  VkCommandBuffer command_buffer = context->graphics_cmd_buffers[context->image_index];
   assert(command_buffer != VK_NULL_HANDLE);
 
   VkCommandBufferBeginInfo command_buffer_begin_info = {
@@ -1862,19 +1859,28 @@ create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *set_layouts
   return pipeline_layout;
 }
 
-// TODO VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT
-//      ^ What does this mean?
-// Could just have this allocate more room than I could ever hope to use.
-// Would save on recompiles and make hot loading easier.
-VkDescriptorPool
-create_descriptor_pool(VkDevice device, const VkDescriptorPoolSize *pool_sizes, u32 pool_size_count, u32 max_sets) {
+// https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#vkCreateDescriptorPool
+VkDescriptorPool create_descriptor_pool(VkDevice device) {
+  // https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VkDescriptorPoolCreateFlagBits
+  VkDescriptorPoolCreateFlags flags = 0;
+
+  VkDescriptorPoolSize pool_sizes[] = {
+      {
+          .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+          .descriptorCount = POOL_SIZE_DESCRIPTOR_COUNT,
+      },
+      {
+          .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorCount = POOL_SIZE_DESCRIPTOR_COUNT,
+      },
+  };
 
   VkDescriptorPoolCreateInfo descriptor_pool_ci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       .pNext = NULL,
-      .flags = 0,
-      .maxSets = max_sets,
-      .poolSizeCount = pool_size_count,
+      .flags = flags,
+      .maxSets = POOL_SIZE_DESCRIPTOR_COUNT,
+      .poolSizeCount = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
       .pPoolSizes = pool_sizes,
   };
 
@@ -1928,18 +1934,15 @@ static void flush_staging_arena(const VulkanContext *context, StagingArena *aren
   end_single_use_command_buffer(context, cmd);
 }
 
-UniformBuffer create_uniform_buffer(const VulkanContext *context, u32 buffer_size) {
-  UniformBuffer uniform_buffer = {
-      .vulkan_buffer = create_buffer(context, BUFFER_TYPE_UNIFORM, buffer_size),
-      .size = buffer_size,
+UniformBuffer create_uniform_buffer(const VulkanContext *ctx, u32 size) {
+  UniformBuffer ub = {
+      .vulkan_buffer = create_buffer(ctx, BUFFER_TYPE_UNIFORM, size),
+      .size = size,
   };
 
-  VkResult result = vkMapMemory(
-      context->device, uniform_buffer.vulkan_buffer.memory, 0, buffer_size, 0, (void **)&uniform_buffer.mapped
-  );
+  VkResult result = vkMapMemory(ctx->device, ub.vulkan_buffer.memory, 0, size, 0, (void **)&ub.mapped);
   VK_CHECK(result, "Failed to map uniform buffer memory");
-
-  return uniform_buffer;
+  return ub;
 }
 
 void destroy_uniform_buffer(const VulkanContext *context, UniformBuffer *uniform_buffer) {
@@ -1993,7 +1996,7 @@ VulkanTexture create_vulkan_texture(
   memcpy(ptr_to_mapped_memory, image_data.data, texture_size);
 
   // TODO what does this do? Still don't understand transitions
-  // first transition
+  // First transition
   VkCommandBuffer cmd = begin_single_use_command_buffer(context);
   VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
   VkImageLayout new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -2289,8 +2292,40 @@ void destroy_descriptor_set_handle(VkDevice device, DescriptorSetHandle *handle)
   vkDestroyDescriptorSetLayout(device, handle->descriptor_set_layout, NULL);
 }
 
+void render_mesh_material(VkCommandBuffer cmd, const VulkanMesh *mesh, const VulkanMaterial *mat) {
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline);
+
+  // Still not really sure when any of these first_* are meaningful.
+  u32 first_binding = 0;
+  if (mesh->num_vertex_buffers > 0) {
+    vkCmdBindVertexBuffers(
+        cmd, first_binding, mesh->num_vertex_buffers, mesh->vertex_buffers, mesh->vertex_buffer_offsets
+    );
+  }
+
+  if (mat->num_descriptor_sets > 0) {
+    u32 first_set = 0;
+    u32 dynamic_offset_count = 0;
+    vkCmdBindDescriptorSets(
+        cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline_layout, first_set, mat->num_descriptor_sets,
+        mat->descriptor_sets, dynamic_offset_count, NULL
+    );
+  }
+
+  u32 first_instance = 0;
+  i32 vertex_offset = 0;
+  if (mesh->num_indices > 0) {
+    vkCmdBindIndexBuffer(cmd, mesh->index_buffer, mesh->index_buffer_offset, VK_INDEX_TYPE_UINT16);
+    u32 first_index = 0;
+    vkCmdDrawIndexed(cmd, mesh->num_indices, mesh->instance_count, first_index, vertex_offset, first_instance);
+  } else {
+    u32 first_vertex = 0;
+    vkCmdDraw(cmd, mesh->num_vertices, mesh->instance_count, first_vertex, first_instance);
+  }
+}
+
 void render_mesh(VkCommandBuffer cmd, RenderCall *call) {
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, call->graphics_pipeline);
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, call->pipeline);
 
   u32 first_binding = 0;
   if (call->num_vertex_buffers > 0) {
@@ -2308,8 +2343,8 @@ void render_mesh(VkCommandBuffer cmd, RenderCall *call) {
     );
   }
 
-  u32 first_instance = 0; // TODO understand when this would be non zero
-  i32 vertex_offset = 0;  // TODO understand when this would be non zero
+  u32 first_instance = 0;
+  i32 vertex_offset = 0;
   if (call->is_indexed) {
     vkCmdBindIndexBuffer(cmd, call->index_buffer, call->index_buffer_offset, VK_INDEX_TYPE_UINT16);
     u32 first_index = 0;
