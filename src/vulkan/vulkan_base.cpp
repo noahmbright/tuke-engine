@@ -94,7 +94,7 @@ void destroy_vulkan_context(VulkanContext *ctx) {
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+    VkDebugUtilsMessageSeverityFlagBitsEXT sev,
     VkDebugUtilsMessageTypeFlagsEXT message_type,
     const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
     void *user_data
@@ -104,13 +104,13 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
   (void)user_data;
 
   const char *severity = "UNKNOWN";
-  if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+  if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
     severity = "VERBOSE";
-  else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+  else if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
     severity = "INFO";
-  else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+  else if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     severity = "WARNING";
-  else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+  else if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
     severity = "ERROR";
 
   fprintf(stderr, "[%s] %s\n", severity, callback_data->pMessage);
@@ -1367,11 +1367,7 @@ VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type,
 }
 
 void write_to_vulkan_buffer(
-    const VulkanContext *context,
-    const void *src_data,
-    VkDeviceSize size,
-    VkDeviceSize offset,
-    VulkanBuffer vulkan_buffer
+    const VulkanContext *ctx, const void *src_data, VkDeviceSize size, VkDeviceSize offset, VulkanBuffer vulkan_buffer
 ) {
   if (!(vulkan_buffer.memory_property_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
     fprintf(
@@ -1383,7 +1379,7 @@ void write_to_vulkan_buffer(
 
   VkDeviceSize aligned_offset = offset;
   VkDeviceSize aligned_size = size;
-  VkDeviceSize atom_size = context->physical_device_properties.limits.nonCoherentAtomSize;
+  VkDeviceSize atom_size = ctx->physical_device_properties.limits.nonCoherentAtomSize;
   bool not_coherent = !(vulkan_buffer.memory_property_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   if (not_coherent) {
     aligned_offset = offset & ~(atom_size - 1);
@@ -1391,7 +1387,7 @@ void write_to_vulkan_buffer(
   }
 
   void *dest_data;
-  VkResult result = vkMapMemory(context->device, vulkan_buffer.memory, aligned_offset, aligned_size, 0, &dest_data);
+  VkResult result = vkMapMemory(ctx->device, vulkan_buffer.memory, aligned_offset, aligned_size, 0, &dest_data);
   VK_CHECK(result, "Failed to map memory");
   memcpy((char *)dest_data + (offset - aligned_offset), src_data, size);
 
@@ -1403,16 +1399,16 @@ void write_to_vulkan_buffer(
     range.offset = aligned_offset;
     range.size = aligned_size;
 
-    result = vkFlushMappedMemoryRanges(context->device, 1, &range);
+    result = vkFlushMappedMemoryRanges(ctx->device, 1, &range);
     VK_CHECK(result, "Failed to flush mapped memory ranges");
   }
 
-  vkUnmapMemory(context->device, vulkan_buffer.memory);
+  vkUnmapMemory(ctx->device, vulkan_buffer.memory);
 }
 
-void destroy_vulkan_buffer(const VulkanContext *context, VulkanBuffer buffer) {
-  vkDestroyBuffer(context->device, buffer.buffer, NULL);
-  vkFreeMemory(context->device, buffer.memory, NULL);
+void destroy_vulkan_buffer(const VulkanContext *ctx, VulkanBuffer buffer) {
+  vkDestroyBuffer(ctx->device, buffer.buffer, NULL);
+  vkFreeMemory(ctx->device, buffer.memory, NULL);
 }
 
 VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context) {
@@ -1723,8 +1719,6 @@ VkPipeline create_default_graphics_pipeline(
   return create_graphics_pipeline(ctx->device, &config, ctx->pipeline_cache);
 }
 
-// Waits for a fence, resets, and updates the context's currently tracked image
-// index to match the acquired swapchain image.
 void begin_frame(VulkanContext *ctx) {
   u32 fence_count = 1;
 
@@ -1755,8 +1749,6 @@ void begin_frame(VulkanContext *ctx) {
   }
 }
 
-// TODO do I want this to be an internal implementation detail, unexposed to the user?
-//      Leaning yes.
 VkCommandBuffer begin_command_buffer(const VulkanContext *context) {
   VkCommandBuffer command_buffer = context->graphics_cmd_buffers[context->image_index];
   assert(command_buffer != VK_NULL_HANDLE);
@@ -2290,6 +2282,11 @@ DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescri
 
 void destroy_descriptor_set_handle(VkDevice device, DescriptorSetHandle *handle) {
   vkDestroyDescriptorSetLayout(device, handle->descriptor_set_layout, NULL);
+}
+
+void destroy_vulkan_material(VkDevice device, VulkanMaterial *mat) {
+  vkDestroyPipelineLayout(device, mat->pipeline_layout, NULL);
+  vkDestroyPipeline(device, mat->pipeline, NULL);
 }
 
 void render_mesh_material(VkCommandBuffer cmd, const VulkanMesh *mesh, const VulkanMaterial *mat) {

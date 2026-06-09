@@ -447,6 +447,8 @@ typedef struct {
   VkPipelineLayout pipeline_layout;
   VkDescriptorSet descriptor_sets[MAX_DESCRIPTOR_SETS];
   u32 num_descriptor_sets;
+  const VkWriteDescriptorSet *descriptor_set_writes[MAX_DESCRIPTOR_SETS];
+  u32 descriptor_set_write_lens[MAX_DESCRIPTOR_SETS];
 } VulkanMaterial;
 
 ////////////////////////////////////////////////////////////////
@@ -480,7 +482,10 @@ void destroy_buffer_manager(BufferManager *buffer_manager);
 CoherentStreamingBuffer create_coherent_streaming_buffer(const VulkanContext *ctx, u32 size);
 void write_to_streaming_buffer(CoherentStreamingBuffer *coherent_streaming_buffer, void *data, u32 size);
 
-// Homeless??
+// Materials
+void destroy_vulkan_material(VkDevice device, VulkanMaterial *mat);
+
+// Rendering APIs
 void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call);
 void render_mesh_material(VkCommandBuffer cmd, const VulkanMesh *mesh, const VulkanMaterial *mat);
 

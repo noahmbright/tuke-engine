@@ -44,37 +44,27 @@ int main() {
   VkDescriptorSetLayout layouts[NUM_DESCRIPTOR_SET_LAYOUTS];
   set_descriptor_set_layouts(&ctx, layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
 
-  VkPipeline pipeline;
-  VkPipelineLayout pipeline_layout;
-  init_program_spec(&ctx, rp, &common_uniform_bringup_program_spec, &pipeline, &pipeline_layout);
-
+  VulkanMaterial mats[MAX_FRAMES_IN_FLIGHT];
   // Know binding, descriptor count, and type from generated layout bindings - from reflection
   // These are needed for a write to particular buffer - runtime info.
-  VkWriteDescriptorSet *write = TRIANGLE_TRANSFORMATION_write_templates;
-
-  VulkanMaterial mats[MAX_FRAMES_IN_FLIGHT];
-
   for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    VkDescriptorSet descriptor_set =
-        create_descriptor_set(ctx.device, &layouts[LAYOUT_ID_TRIANGLE_TRANSFORMATION], ctx.descriptor_pool);
-    write->dstSet = descriptor_set;
+    init_program_spec(&ctx, rp, &common_uniform_bringup_program_spec, &mats[i]);
+
+    // This write stuff indexed by 0 should all be per descriptor in the material
+    VkWriteDescriptorSet writes[MAX_DESCRIPTOR_SETS];
+    u32 write_count = mats[i].descriptor_set_write_lens[0];
+    memcpy(writes, mats[i].descriptor_set_writes[0], write_count * sizeof(VkWriteDescriptorSet));
+    writes[0].dstSet = mats[i].descriptor_sets[0];
+
     VkDescriptorBufferInfo descriptor_buffer_info = {
         .buffer = ubs[i].vulkan_buffer.buffer,
         .offset = handle.offset,
         .range = handle.size,
     };
-    write->pBufferInfo = &descriptor_buffer_info;
+    writes[0].pBufferInfo = &descriptor_buffer_info;
 
-    mats[i] = {
-        .pipeline = pipeline,
-        .pipeline_layout = pipeline_layout,
-        .descriptor_sets = {descriptor_set},
-        .num_descriptor_sets = 1,
-    };
-
-    u32 write_count = 1;
     u32 copy_count = 0;
-    vkUpdateDescriptorSets(ctx.device, write_count, write, copy_count, NULL);
+    vkUpdateDescriptorSets(ctx.device, write_count, writes, copy_count, NULL);
   }
 
   VulkanMesh mesh = {
@@ -116,10 +106,9 @@ int main() {
 
   vkDeviceWaitIdle(ctx.device);
   vkDestroyRenderPass(ctx.device, rp, NULL);
-  vkDestroyPipelineLayout(ctx.device, pipeline_layout, NULL);
-  vkDestroyPipeline(ctx.device, pipeline, NULL);
   for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
     destroy_uniform_buffer(&ctx, &ubs[i]);
+    destroy_vulkan_material(ctx.device, &mats[i]);
   }
 
   destroy_vulkan_context(&ctx);

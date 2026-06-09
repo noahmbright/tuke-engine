@@ -40,13 +40,8 @@ inline VkPipeline shader_handles_to_graphics_pipeline(
 }
 
 // TODO would like this render pass removed
-inline void init_program_spec(
-    VulkanContext *ctx,
-    VkRenderPass render_pass,
-    const ProgramSpec *spec,
-    VkPipeline *out_pipeline,
-    VkPipelineLayout *out_pipeline_layout
-) {
+inline void
+init_program_spec(VulkanContext *ctx, VkRenderPass render_pass, const ProgramSpec *spec, VulkanMaterial *mat) {
   VkDevice dev = ctx->device;
 
   VkShaderModule vert_mod = create_shader_module(dev, spec->vert_spv, spec->vert_spv_size);
@@ -57,18 +52,27 @@ inline void init_program_spec(
 
   assert(spec->num_descriptor_set_layouts <= 16);
   VkDescriptorSetLayout temp_layouts[16] = {};
+
   for (u32 i = 0; i < spec->num_descriptor_set_layouts; i++) {
-    VkDescriptorSetLayout *layout = &ctx->descriptor_set_layouts[spec->binding_list_ids[i]];
+    DescriptorSetLayoutID layout_id = spec->binding_list_ids[i];
+    VkDescriptorSetLayout *layout = &ctx->descriptor_set_layouts[layout_id];
+
     if (*layout == VK_NULL_HANDLE) {
       *layout = create_descriptor_set_layout(dev, spec->binding_lists[i], spec->binding_list_lens[i]);
     }
     temp_layouts[i] = *layout;
+
+    VkDescriptorSet descriptor_set = create_descriptor_set(ctx->device, layout, ctx->descriptor_pool);
+    mat->descriptor_sets[i] = descriptor_set;
+    mat->descriptor_set_writes[i] = spec->write_templates[i];
+    mat->descriptor_set_write_lens[i] = spec->binding_list_lens[i];
   }
+  mat->num_descriptor_sets = spec->num_descriptor_set_layouts;
 
   const VkPipelineVertexInputStateCreateInfo *vertex_layout = &generated_vulkan_vertex_layouts[spec->vertex_layout_id];
-  *out_pipeline_layout = create_pipeline_layout(dev, temp_layouts, spec->num_descriptor_set_layouts);
-  *out_pipeline =
-      create_default_graphics_pipeline(ctx, render_pass, vert_mod, frag_mod, vertex_layout, *out_pipeline_layout);
+  mat->pipeline_layout = create_pipeline_layout(dev, temp_layouts, spec->num_descriptor_set_layouts);
+  mat->pipeline =
+      create_default_graphics_pipeline(ctx, render_pass, vert_mod, frag_mod, vertex_layout, mat->pipeline_layout);
 
   vkDestroyShaderModule(dev, vert_mod, NULL);
   vkDestroyShaderModule(dev, frag_mod, NULL);

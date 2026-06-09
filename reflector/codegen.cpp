@@ -487,6 +487,7 @@ static void codegen_program_spec_struct_definition(FILE *dst) {
   fprintf(dst, "  VertexLayoutID vertex_layout_id;\n");
 
   fprintf(dst, "  const VkDescriptorSetLayoutBinding *binding_lists[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
+  fprintf(dst, "  const VkWriteDescriptorSet *write_templates[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
   fprintf(dst, "  uint32_t binding_list_lens[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
   fprintf(dst, "  DescriptorSetLayoutID binding_list_ids[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
   fprintf(dst, "  uint32_t num_descriptor_set_layouts;\n");
@@ -821,8 +822,7 @@ static void generate_vulkan_descriptor_write_templates(FILE *dst, const ParsedSh
   for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
     const DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
 
-    // TODO should make this const eventually
-    fprintf(dst, "static VkWriteDescriptorSet %.*s_write_templates[] = {\n", layout->name_length, layout->name);
+    fprintf(dst, "static const VkWriteDescriptorSet %.*s_write_templates[] = {\n", layout->name_length, layout->name);
     for (u32 j = 0; j < MAX_NUM_DESCRIPTOR_BINDINGS; j++) {
       const DescriptorBinding *binding = &layout->bindings[j];
       if (binding->type == DESCRIPTOR_TYPE_INVALID) {
@@ -1010,6 +1010,14 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
   }
   fprintf(dst, "  },\n");
 
+  // Write templates
+  fprintf(dst, "  .write_templates = {\n");
+  for(u32 i = 0; i < program->num_descriptor_set_layouts; i++) {
+    const DescriptorSetLayout *layout = program->descriptor_set_layouts[i];
+    fprintf(dst, "    %.*s_write_templates,\n", layout->name_length, layout->name);
+  }
+  fprintf(dst, "  },\n");
+
   // Binding List Lens
   fprintf(dst, "  .binding_list_lens = {");
   for(u32 i = 0; i < program->num_descriptor_set_layouts; i++) {
@@ -1023,8 +1031,6 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
     fprintf(dst, "    LAYOUT_ID_%s,\n", program->descriptor_set_layouts[i]->name);
   }
   fprintf(dst, "  },\n");
-
-  fprintf(dst, "  .num_descriptor_set_layouts = %u,\n",   program->num_descriptor_set_layouts);
 
   fprintf(dst, "};\n\n");
   // clang-format on
