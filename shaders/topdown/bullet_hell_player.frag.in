@@ -1,10 +1,10 @@
 #version {{ VERSION }}
 
-{{ SET_BINDING 0 0 SET_LABEL PLACEHOLDER }} uniform sampler2D tex;
+{{ SET_BINDING 0 SET_LABEL PLACEHOLDER }} uniform sampler2D tex;
 
 {{ LOCATION 0 }} out vec4 frag_color;
 
-{{ SET_BINDING 0 1 SET_LABEL TOPDOWN_BULLET_HELL_PLAYER_FRAG }} uniform BulletHellPlayerFrag {
+{{ SET_BINDING 1 SET_LABEL TOPDOWN_BULLET_HELL_PLAYER_FRAG }} uniform BulletHellPlayerFrag {
     float invincibility_time;
 } u_data;
 

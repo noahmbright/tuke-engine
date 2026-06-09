@@ -1032,6 +1032,9 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
   }
   fprintf(dst, "  },\n");
 
+  fprintf(dst, "  .num_descriptor_set_layouts = %u,\n", program->num_descriptor_set_layouts);
+
+
   fprintf(dst, "};\n\n");
   // clang-format on
 }

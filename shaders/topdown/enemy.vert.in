@@ -2,7 +2,7 @@
 
 {{ LOCATION 0 BINDING 0 RATE_INSTANCE OFFSET TIGHTLY_PACKED }} in vec2 a_pos;
 
-{{ SET_BINDING 0 0 SET_LABEL CAMERA_VP }} uniform VPUniform {
+{{ SET_BINDING 0 SET_LABEL CAMERA_VP }} uniform VPUniform {
     mat4 vp;
 } u_vp;
 

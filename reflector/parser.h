@@ -180,7 +180,6 @@ typedef struct {
   const char *next_glsl_source_start;
   GLSLStruct glsl_struct;
 
-  u32 set;
   u32 binding;
   u32 descriptor_count;
   ShaderStage stage;

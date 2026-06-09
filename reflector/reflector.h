@@ -307,7 +307,4 @@ struct DescriptorSetLayout {
 
   DescriptorBinding bindings[MAX_NUM_DESCRIPTOR_BINDINGS];
   u32 num_bindings;
-
-  // TODO is set index necessary? This may be needed at the application level.
-  u32 set_index; // numerically, which number set this is
 };

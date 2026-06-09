@@ -4,7 +4,7 @@
 
 {{ LOCATION 0 }} out vec4 frag_color;
 
-{{ SET_BINDING 0 0 SET_LABEL BULLET_HELL_DATA }} uniform BulletHellData {
+{{ SET_BINDING 0 SET_LABEL BULLET_HELL_DATA }} uniform BulletHellData {
     uint max_health;
     uint health;
 } u_data;

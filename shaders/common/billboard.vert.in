@@ -4,11 +4,11 @@
 {{ LOCATION 1 BINDING 0 RATE_INSTANCE OFFSET TIGHTLY_PACKED }} in vec2 a_size;
 {{ LOCATION 2 BINDING 0 RATE_INSTANCE OFFSET TIGHTLY_PACKED }} in float a_rotation;
 
-{{ SET_BINDING 0 0 SET_LABEL CAMERA_VP }} uniform VPUniform {
+{{ SET_BINDING 0 SET_LABEL CAMERA_VP }} uniform VPUniform {
     mat4 vp;
 } u_vp;
 
-{{ SET_BINDING 1 0 SET_LABEL BILLBOARD_CAMERA_VECTORS }} uniform CameraUpRight {
+{{ SET_BINDING 0 SET_LABEL BILLBOARD_CAMERA_VECTORS }} uniform CameraUpRight {
     vec3 up;
     vec3 right;
 } u_vectors;

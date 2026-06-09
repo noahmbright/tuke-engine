@@ -5,11 +5,11 @@
 
 {{ LOCATION 0 }} out vec2 uv;
 
-{{ SET_BINDING 0 0 SET_LABEL PONG_GLOBAL }} uniform VPUniform {
+{{ SET_BINDING 0 SET_LABEL PONG_GLOBAL }} uniform VPUniform {
     mat4 vp;
 } vp;
 
-{{ SET_BINDING 0 2 SET_LABEL PONG_GLOBAL }} uniform InstanceDataUBO {
+{{ SET_BINDING 2 SET_LABEL PONG_GLOBAL }} uniform InstanceDataUBO {
     mat4 model[3];
 } instance_data;
 

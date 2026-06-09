@@ -1,10 +1,10 @@
 #version {{ VERSION }}
 
-{{ SET_BINDING 0 0 SET_LABEL CAMERA_VP }} uniform VPUniform {
+{{ SET_BINDING 0 SET_LABEL CAMERA_VP }} uniform VPUniform {
     mat4 vp;
 } u_vp;
 
-{{ SET_BINDING 1 0 SET_LABEL OVERWORLD_VISION_CONE }} uniform VisionCone {
+{{ SET_BINDING 0 SET_LABEL OVERWORLD_VISION_CONE }} uniform VisionCone {
     vec3 a;
     vec3 b;
     vec3 c;

@@ -851,17 +851,6 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
   Token cur_tok = get_current_token(parser);
   assert(cur_tok.type == TOKEN_TYPE_DIRECTIVE_SET_BINDING);
 
-  // numeric set
-  cur_tok = get_next_token(parser);
-  if (cur_tok.type != TOKEN_TYPE_NUMBER) {
-    report_parser_error(
-        parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE, "Expected numeric set after SET_BINDING in directive, got %s",
-        token_type_to_string[cur_tok.type]
-    );
-    return directive_parse;
-  }
-  u32 set = parse_integer_token(parser, cur_tok);
-
   // numeric binding
   cur_tok = get_next_token(parser);
   if (cur_tok.type != TOKEN_TYPE_NUMBER) {
@@ -979,13 +968,11 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
     // Not happy about duplicate assignment here and in the uniform path
     advance(parser);
     directive_parse.was_successful = true;
-    directive_parse.set = set;
     directive_parse.binding = binding;
     directive_parse.descriptor_type = DESCRIPTOR_TYPE_SAMPLER2D;
     directive_parse.descriptor_count = descriptor_count;
 
     // TODO Don't like the repetition between the directive parse and slice here.
-    template_string_slice->set = set;
     template_string_slice->binding = binding;
     template_string_slice->descriptor_type = DESCRIPTOR_TYPE_SAMPLER2D;
     return directive_parse;
@@ -1009,7 +996,6 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
   }
   // parsing members processes the closing brace
   parse_glsl_struct_member_list(parser, &glsl_struct);
-  template_string_slice->set = set;
   template_string_slice->binding = binding;
 
   cur_tok = get_current_token(parser);
@@ -1050,7 +1036,6 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
   directive_parse.descriptor_count = descriptor_count;
   directive_parse.was_successful = true;
   directive_parse.glsl_struct = glsl_struct;
-  directive_parse.set = set;
   directive_parse.binding = binding;
   return directive_parse;
 }

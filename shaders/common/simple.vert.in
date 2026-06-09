@@ -5,11 +5,11 @@
 
 {{ LOCATION 0 }} out vec3 norm;
 
-{{ SET_BINDING 0 1 SET_LABEL SIMPLE }} uniform CameraVP {
+{{ SET_BINDING 1 SET_LABEL SIMPLE }} uniform CameraVP {
     mat4 vp;
 } camera_vp;
 
-{{ SET_BINDING 0 2 SET_LABEL SIMPLE }} uniform LightPosition {
+{{ SET_BINDING 2 SET_LABEL SIMPLE }} uniform LightPosition {
     vec4 position;
 } light_position;
 
