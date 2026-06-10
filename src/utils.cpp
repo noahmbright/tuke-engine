@@ -65,28 +65,6 @@ void free_stb_handle(STBHandle *handle) {
   handle->data = NULL;
 }
 
-unsigned load_texture_opengl(const char *path) {
-  STBHandle handle = load_texture(path);
-  GLenum format = (handle.n_channels == 4) ? GL_RGBA : GL_RGB;
-  unsigned texture;
-  glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  if (handle.data) {
-    glTexImage2D(GL_TEXTURE_2D, 0, format, handle.width, handle.height, 0, format, GL_UNSIGNED_BYTE, handle.data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-  } else {
-    fprintf(stderr, "stbi_load returned nullptr\n");
-  }
-
-  free_stb_handle(&handle);
-
-  return texture;
-}
-
 // Can use this to upload a texture directly to the GPU using a temporary buffer
 // allocated inside this function.
 // /System/Library/Fonts/Helvetica.ttc

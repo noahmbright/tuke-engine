@@ -1,14 +1,116 @@
 #define GLM_ENABLE_EXPERIMENTAL
 
-#include "vulkan_test.h"
 #include "camera.h"
 #include "generated_shader_utils.h"
 #include "glfw_vulkan.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/gtx/string_cast.hpp"
+#include "tuke_engine.h"
 #include "utils.h"
 #include "vulkan/vulkan_base.h"
 #include "window.h"
+
+// clang-format off
+const f32 triangle_vertices[] = {
+  0.0f, -0.5f, 0.0f,  1.0f, 0.0f, 0.0f, 
+  0.5f, 0.5f, 0.0f,   0.0f, 1.0f, 0.0f,
+  -0.5f, 0.5f, 0.0f,  0.0f, 0.0f, 1.0f
+};
+
+const f32 square_vertices[] = {
+  0.33f, 0.33f, 0.0f, 0.0f, 0.0f, 1.0f,
+  0.33f, 0.67f, 0.0f, 0.0f, 0.0f, 1.0f,
+  0.67f, 0.67f, 0.0f, 0.0f, 0.0f, 1.0f,
+  0.33f, 0.33f, 0.0f, 0.0f, 0.0f, 1.0f,
+  0.67f, 0.33f, 0.0f, 0.0f, 0.0f, 1.0f,
+  0.67f, 0.67f, 0.0f, 0.0f, 0.0f, 1.0f,
+};
+
+// TL, BL, BR, TR
+const f32 unit_square_positions[] = {
+   // x, y, z, u, v
+  -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 
+  -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+   0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+   0.5f,  0.5f, 0.0f, 1.0f, 1.0f
+};
+
+const u16 unit_square_indices[] = {
+  0, 1, 2, 0, 2, 3,
+};
+
+const u32 instanced_quad_count = 5;
+const f32 quad_positions[] = {
+  -0.5, -0.5
+  -0.1, -0.1
+  -0.1, -0.1
+  -0.3, -0.3
+  -0.3, -0.3
+};
+
+const f32 cube_vertices[] = {
+    // Front face (+Z)
+    // xyz,              nx, ny, nz, u, v
+    -0.5f, -0.5f,  0.5f, 0, 0, 1, 0, 0,
+     0.5f, -0.5f,  0.5f, 0, 0, 1, 1, 0,
+     0.5f,  0.5f,  0.5f, 0, 0, 1, 1, 1,
+
+    -0.5f, -0.5f,  0.5f, 0, 0, 1, 0, 0,
+     0.5f,  0.5f,  0.5f, 0, 0, 1, 1, 1,
+    -0.5f,  0.5f,  0.5f, 0, 0, 1, 0, 1,
+
+     //Back face (-Z)
+     0.5f, -0.5f, -0.5f, 0, 0, -1, 0, 0,
+    -0.5f, -0.5f, -0.5f, 0, 0, -1, 1, 0,
+    -0.5f,  0.5f, -0.5f, 0, 0, -1, 1, 1,
+
+     0.5f, -0.5f, -0.5f, 0, 0, -1, 0, 0,
+    -0.5f,  0.5f, -0.5f, 0, 0, -1, 1, 1,
+     0.5f,  0.5f, -0.5f, 0, 0, -1, 0, 1,
+
+     //Left face (-X)
+    -0.5f, -0.5f, -0.5f, -1, 0, 0, 0, 0,
+    -0.5f, -0.5f,  0.5f, -1, 0, 0, 1, 0,
+    -0.5f,  0.5f,  0.5f, -1, 0, 0, 1, 1,
+
+    -0.5f, -0.5f, -0.5f, -1, 0, 0, 0, 0,
+    -0.5f,  0.5f,  0.5f, -1, 0, 0, 1, 1,
+    -0.5f,  0.5f, -0.5f, -1, 0, 0, 0, 1,
+
+     //Right face (+X)
+     0.5f, -0.5f,  0.5f, 1, 0, 0, 0, 0,
+     0.5f, -0.5f, -0.5f, 1, 0, 0, 1, 0,
+     0.5f,  0.5f, -0.5f, 1, 0, 0, 1, 1,
+
+     0.5f, -0.5f,  0.5f, 1, 0, 0, 0, 0,
+     0.5f,  0.5f, -0.5f, 1, 0, 0, 1, 1,
+     0.5f,  0.5f,  0.5f, 1, 0, 0, 0, 1,
+
+     //Top face (+Y)
+    -0.5f,  0.5f,  0.5f, 0, 1, 0, 0, 0,
+     0.5f,  0.5f,  0.5f, 0, 1, 0, 1, 0,
+     0.5f,  0.5f, -0.5f, 0, 1, 0, 1, 1,
+
+    -0.5f,  0.5f,  0.5f, 0, 1, 0, 0, 0,
+     0.5f,  0.5f, -0.5f, 0, 1, 0, 1, 1,
+    -0.5f,  0.5f, -0.5f, 0, 1, 0, 0, 1,
+
+     //Bottom face (-Y)
+    -0.5f, -0.5f, -0.5f, 0, -1, 0, 0, 0,
+     0.5f, -0.5f, -0.5f, 0, -1, 0, 1, 0,
+     0.5f, -0.5f,  0.5f, 0, -1, 0, 1, 1,
+
+    -0.5f, -0.5f, -0.5f, 0, -1, 0, 0, 0,
+     0.5f, -0.5f,  0.5f, 0, -1, 0, 1, 1,
+    -0.5f, -0.5f,  0.5f, 0, -1, 0, 0, 1,
+};
+// clang-format on
+
+enum TextureId { TEXTURE_GENERIC_GIRL, TEXTURE_GIRL_FACE, TEXTURE_GIRL_FACE_NORMAL_MAP, NUM_TEXTURES };
+
+static const char *texture_names[NUM_TEXTURES] = {
+    "textures/generic_girl.jpg", "textures/girl_face.jpg", "textures/girl_face_normal_map.jpg"
+};
 
 int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
@@ -20,25 +122,33 @@ int main() {
       {.color = {{0.01, 0.01, 0.01, 1.0}}}, {.depthStencil = {.depth = 1.0f, .stencil = 0}}
   };
 
+  // Asset system lol
+  VulkanTexture textures[NUM_TEXTURES];
   STBHandle stbs[NUM_TEXTURES];
-  VulkanImageData image_datas[NUM_TEXTURES];
+  u32 max_size = 0;
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
     stbs[i] = load_texture(texture_names[i]);
-    image_datas[i].n_channels = stbs[i].n_channels;
-    image_datas[i].data = stbs[i].data;
-    image_datas[i].width = stbs[i].width;
-    image_datas[i].height = stbs[i].height;
+    u32 size = stbs[i].width * stbs[i].height * stbs[i].n_channels;
+    max_size = (size > max_size) ? size : max_size;
   }
 
-  VulkanTexture textures[NUM_TEXTURES];
-  load_vulkan_textures(&ctx, image_datas, NUM_TEXTURES, textures);
+  VulkanBuffer staging_buffer = create_buffer(&ctx, BUFFER_TYPE_STAGING, max_size);
+  void *texture_data;
+  VkResult result =
+      vkMapMemory(ctx.device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data);
+  VK_CHECK(result, "Failed to map staging buffer memory");
 
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
+    textures[i] = create_vulkan_texture(
+        &ctx, stbs[i].width, stbs[i].height, stbs[i].n_channels, stbs[i].data, staging_buffer, texture_data
+    );
     free_stb_handle(&stbs[i]);
   }
 
-  VkSampler sampler = create_sampler(ctx.device);
+  vkUnmapMemory(ctx.device, staging_buffer.memory);
+  destroy_vulkan_buffer(&ctx, staging_buffer);
 
+  VkSampler sampler = create_sampler(ctx.device);
   ColorDepthFramebuffer offscreen_framebuffer =
       create_color_depth_framebuffer(&ctx, ctx.swapchain_extent, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D32_SFLOAT);
 

@@ -2,12 +2,6 @@
 
 ## Descriptor Generation
 
-**Startup descriptor set init loop.**
-Generate `static VkDescriptorSet descriptor_sets[NUM_DESCRIPTOR_SET_LAYOUTS]` and pointer tables
-mapping enum index → binding array, binding count, write template array, write template count.
-Startup loop allocates all sets and pre-wires `dstSet` into write templates so call sites never
-touch it again.
-
 **Per-label aggregate structs (replaces UniformBufferManager).**
 Generate one C struct per label containing all bound uniform structs as fields, sorted by binding.
 Buffer creation becomes `sizeof(LabelUniforms)`. Offsets come from `offsetof`. Alignment is
@@ -25,13 +19,6 @@ compilation duplicates the preamble for each stage. Bindings in the preamble get
 `{{ VERTEX_BEGIN }}` — assert otherwise. Existing `.vert.in` / `.frag.in` pairs continue to work.
 Compute stays standalone, no combined format.
 
-**Pair vert+frag by name, emit a single program handle.**
-`SHADER_HANDLE_FOO_VERT` + `SHADER_HANDLE_FOO_FRAG` → `SHADER_PROGRAM_FOO`. Covers both
-split-file pairs (matched by stem) and combined files. Name uniqueness must be enforced — a
-`.combined.in` and a `.vert.in` with the same stem is a hard error. Eliminates the two-handle
-pipeline creation call and enables reflector-level validation that stages are compatible.
-Per-program: which `DescriptorSetLayoutIDs` it uses, which `VertexLayoutID`, both shader handles.
-
 ---
 
 ## Further Learning Resources
@@ -45,12 +32,23 @@ Per-program: which `DescriptorSetLayoutIDs` it uses, which `VertexLayoutID`, bot
 
 ---
 
+## Generated Header Split
+
+**Split generated output into a types header and a Vulkan data header.**
+Currently everything lands in one `shaders.h`. Split into two:
+- `shader_types.h` — enums (`ShaderHandle`, `ShaderProgram`, `VertexLayoutID`,
+  `DescriptorSetLayoutID`, `UniformBufferLabel`), C structs from GLSL uniforms, and
+  `#define` constants. No Vulkan types, no SPIR-V arrays. Safe to include anywhere.
+- `shaders.h` (or `shader_vulkan.h`) — SPIR-V byte arrays, `VkDescriptorSetLayoutBinding`
+  arrays, write templates, `ProgramSpec` literals, vertex layout `VkPipelineVertexInputStateCreateInfo`
+  arrays. Includes `shader_types.h` and `<vulkan/vulkan.h>`.
+
+This lets non-rendering code (simulation, asset system, UI logic) include only
+`shader_types.h` without pulling in Vulkan headers.
+
+---
+
 ## Minor / Deferred
 
 - Push constant parsing is a stub (`parse_push_constant_directive` does nothing).
 - Add `const char *source_path` to `ShaderSpec` for hot reload.
-- Validate that matching bindings across shaders sharing a SET_LABEL have the same struct type
-  name, not just the same shape.
-- Remove the set number from the `SET_BINDING` DSL syntax and parser. The value is parsed and
-  immediately discarded — set index is now derived from layout position in the program. Strip it
-  from `parse_set_binding_directive`, update all `.vert.in` / `.frag.in` files accordingly.

@@ -752,24 +752,24 @@ create_default_image(const VulkanContext *context, u32 width, u32 height, VkImag
   return image;
 }
 
-VkDeviceMemory allocate_and_bind_image_memory(const VulkanContext *context, VkImage image) {
+VkDeviceMemory allocate_and_bind_image_memory(const VulkanContext *ctx, VkImage image) {
   // create memory
-  VkMemoryRequirements memory_requirements;
-  vkGetImageMemoryRequirements(context->device, image, &memory_requirements);
+  VkMemoryRequirements memory_reqs;
+  vkGetImageMemoryRequirements(ctx->device, image, &memory_reqs);
 
-  VkMemoryAllocateInfo memory_allocate_info;
-  memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-  memory_allocate_info.pNext = 0;
-  memory_allocate_info.allocationSize = memory_requirements.size;
-  memory_allocate_info.memoryTypeIndex = find_memory_type(
-      context->physical_device, memory_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-  );
+  VkMemoryAllocateInfo memory_allocate_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = 0,
+      .allocationSize = memory_reqs.size,
+      .memoryTypeIndex =
+          find_memory_type(ctx->physical_device, memory_reqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+  };
 
   VkDeviceMemory device_memory;
-  VkResult result = vkAllocateMemory(context->device, &memory_allocate_info, NULL, &device_memory);
+  VkResult result = vkAllocateMemory(ctx->device, &memory_allocate_info, NULL, &device_memory);
   VK_CHECK(result, "Failed to allocate image memory");
 
-  result = vkBindImageMemory(context->device, image, device_memory, 0);
+  result = vkBindImageMemory(ctx->device, image, device_memory, 0);
   VK_CHECK(result, "Failed to bind image memory");
 
   return device_memory;
@@ -1164,7 +1164,7 @@ VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u
 // May want this to be create_instance_graphics(), or something. Or need to have
 // VulkanWindowInfo be something that can equally well describe compute pipelines.
 VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_info) {
-  VulkanContext ctx;
+  VulkanContext ctx = {};
 
   ctx.instance = create_instance(title, window_info);
 #ifdef TUKE_DISABLE_VULKAN_VALIDATION
@@ -1961,40 +1961,40 @@ ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *ctx, u
 }
 
 // Can make textures in a GPU native format KTX: https://developer.imaginationtech.com/solutions/pvrtextool/
-// TODO how to handle reusing staging buffers?
-// Need to see usage when multiple textures are present
-// current idea: anticipate loading several textures at once, read from files,
-// pick one with max size, allocate staging buffer with that size, and
-// stream the textures in one by one after that
 VulkanTexture create_vulkan_texture(
-    VulkanContext *context, VulkanImageData image_data, VulkanBuffer staging_buffer, void *ptr_to_mapped_memory
+    VulkanContext *ctx,
+    u32 width,
+    u32 height,
+    u32 n_channels,
+    u8 *data,
+    VulkanBuffer staging_buffer,
+    void *ptr_to_mapped_memory
 ) {
   VulkanTexture texture = {
-      .width = image_data.width,
-      .height = image_data.height,
+      .width = width,
+      .height = height,
   };
 
   VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
   VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-  texture.image = create_default_image(context, image_data.width, image_data.height, usage, format);
+  texture.image = create_default_image(ctx, width, height, usage, format);
 
   // Allocating device memory must come after image creation.
-  texture.device_memory = allocate_and_bind_image_memory(context, texture.image);
+  texture.device_memory = allocate_and_bind_image_memory(ctx, texture.image);
 
-  // map memory
-  assert(image_data.data);
+  // Map memory
+  assert(data);
   assert(ptr_to_mapped_memory);
-  u32 texture_size = image_data.n_channels * image_data.width * image_data.height;
-  memcpy(ptr_to_mapped_memory, image_data.data, texture_size);
+  u32 size = n_channels * width * height;
+  memcpy(ptr_to_mapped_memory, data, size);
 
-  // TODO what does this do? Still don't understand transitions
   // First transition
-  VkCommandBuffer cmd = begin_single_use_command_buffer(context);
+  VkCommandBuffer cmd = begin_single_use_command_buffer(ctx);
   VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
   VkImageLayout new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
   transition_image_layout(cmd, texture.image, old_layout, new_layout);
 
-  // copy buffer to image
+  // Copy buffer to image
   VkBufferImageCopy buffer_image_copy = {
       .bufferOffset = 0,
       .bufferRowLength = 0, // 0 indicates tightly packed - could we also used handle width/height?
@@ -2006,8 +2006,8 @@ VulkanTexture create_vulkan_texture(
       .imageOffset.x = 0,
       .imageOffset.y = 0,
       .imageOffset.z = 0,
-      .imageExtent.width = image_data.width,
-      .imageExtent.height = image_data.height,
+      .imageExtent.width = width,
+      .imageExtent.height = height,
       .imageExtent.depth = 1,
   };
 
@@ -2015,46 +2015,17 @@ VulkanTexture create_vulkan_texture(
   u32 region_count = 1;
   vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, texture.image, image_layout, region_count, &buffer_image_copy);
 
-  // second transition
+  // Second transition
   old_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
   new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   transition_image_layout(cmd, texture.image, old_layout, new_layout);
-  end_single_use_command_buffer(context, cmd);
+  end_single_use_command_buffer(ctx, cmd);
 
   VkImageAspectFlags aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT;
-  format = VK_FORMAT_R8G8B8A8_SRGB;
-  texture.image_view = create_default_image_view(context, texture.image, format, aspect_flags);
+  format = VK_FORMAT_R8G8B8A8_SRGB; // TODO should be determined from image
+  texture.image_view = create_default_image_view(ctx, texture.image, format, aspect_flags);
 
   return texture;
-}
-
-// TODO return type - would I prefer to return an array of textures, or do I
-// want to be able to refer to textures by name?
-// I could pass an array of structs containing a VulkanTexture and a path
-void load_vulkan_textures(
-    VulkanContext *ctx, const VulkanImageData *image_datas, u32 num_images, VulkanTexture *out_textures
-) {
-
-  u32 max_size = 0;
-  for (u32 i = 0; i < num_images; i++) {
-    const VulkanImageData *data = &image_datas[i];
-    u32 texture_size = data->width * data->height * data->n_channels;
-    max_size = (texture_size > max_size) ? texture_size : max_size;
-  }
-
-  // TODO find a way to reuse another staging buffer, already allocated
-  VulkanBuffer staging_buffer = create_buffer(ctx, BUFFER_TYPE_STAGING, max_size);
-  void *texture_data;
-  VkResult result =
-      vkMapMemory(ctx->device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data);
-  VK_CHECK(result, "Failed to map staging buffer memory");
-
-  for (u32 i = 0; i < num_images; i++) {
-    out_textures[i] = create_vulkan_texture(ctx, image_datas[i], staging_buffer, texture_data);
-  }
-
-  vkUnmapMemory(ctx->device, staging_buffer.memory);
-  destroy_vulkan_buffer(ctx, staging_buffer);
 }
 
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture) {
@@ -2094,6 +2065,9 @@ VkSampler create_sampler(VkDevice device) {
 }
 
 void reset_descriptor_set_layouts(VulkanContext *ctx) {
+  if (!ctx->descriptor_set_layouts) {
+    return;
+  }
   for (u32 i = 0; i < ctx->num_descriptor_set_layouts; i++) {
     vkDestroyDescriptorSetLayout(ctx->device, ctx->descriptor_set_layouts[i], NULL);
     ctx->descriptor_set_layouts[i] = VK_NULL_HANDLE;

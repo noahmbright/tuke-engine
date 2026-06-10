@@ -37,110 +37,65 @@ void init_buffers(State *state) {
   state->uniform_buffer = create_uniform_buffer(ctx, ub_manager.current_offset);
 }
 
-// currently, global VP is premultiplied proj * view
-void init_descriptor_sets(State *state) {
-  VulkanContext *ctx = &state->ctx;
 
-  // global VP
-  DescriptorSetBuilder global_vp_builder = create_descriptor_set_builder(ctx);
-  // global vp
-  add_uniform_buffer_descriptor_set(
-      &global_vp_builder, &state->uniform_buffer, state->uniform_writes.camera_vp.offset,
-      state->uniform_writes.camera_vp.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false
-  );
-  state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP] =
-      build_descriptor_set(&global_vp_builder, state->descriptor_pool);
-
-  // TODO background vs arena, in game vs overlay
-  DescriptorSetBuilder background_builder = create_descriptor_set_builder(ctx);
-  // background model
-  add_uniform_buffer_descriptor_set(
-      &background_builder, &state->uniform_buffer, state->uniform_writes.arena_model.offset,
-      state->uniform_writes.arena_model.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false
-  );
-
-  add_image_descriptor_set(
-      &background_builder, state->textures[TEXTURE_FIELD_BACKGROUND].image_view, state->sampler, 1, 1,
-      VK_SHADER_STAGE_FRAGMENT_BIT
-  );
-
-  state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND] =
-      build_descriptor_set(&background_builder, state->descriptor_pool);
-
-  // paddles and ball
-  DescriptorSetBuilder paddle_ball_builder = create_descriptor_set_builder(ctx);
-  add_uniform_buffer_descriptor_set(
-      &paddle_ball_builder, &state->uniform_buffer, state->uniform_writes.instance_data.offset,
-      state->uniform_writes.instance_data.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT, false
-  );
-
-  state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL] =
-      build_descriptor_set(&paddle_ball_builder, state->descriptor_pool);
+static VkWriteDescriptorSet fill_write(const VulkanMaterial *mat, u32 set_idx, u32 binding) {
+  u32 len = mat->descriptor_set_write_lens[set_idx];
+  const VkWriteDescriptorSet *templates = mat->descriptor_set_writes[set_idx];
+  for (u32 i = 0; i < len; i++) {
+    if (templates[i].dstBinding == binding) {
+      VkWriteDescriptorSet w = templates[i];
+      w.dstSet = mat->descriptor_sets[set_idx];
+      return w;
+    }
+  }
+  assert(false);
+  return {};
 }
 
 void init_background_material(State *state) {
+  init_program_spec(&state->ctx, state->ctx.render_pass, &pong_background_program_spec, &state->background_material);
 
-  Material *mat = &state->background_material;
+  VulkanMaterial *mat = &state->background_material;
+  VkBuffer ub = state->uniform_buffer.vulkan_buffer.buffer;
 
-  DescriptorSetHandle *vp_handle = &state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP];
+  VkDescriptorImageInfo image_info = {
+      .sampler = state->sampler,
+      .imageView = state->textures[TEXTURE_FIELD_BACKGROUND].image_view,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+  VkDescriptorBufferInfo vp_info = {
+      .buffer = ub, .offset = state->uniform_writes.camera_vp.offset, .range = state->uniform_writes.camera_vp.size,
+  };
+  VkDescriptorBufferInfo model_info = {
+      .buffer = ub, .offset = state->uniform_writes.arena_model.offset, .range = state->uniform_writes.arena_model.size,
+  };
 
-  DescriptorSetHandle *background_handle = &state->descriptor_set_handles[DESCRIPTOR_HANDLE_BACKGROUND];
-
-  VkDescriptorSetLayout layouts[2] = {vp_handle->descriptor_set_layout, background_handle->descriptor_set_layout};
-
-  state->background_material.pipeline_layout = create_pipeline_layout(state->ctx.device, layouts, 2);
-
-  state->background_material.pipeline = shader_handles_to_graphics_pipeline(
-      &state->ctx, state->ctx.render_pass, SHADER_HANDLE_PONG_BACKGROUND_VERT, SHADER_HANDLE_PONG_BACKGROUND_FRAG,
-      state->background_material.pipeline_layout
-  );
-
-  mat->render_call.instance_count = 1;
-  mat->render_call.pipeline = mat->pipeline;
-  mat->render_call.pipeline_layout = mat->pipeline_layout;
-  mat->render_call.num_descriptor_sets = 2;
-  mat->render_call.descriptor_sets[0] = vp_handle->descriptor_set;
-  mat->render_call.descriptor_sets[1] = background_handle->descriptor_set;
-  mat->render_call.num_vertex_buffers = 1;
-  mat->render_call.vertex_buffer_offsets[0] = 0;
-  mat->render_call.vertex_buffers[0] = state->buffer_manager.vertex_buffer.buffer;
-  mat->render_call.index_buffer_offset = 0;
-  mat->render_call.num_indices = 6;
-  mat->render_call.index_buffer = state->buffer_manager.index_buffer.buffer;
-  mat->render_call.is_indexed = true;
+  // set 0 = PLACEHOLDER, set 1 = PONG_GLOBAL
+  VkWriteDescriptorSet writes[3];
+  writes[0] = fill_write(mat, 0, 1);  writes[0].pImageInfo = &image_info;
+  writes[1] = fill_write(mat, 1, 0);  writes[1].pBufferInfo = &vp_info;
+  writes[2] = fill_write(mat, 1, 1);  writes[2].pBufferInfo = &model_info;
+  vkUpdateDescriptorSets(state->ctx.device, 3, writes, 0, NULL);
 }
 
 void init_paddles_material(State *state) {
+  init_program_spec(&state->ctx, state->ctx.render_pass, &pong_paddle_program_spec, &state->paddle_material);
 
-  Material *mat = &state->paddle_material;
+  VulkanMaterial *mat = &state->paddle_material;
+  VkBuffer ub = state->uniform_buffer.vulkan_buffer.buffer;
 
-  DescriptorSetHandle *vp_handle = &state->descriptor_set_handles[DESCRIPTOR_HANDLE_GLOBAL_VP];
+  VkDescriptorBufferInfo vp_info = {
+      .buffer = ub, .offset = state->uniform_writes.camera_vp.offset, .range = state->uniform_writes.camera_vp.size,
+  };
+  VkDescriptorBufferInfo instance_info = {
+      .buffer = ub, .offset = state->uniform_writes.instance_data.offset, .range = state->uniform_writes.instance_data.size,
+  };
 
-  DescriptorSetHandle *paddle_handle = &state->descriptor_set_handles[DESCRIPTOR_HANDLE_PADDLES_AND_BALL];
-
-  VkDescriptorSetLayout layouts[2] = {vp_handle->descriptor_set_layout, paddle_handle->descriptor_set_layout};
-
-  state->paddle_material.pipeline_layout = create_pipeline_layout(state->ctx.device, layouts, 2);
-
-  state->paddle_material.pipeline = shader_handles_to_graphics_pipeline(
-      &state->ctx, state->ctx.render_pass, SHADER_HANDLE_PONG_PADDLE_VERT, SHADER_HANDLE_PONG_PADDLE_FRAG,
-      state->paddle_material.pipeline_layout
-  );
-
-  RenderCall *c = &mat->render_call;
-  c->instance_count = InstanceDataUBO_model_array_size;
-  c->pipeline = mat->pipeline;
-  c->pipeline_layout = mat->pipeline_layout;
-  c->num_descriptor_sets = 2;
-  c->descriptor_sets[0] = vp_handle->descriptor_set;
-  c->descriptor_sets[1] = paddle_handle->descriptor_set;
-  c->num_vertex_buffers = 1;
-  c->vertex_buffer_offsets[0] = 0;
-  c->vertex_buffers[0] = state->buffer_manager.vertex_buffer.buffer;
-  c->index_buffer_offset = 0;
-  c->num_indices = 6;
-  c->index_buffer = state->buffer_manager.index_buffer.buffer;
-  c->is_indexed = true;
+  // set 0 = PONG_GLOBAL
+  VkWriteDescriptorSet writes[2];
+  writes[0] = fill_write(mat, 0, 0);  writes[0].pBufferInfo = &vp_info;
+  writes[1] = fill_write(mat, 0, 2);  writes[1].pBufferInfo = &instance_info;
+  vkUpdateDescriptorSets(state->ctx.device, 2, writes, 0, NULL);
 }
 
 static void init_transforms(State *state) {
@@ -163,36 +118,54 @@ static void init_transforms(State *state) {
 }
 
 State setup_state(const char *title) {
-  State state;
-  state.current_frame = 0;
-  state.arena_dimensions = arena_dimensions0;
-  init_inputs(&state.inputs);
-  state.game_mode = GAMEMODE_MAIN_MENU;
-  state.movement_mode = MOVEMENT_MODE_VERTICAL_ONLY;
-  state.pong_mode = PONG_MODE_BETWEEN_POINTS;
-  state.left_score = state.right_score = 0;
+  GLFWwindow *window = create_window(true /* is_vulkan */);
+  VulkanWindowInfo window_info = create_glfw_vulkan_window_info(window);
 
-  state.window = create_window(true /* is_vulkan */);
-  VulkanWindowInfo window_info = create_glfw_vulkan_window_info(state.window);
-  state.ctx = create_vulkan_context(title, window_info);
+  State state = {
+      .current_frame = 0,
+      .arena_dimensions = arena_dimensions0,
+      .game_mode = GAMEMODE_MAIN_MENU,
+      .movement_mode = MOVEMENT_MODE_VERTICAL_ONLY,
+      .pong_mode = PONG_MODE_BETWEEN_POINTS,
+      .left_score = state.right_score = 0,
+      .window = window,
+      .ctx = create_vulkan_context(title, window_info),
+  };
+
   VulkanContext *ctx = &state.ctx;
 
-  VulkanImageData image_datas[NUM_TEXTURES];
+  STBHandle stbs[NUM_TEXTURES];
+  u32 max_size = 0;
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
-    STBHandle stb = load_texture(texture_names[i]);
-    image_datas[i].n_channels = stb.n_channels;
-    image_datas[i].data = stb.data;
-    image_datas[i].width = stb.width;
-    image_datas[i].height = stb.height;
+    stbs[i] = load_texture(texture_names[i]);
+    u32 texture_size = stbs[i].width * stbs[i].height * stbs[i].n_channels;
+    max_size = (texture_size > max_size) ? texture_size : max_size;
   }
 
-  load_vulkan_textures(ctx, image_datas, NUM_TEXTURES, state.textures);
+  VulkanBuffer staging_buffer = create_buffer(ctx, BUFFER_TYPE_STAGING, max_size);
+  void *texture_data;
+  VkResult result =
+      vkMapMemory(ctx->device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data);
+  VK_CHECK(result, "Failed to map staging buffer memory");
+
+  for (u32 i = 0; i < NUM_TEXTURES; i++) {
+    state.textures[i] = create_vulkan_texture(
+        ctx, stbs[i].width, stbs[i].height, stbs[i].n_channels, stbs[i].data, staging_buffer, texture_data
+    );
+    free_stb_handle(&stbs[i]);
+  }
+
+  vkUnmapMemory(ctx->device, staging_buffer.memory);
+  destroy_vulkan_buffer(ctx, staging_buffer);
+
   init_buffers(&state);
 
   // TODO this sampler never changes - look into wiring immutable samplers
+  // All this stuff needs to be managed in the backend. I don't know how to
+  // manage samplers at all.
   state.sampler = create_sampler(ctx->device);
-  state.descriptor_pool = create_descriptor_pool(ctx->device);
-  init_descriptor_sets(&state);
+  set_descriptor_set_layouts(&state.ctx, state.descriptor_set_layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
+  init_inputs(&state.inputs);
 
   state.clear_values[0].color = {{0.0, 1.0, 0.0, 1.0}};
   state.clear_values[1].depthStencil = {.depth = 1.0f, .stencil = 0};
@@ -233,7 +206,7 @@ State setup_state(const char *title) {
   // TODO make camera matrices only on camera movement
   // TODO buffer only on resize
   const CameraMatrices camera_matrices =
-      create_camera_matrices(&state.camera, state.ctx.window_framebuffer_width, state.ctx.window_framebuffer_height);
+      create_camera_matrices(&state.camera, state.ctx.swapchain_extent.width, state.ctx.swapchain_extent.height);
   glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
 
   // uniform buffer structure: camera vp, background model, paddle model
@@ -280,14 +253,8 @@ void destroy_state(State *state) {
     destroy_vulkan_texture(ctx->device, &state->textures[i]);
   }
 
-  for (u32 i = 0; i < NUM_DESCRIPTOR_HANDLES; i++) {
-    destroy_descriptor_set_handle(ctx->device, &state->descriptor_set_handles[i]);
-  }
-
-  destroy_material(ctx, &state->background_material);
-  destroy_material(ctx, &state->paddle_material);
-
-  vkDestroyDescriptorPool(ctx->device, state->descriptor_pool, NULL);
+  destroy_vulkan_material(ctx->device, &state->background_material);
+  destroy_vulkan_material(ctx->device, &state->paddle_material);
 
   destroy_buffer_manager(&state->buffer_manager);
   destroy_uniform_buffer(ctx, &state->uniform_buffer);
@@ -307,8 +274,19 @@ void render(State *state) {
   vkCmdSetViewport(command_buffer, 0, 1, &state->viewport_state.viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &state->viewport_state.scissor);
 
-  render_mesh(command_buffer, &state->background_material.render_call);
-  render_mesh(command_buffer, &state->paddle_material.render_call);
+  VulkanMesh mesh = {
+      .num_indices = 6,
+      .instance_count = 1,
+      .num_vertex_buffers = 1,
+      .vertex_buffers = {state->buffer_manager.vertex_buffer.buffer},
+      .vertex_buffer_offsets = {0},
+      .index_buffer = state->buffer_manager.index_buffer.buffer,
+  };
+
+  render_mesh_material(command_buffer, &mesh, &state->background_material);
+
+  mesh.instance_count = InstanceDataUBO_model_array_size;
+  render_mesh_material(command_buffer, &mesh, &state->paddle_material);
 
   vkCmdEndRenderPass(command_buffer);
   VK_CHECK(vkEndCommandBuffer(command_buffer), "Failed to end command buffer");
@@ -514,8 +492,8 @@ void handle_collisions(State *state, const f32 dt) {
 
 void update_screen_shake(State *state, f32 dt) {
 
-  i32 width = state->ctx.window_framebuffer_width;
-  i32 height = state->ctx.window_framebuffer_height;
+  i32 width = state->ctx.swapchain_extent.width;
+  i32 height = state->ctx.swapchain_extent.height;
 
   CameraMatrices camera_matrices;
   state->screen_shake.time_elapsed += dt;

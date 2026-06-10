@@ -366,11 +366,6 @@ TemplateStringReplacement directive_replacement_set_binding(Backend backend, Des
 }
 
 TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_slice, Backend backend) {
-
-  TemplateStringReplacement replacement;
-  replacement.string = NULL;
-  replacement.length = 0;
-
   switch (string_slice->type) {
   case DIRECTIVE_TYPE_VERSION:
     return directive_replacement_version(backend);
@@ -384,13 +379,17 @@ TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_
     return directive_replacement_set_binding(backend, string_slice->descriptor_type);
   case DIRECTIVE_TYPE_PUSH_CONSTANT:
     // return replacement;
-  case DIRECTIVE_TYPE_GLSL_SOURCE:
-    replacement.string = string_slice->start;
-    replacement.length = u32(string_slice->end - string_slice->start);
+  case DIRECTIVE_TYPE_GLSL_SOURCE: {
+    TemplateStringReplacement replacement = {
+        .string = string_slice->start,
+        .length = u32(string_slice->end - string_slice->start),
+    };
     return replacement;
   }
-
-  return replacement;
+  default:
+    TemplateStringReplacement replacement = {};
+    return replacement;
+  }
 }
 
 GLSLSource replace_string_slices(const ParsedShader *parsed, Backend backend) {
@@ -1178,92 +1177,6 @@ static bool compile_shaders(const ParsedShadersIR *ir, CompiledShaders *compiled
   return should_codegen;
 }
 
-static bool validate_vertex_fragment_pairs(const ParsedShadersIR *ir, ShaderProgram *programs, u32 *num_names) {
-  u32 found_names = 0;
-  bool valid = true;
-
-  for (u32 j = 0; j < ir->num_parsed_shaders; j++) {
-    const ParsedShader *shader = &ir->parsed_shaders[j];
-    bool new_vert = (shader->stage == SHADER_STAGE_VERTEX);
-    bool new_frag = (shader->stage == SHADER_STAGE_FRAGMENT);
-    bool new_comp = (shader->stage == SHADER_STAGE_COMPUTE);
-
-    ShaderProgram *prog = NULL;
-    for (u32 i = 0; i < found_names; i++) {
-      if (strcmp(shader->name, programs[i].name) != 0) {
-        continue;
-      }
-
-      prog = &programs[i];
-      bool old_vert = (prog->parsed_vert != NULL);
-      bool old_frag = (prog->parsed_frag != NULL);
-      bool old_comp = (prog->parsed_comp != NULL);
-
-      if ((new_vert && old_vert) || (new_frag && old_frag) || (new_comp && old_comp)) {
-        fprintf(stderr, "Shader %s has a duplicate stage.\n", shader->name);
-        valid = false;
-      }
-
-      bool old_graphics_new_comp = new_comp && (old_vert || old_frag);
-      bool new_graphics_old_comp = (new_vert || new_frag) && old_comp;
-      if (old_graphics_new_comp || new_graphics_old_comp) {
-        fprintf(stderr, "Shader %s mixes compute with vertex/fragment stages.\n", shader->name);
-        valid = false;
-      }
-
-      break;
-    } // End loop over heretofore found programs
-
-    if (!prog) {
-      prog = &programs[found_names++];
-      prog->name = shader->name;
-    }
-
-    if (new_vert) {
-      prog->parsed_vert = shader;
-    } else if (new_frag) {
-      prog->parsed_frag = shader;
-    } else if (new_comp) {
-      prog->parsed_comp = shader;
-    }
-
-    // Push new descriptor set layouts to the program.
-    // Can use pointer equality because everything is stored in the statically allocated IR's arrays.
-    for (u32 new_idx = 0; new_idx < shader->num_descriptor_set_layouts; new_idx++) {
-      const DescriptorSetLayout *new_layout = shader->descriptor_set_layouts[new_idx];
-
-      bool layout_is_new = true;
-      for (u32 old_idx = 0; old_idx < prog->num_descriptor_set_layouts; old_idx++) {
-        const DescriptorSetLayout *old_layout = prog->descriptor_set_layouts[old_idx];
-        if (old_layout == new_layout) {
-          layout_is_new = false;
-          break;
-        }
-      }
-
-      if (layout_is_new) {
-        prog->descriptor_set_layouts[prog->num_descriptor_set_layouts++] = new_layout;
-      }
-    }
-  } // End loop over all shaders
-
-  // Validate names are either compute OR both vertex and fragment.
-  for (u32 i = 0; i < found_names; i++) {
-    ShaderProgram *entry = &programs[i];
-    if (entry->parsed_comp) {
-      continue;
-    }
-    if (!entry->parsed_vert || !entry->parsed_frag) {
-      const char *missing_stage = !entry->parsed_vert ? "vertex" : "fragment";
-      fprintf(stderr, "Shader %s is missing a %s stage.\n", entry->name, missing_stage);
-      valid = false;
-    }
-  }
-
-  *num_names = found_names;
-  return valid;
-}
-
 static void codegen_compiled_code(FILE *dst, const CompiledShaders *shaders, u32 num_shaders) {
   for (u32 i = 0; i < num_shaders; i++) {
     const ParsedShader *parsed = shaders->parsed[i];
@@ -1293,17 +1206,6 @@ static void codegen_compiled_code(FILE *dst, const CompiledShaders *shaders, u32
 // The real deal!
 bool codegen(const char *out_path, const ParsedShadersIR *ir) {
 
-  // Collect shaders into programs.
-  ShaderProgram programs[MAX_NUM_SHADERS];
-  memset(programs, 0, sizeof(programs));
-
-  u32 num_programs;
-  bool pairs_valid = validate_vertex_fragment_pairs(ir, programs, &num_programs);
-  if (!pairs_valid) {
-    fprintf(stderr, "Program pairings invalid. Not writing %s.\n", out_path);
-    return false;
-  }
-
   // Compile and replace GLSL slices.
   CompiledShaders compiled_shaders;
   bool compile_success = compile_shaders(ir, &compiled_shaders);
@@ -1318,7 +1220,7 @@ bool codegen(const char *out_path, const ParsedShadersIR *ir) {
   codegen_compiled_shader_header(dst);
   codegen_descriptor_set_enum(dst, ir);
   codegen_shader_handle_enum(dst, ir); // TODO deprecate
-  codegen_shader_program_enum(dst, programs, num_programs);
+  codegen_shader_program_enum(dst, ir->programs, ir->num_programs);
   codegen_vertex_layout_enum(dst, ir);
   codegen_buffer_label_enum(dst, ir);
 
@@ -1335,8 +1237,8 @@ bool codegen(const char *out_path, const ParsedShadersIR *ir) {
   codegen_shader_spec(dst, &compiled_shaders, ir->num_parsed_shaders);
 
   codegen_program_spec_struct_definition(dst);
-  for (u32 i = 0; i < num_programs; i++) {
-    codegen_program_spec(dst, &programs[i]);
+  for (u32 i = 0; i < ir->num_programs; i++) {
+    codegen_program_spec(dst, &ir->programs[i]);
   }
 
   codegen_footer(dst, ir);

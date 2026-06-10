@@ -80,12 +80,6 @@ enum TextureID {
   NUM_TEXTURES
 };
 
-enum DescriptorHandleID {
-  DESCRIPTOR_HANDLE_BACKGROUND,
-  DESCRIPTOR_HANDLE_GLOBAL_VP,
-  DESCRIPTOR_HANDLE_PADDLES_AND_BALL,
-  NUM_DESCRIPTOR_HANDLES
-};
 
 enum GameMode {
   GAMEMODE_PAUSED,
@@ -103,17 +97,6 @@ enum PongMode {
   PONG_MODE_LIVE_BALL,
 };
 
-struct Material {
-  DescriptorSetHandle descriptor_set_handle;
-  VkPipelineLayout pipeline_layout;
-  RenderCall render_call;
-  VkPipeline pipeline;
-};
-
-inline void destroy_material(VulkanContext *ctx, Material *material) {
-  vkDestroyPipelineLayout(ctx->device, material->pipeline_layout, NULL);
-  vkDestroyPipeline(ctx->device, material->pipeline, NULL);
-}
 
 struct UniformWrites {
   UniformWrite camera_vp;
@@ -159,22 +142,20 @@ struct State {
 
   glm::vec2 arena_dimensions;
 
+  // Renderer
   VulkanContext ctx;
   VulkanTexture textures[NUM_TEXTURES];
   VkSampler sampler;
-  DescriptorSetHandle descriptor_set_handles[NUM_DESCRIPTOR_HANDLES];
-  VkDescriptorPool descriptor_pool;
+  VkDescriptorSetLayout descriptor_set_layouts[NUM_DESCRIPTOR_SET_LAYOUTS];
   VkClearValue clear_values[NUM_ATTACHMENTS];
-
-  Material background_material;
-  Material paddle_material;
-
   ViewportState viewport_state;
-
   UniformBuffer uniform_buffer;
   UniformWrites uniform_writes;
   BufferManager buffer_manager;
   InstanceDataUBO instance_data;
+
+  VulkanMaterial background_material;
+  VulkanMaterial paddle_material;
 
   Inputs inputs;
   RNGs rngs;

@@ -1325,6 +1325,7 @@ search_descriptor_set_layouts(ParsedShadersIR *ir, const SetBindingDirectivePars
 }
 
 // Return is success. Out parameter is if the parsed binding is new.
+// Push a binding at a numeric index from sb_parse to layout.
 static bool push_and_validate_descriptor(
     DescriptorSetLayout *layout, const SetBindingDirectiveParse *sb_parse, bool *binding_is_new
 ) {
@@ -1372,6 +1373,69 @@ static bool push_and_validate_descriptor(
   return true;
 }
 
+static ShaderProgram *attach_shader_to_program(ParsedShadersIR *ir, const ParsedShader *shader) {
+  bool new_vert = (shader->stage == SHADER_STAGE_VERTEX);
+  bool new_frag = (shader->stage == SHADER_STAGE_FRAGMENT);
+  bool new_comp = (shader->stage == SHADER_STAGE_COMPUTE);
+
+  ShaderProgram *prog = NULL;
+  for (u32 i = 0; i < ir->num_programs; i++) {
+    if (strcmp(shader->name, ir->programs[i].name) != 0) {
+      continue;
+    }
+
+    prog = &ir->programs[i];
+    bool old_vert = (prog->parsed_vert != NULL);
+    bool old_frag = (prog->parsed_frag != NULL);
+    bool old_comp = (prog->parsed_comp != NULL);
+
+    bool valid = true;
+    if ((new_vert && old_vert) || (new_frag && old_frag) || (new_comp && old_comp)) {
+      fprintf(stderr, "Shader %s has a duplicate stage.\n", shader->name);
+      valid = false;
+    }
+
+    bool old_graphics_new_comp = new_comp && (old_vert || old_frag);
+    bool new_graphics_old_comp = (new_vert || new_frag) && old_comp;
+    if (old_graphics_new_comp || new_graphics_old_comp) {
+      fprintf(stderr, "Shader %s mixes compute with vertex/fragment stages.\n", shader->name);
+      valid = false;
+    }
+
+    if (!valid) {
+      return NULL;
+    }
+    break;
+  } // End loop over heretofore found programs
+
+  if (!prog) {
+    prog = &ir->programs[ir->num_programs++];
+    prog->name = shader->name;
+  }
+
+  if (new_vert) {
+    prog->parsed_vert = shader;
+  } else if (new_frag) {
+    prog->parsed_frag = shader;
+  } else if (new_comp) {
+    prog->parsed_comp = shader;
+  }
+
+  return prog;
+}
+
+static u32 find_label_set_number(ShaderProgram *prog, DescriptorSetLayout *layout) {
+  for (u32 old_idx = 0; old_idx < prog->num_descriptor_set_layouts; old_idx++) {
+    const DescriptorSetLayout *old_layout = prog->descriptor_set_layouts[old_idx];
+    if (old_layout == layout) {
+      return old_idx;
+    }
+  }
+
+  prog->descriptor_set_layouts[prog->num_descriptor_set_layouts++] = layout;
+  return prog->num_descriptor_set_layouts - 1;
+}
+
 static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
   Parser parser = {
       .tokens = lex_string(input.source, input.source_length),
@@ -1381,9 +1445,11 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
   };
 
   u32 slice_idx = 0;
-  ParsedShader parsed_shader = {.name = input.name, .stage = input.stage};
+  ParsedShader *parsed_shader = &ir->parsed_shaders[ir->num_parsed_shaders++];
+  *parsed_shader = {.name = input.name, .stage = input.stage};
   VertexLayout vertex_layout = {};
   TemplateStringSlice glsl_slice = {.start = input.source, .type = DIRECTIVE_TYPE_GLSL_SOURCE};
+  ShaderProgram *program = attach_shader_to_program(ir, parsed_shader);
 
   while (still_valid(&parser)) {
     Token cur_tok = get_current_token(&parser);
@@ -1395,7 +1461,7 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
     // on a double L brace, end the glsl slice
     glsl_slice.end = cur_tok.start;
     if (glsl_slice.start != glsl_slice.end) {
-      parsed_shader.slices[slice_idx++] = glsl_slice;
+      parsed_shader->slices[slice_idx++] = glsl_slice;
     }
 
     TemplateStringSlice slice = {.start = input.source};
@@ -1507,8 +1573,7 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
         layout = matching_layout;
       }
 
-      // We're parsing a single set/binding directive, so we find one new binding.
-      // Track discovery of new bindings here.
+      // Push the parsed binding to the current layout
       bool binding_is_new;
       bool added_binding = push_and_validate_descriptor(layout, &sb_parse, &binding_is_new);
       if (!added_binding) {
@@ -1534,21 +1599,19 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
         }
       }
 
+      // Determine if this layout label is new to this shader.
       bool layout_is_new = true;
-      u32 layout_set_idx = ~0u;
-      for (u32 i = 0; i < parsed_shader.num_descriptor_set_layouts; i++) {
-        if (parsed_shader.descriptor_set_layouts[i] == layout) {
+      for (u32 i = 0; i < parsed_shader->num_descriptor_set_layouts; i++) {
+        if (parsed_shader->descriptor_set_layouts[i] == layout) {
           layout_is_new = false;
-          layout_set_idx = i;
           break;
         }
       }
-
       if (layout_is_new) {
-        parsed_shader.descriptor_set_layouts[parsed_shader.num_descriptor_set_layouts++] = layout;
-        layout_set_idx = parsed_shader.num_descriptor_set_layouts - 1;
+        parsed_shader->descriptor_set_layouts[parsed_shader->num_descriptor_set_layouts++] = layout;
       }
-      slice.set = layout_set_idx;
+
+      slice.set = find_label_set_number(program, layout);
 
       // Increment IR's descriptor_binding_types
       if (sb_parse.descriptor_type != DESCRIPTOR_TYPE_INVALID) {
@@ -1563,12 +1626,12 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
       assert(false);
     };
 
-    parsed_shader.slices[slice_idx++] = slice;
+    parsed_shader->slices[slice_idx++] = slice;
   } // finished parsing
 
   glsl_slice.end = input.source + input.source_length;
   if (glsl_slice.start != glsl_slice.end) {
-    parsed_shader.slices[slice_idx++] = glsl_slice;
+    parsed_shader->slices[slice_idx++] = glsl_slice;
   }
 
   // TODO rwlocks
@@ -1585,10 +1648,10 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
       }
 
       if (matching_layout != NULL) {
-        parsed_shader.vertex_layout = matching_layout;
+        parsed_shader->vertex_layout = matching_layout;
       } else {
         ir->vertex_layouts[ir->num_vertex_layouts++] = vertex_layout;
-        parsed_shader.vertex_layout = &ir->vertex_layouts[ir->num_vertex_layouts - 1];
+        parsed_shader->vertex_layout = &ir->vertex_layouts[ir->num_vertex_layouts - 1];
       }
     } else {
       // release locks?
@@ -1597,8 +1660,7 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
     }
   }
 
-  parsed_shader.num_slices = slice_idx;
-  ir->parsed_shaders[ir->num_parsed_shaders++] = parsed_shader;
+  parsed_shader->num_slices = slice_idx;
   token_vector_free(&parser.tokens);
   return true;
 }
@@ -1607,14 +1669,27 @@ ParsedShadersIR parse_shaders(const ShaderToCompileList *shaders) {
   ParsedShadersIR ir;
   memset(&ir, 0, sizeof(ir));
 
-  bool all_successful = true;
+  ir.parsing_successful = true;
   for (u32 i = 0; i < shaders->num_shaders; i++) {
     bool successful = parse_shader(shaders->shaders[i], &ir);
     if (!successful) {
-      all_successful = false;
+      ir.parsing_successful = false;
     }
   }
 
-  ir.parsing_successful = all_successful;
+  // Validate names are either compute OR both vertex and fragment.
+  for (u32 i = 0; i < ir.num_programs; i++) {
+    ShaderProgram *prog = &ir.programs[i];
+    if (prog->parsed_comp) {
+      continue;
+    }
+    if (!prog->parsed_vert || !prog->parsed_frag) {
+      const char *missing_stage = !prog->parsed_vert ? "vertex" : "fragment";
+      fprintf(stderr, "Shader %s is missing a %s stage.\n", prog->name, missing_stage);
+      ir.parsing_successful = false;
+      continue;
+    }
+  }
+
   return ir;
 }

@@ -349,14 +349,6 @@ typedef struct {
   VkDescriptorSetLayout descriptor_set_layout;
 } DescriptorSetHandle;
 
-// TODO don't like how this is redefined for my personal engine, STB, and here again for Vulkan
-typedef struct {
-  u32 width;
-  u32 height;
-  u32 n_channels;
-  u8 *data;
-} VulkanImageData;
-
 typedef struct {
   VkImage image;
   u32 height;
@@ -613,11 +605,16 @@ void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *col
 // Images/Textures
 // Want to have this transitioning business be entirely backend
 void transition_image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout);
+
 VulkanTexture create_vulkan_texture(
-    VulkanContext *ctx, VulkanImageData image_data, VulkanBuffer staging_buffer, void *ptr_to_mapped_memory
+    VulkanContext *ctx,
+    u32 width,
+    u32 height,
+    u32 n_channels,
+    u8 *data,
+    VulkanBuffer staging_buffer,
+    void *ptr_to_mapped_memory
 );
-void load_vulkan_textures(
-    VulkanContext *ctx, const VulkanImageData *image_datas, u32 num_images, VulkanTexture *out_textures
-);
+
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
 VkSampler create_sampler(VkDevice device);

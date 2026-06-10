@@ -144,13 +144,13 @@ typedef enum {
   DIRECTIVE_TYPE_GLSL_SOURCE // not really a directive, but the stuff that comes between the directives
 } DirectiveType;
 
-// template string slices start on the first { of {{ and end on the first char of the next token
-// or they start on the first token after the {{ and end on the first } of the }}
+// Template string slices start on the first { of {{,
+// and end on the first char of the next token
+// OR they start on the first token after the {{
+// and end on the first } of the }}
 typedef struct {
   const char *start, *end;
   DirectiveType type;
-  // fat struct with all the possible fields that could be needed for any of my
-  // supported template replacements
   u32 location;
   u32 set;
   u32 binding;
@@ -288,6 +288,19 @@ typedef struct {
   u32 num_descriptor_set_layouts;
 } ParsedShader;
 
+// Accumulate data needed for an entire compute or graphics pipeline.
+// Deduplicate across vertex/fragment stages.
+typedef struct {
+  const char *name; // malloc'd and owned by shader to compile
+
+  const ParsedShader *parsed_vert;
+  const ParsedShader *parsed_frag;
+  const ParsedShader *parsed_comp;
+
+  const DescriptorSetLayout *descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LISTS];
+  u32 num_descriptor_set_layouts;
+} ShaderProgram;
+
 // The IR contains the shaders after parsing, which have their slices and pointers to their descriptor sets and vertex
 // layouts.
 // It also holds the global list of descriptor sets and vertex layouts that the slices shaders point into
@@ -311,6 +324,9 @@ typedef struct {
 
   GLSLStruct structs[MAX_NUM_GLSL_STRUCTS];
   u32 num_structs;
+
+  ShaderProgram programs[MAX_NUM_SHADERS];
+  u32 num_programs;
 } ParsedShadersIR;
 
 ParsedShadersIR parse_shaders(const ShaderToCompileList *shader_to_compile_list);

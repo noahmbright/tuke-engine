@@ -2,7 +2,6 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "opengl_base.h"
 #include "tuke_engine.h"
-#include "utils.h"
 #include "window.h"
 
 // clang-format off
@@ -63,7 +62,7 @@ int main() {
       textured_quad_vertices, sizeof(textured_quad_vertices), 6, VERTEX_LAYOUT_BINDING0VERTEX_VEC3_VEC2, GL_STATIC_DRAW
   );
   GLMaterial textured_quad_material = create_gl_material(textured_quad_program);
-  textured_quad_material.texture.texture = load_texture_opengl("textures/girl_face.jpg");
+  textured_quad_material.texture = create_gl_texture_from_image("textures/girl_face.jpg");
 
   TriangleTransformation triangle_transformation;
   const glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.0f));

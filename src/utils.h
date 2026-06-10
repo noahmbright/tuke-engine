@@ -13,7 +13,6 @@ const char *read_file(const char *path, unsigned long *size);
 STBHandle load_texture(const char *path);
 STBHandle load_texture_metadata(const char *path);
 void free_stb_handle(STBHandle *handle);
-u32 load_texture_opengl(const char *path); // TODO this is ugly, impure API leakage cruft
 
 inline f32 clamp_f32(f32 x, f32 min, f32 max) {
   if (x < min) {
