@@ -37,21 +37,6 @@ void init_buffers(State *state) {
   state->uniform_buffer = create_uniform_buffer(ctx, ub_manager.current_offset);
 }
 
-
-static VkWriteDescriptorSet fill_write(const VulkanMaterial *mat, u32 set_idx, u32 binding) {
-  u32 len = mat->descriptor_set_write_lens[set_idx];
-  const VkWriteDescriptorSet *templates = mat->descriptor_set_writes[set_idx];
-  for (u32 i = 0; i < len; i++) {
-    if (templates[i].dstBinding == binding) {
-      VkWriteDescriptorSet w = templates[i];
-      w.dstSet = mat->descriptor_sets[set_idx];
-      return w;
-    }
-  }
-  assert(false);
-  return {};
-}
-
 void init_background_material(State *state) {
   init_program_spec(&state->ctx, state->ctx.render_pass, &pong_background_program_spec, &state->background_material);
 
@@ -64,17 +49,24 @@ void init_background_material(State *state) {
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };
   VkDescriptorBufferInfo vp_info = {
-      .buffer = ub, .offset = state->uniform_writes.camera_vp.offset, .range = state->uniform_writes.camera_vp.size,
+      .buffer = ub,
+      .offset = state->uniform_writes.camera_vp.offset,
+      .range = state->uniform_writes.camera_vp.size,
   };
   VkDescriptorBufferInfo model_info = {
-      .buffer = ub, .offset = state->uniform_writes.arena_model.offset, .range = state->uniform_writes.arena_model.size,
+      .buffer = ub,
+      .offset = state->uniform_writes.arena_model.offset,
+      .range = state->uniform_writes.arena_model.size,
   };
 
   // set 0 = PLACEHOLDER, set 1 = PONG_GLOBAL
   VkWriteDescriptorSet writes[3];
-  writes[0] = fill_write(mat, 0, 1);  writes[0].pImageInfo = &image_info;
-  writes[1] = fill_write(mat, 1, 0);  writes[1].pBufferInfo = &vp_info;
-  writes[2] = fill_write(mat, 1, 1);  writes[2].pBufferInfo = &model_info;
+  writes[0] = fill_write(mat, 0, 1);
+  writes[0].pImageInfo = &image_info;
+  writes[1] = fill_write(mat, 1, 0);
+  writes[1].pBufferInfo = &vp_info;
+  writes[2] = fill_write(mat, 1, 1);
+  writes[2].pBufferInfo = &model_info;
   vkUpdateDescriptorSets(state->ctx.device, 3, writes, 0, NULL);
 }
 
@@ -85,16 +77,22 @@ void init_paddles_material(State *state) {
   VkBuffer ub = state->uniform_buffer.vulkan_buffer.buffer;
 
   VkDescriptorBufferInfo vp_info = {
-      .buffer = ub, .offset = state->uniform_writes.camera_vp.offset, .range = state->uniform_writes.camera_vp.size,
+      .buffer = ub,
+      .offset = state->uniform_writes.camera_vp.offset,
+      .range = state->uniform_writes.camera_vp.size,
   };
   VkDescriptorBufferInfo instance_info = {
-      .buffer = ub, .offset = state->uniform_writes.instance_data.offset, .range = state->uniform_writes.instance_data.size,
+      .buffer = ub,
+      .offset = state->uniform_writes.instance_data.offset,
+      .range = state->uniform_writes.instance_data.size,
   };
 
   // set 0 = PONG_GLOBAL
   VkWriteDescriptorSet writes[2];
-  writes[0] = fill_write(mat, 0, 0);  writes[0].pBufferInfo = &vp_info;
-  writes[1] = fill_write(mat, 0, 2);  writes[1].pBufferInfo = &instance_info;
+  writes[0] = fill_write(mat, 0, 0);
+  writes[0].pBufferInfo = &vp_info;
+  writes[1] = fill_write(mat, 0, 2);
+  writes[1].pBufferInfo = &instance_info;
   vkUpdateDescriptorSets(state->ctx.device, 2, writes, 0, NULL);
 }
 

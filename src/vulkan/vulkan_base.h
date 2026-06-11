@@ -618,3 +618,18 @@ VulkanTexture create_vulkan_texture(
 
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
 VkSampler create_sampler(VkDevice device);
+
+// TODO remove when a better system for automating these writes is in place
+static inline VkWriteDescriptorSet fill_write(const VulkanMaterial *mat, u32 set_idx, u32 binding) {
+  u32 len = mat->descriptor_set_write_lens[set_idx];
+  const VkWriteDescriptorSet *templates = mat->descriptor_set_writes[set_idx];
+  for (u32 i = 0; i < len; i++) {
+    if (templates[i].dstBinding == binding) {
+      VkWriteDescriptorSet w = templates[i];
+      w.dstSet = mat->descriptor_sets[set_idx];
+      return w;
+    }
+  }
+  assert(false);
+  return {};
+}

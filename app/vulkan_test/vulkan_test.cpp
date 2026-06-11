@@ -106,10 +106,16 @@ const f32 cube_vertices[] = {
 };
 // clang-format on
 
-enum TextureId { TEXTURE_GENERIC_GIRL, TEXTURE_GIRL_FACE, TEXTURE_GIRL_FACE_NORMAL_MAP, NUM_TEXTURES };
+enum TextureId {
+  TEXTURE_GENERIC_GIRL,
+  TEXTURE_GIRL_FACE,
+  TEXTURE_GIRL_FACE_NORMAL_MAP,
+  TEXTURE_BRICKWALL,
+  NUM_TEXTURES
+};
 
 static const char *texture_names[NUM_TEXTURES] = {
-    "textures/generic_girl.jpg", "textures/girl_face.jpg", "textures/girl_face_normal_map.jpg"
+    "textures/generic_girl.jpg", "textures/girl_face.jpg", "textures/girl_face_normal_map.jpg", "textures/brickwall.jpg"
 };
 
 int main() {
