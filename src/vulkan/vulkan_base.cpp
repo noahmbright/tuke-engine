@@ -1161,6 +1161,37 @@ VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u
   return description;
 }
 
+// https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#vkCreateDescriptorPool
+static VkDescriptorPool create_descriptor_pool(VkDevice device) {
+  // https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VkDescriptorPoolCreateFlagBits
+  VkDescriptorPoolCreateFlags flags = 0;
+
+  VkDescriptorPoolSize pool_sizes[] = {
+      {
+          .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+          .descriptorCount = POOL_SIZE_DESCRIPTOR_COUNT,
+      },
+      {
+          .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorCount = POOL_SIZE_DESCRIPTOR_COUNT,
+      },
+  };
+
+  VkDescriptorPoolCreateInfo descriptor_pool_ci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .pNext = NULL,
+      .flags = flags,
+      .maxSets = POOL_SIZE_DESCRIPTOR_COUNT,
+      .poolSizeCount = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
+      .pPoolSizes = pool_sizes,
+  };
+
+  VkDescriptorPool descriptor_pool;
+  VkResult result = vkCreateDescriptorPool(device, &descriptor_pool_ci, NULL, &descriptor_pool);
+  VK_CHECK(result, "Failed to create descriptor pool");
+  return descriptor_pool;
+}
+
 // May want this to be create_instance_graphics(), or something. Or need to have
 // VulkanWindowInfo be something that can equally well describe compute pipelines.
 VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_info) {
@@ -1851,37 +1882,6 @@ create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *set_layouts
   return pipeline_layout;
 }
 
-// https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#vkCreateDescriptorPool
-VkDescriptorPool create_descriptor_pool(VkDevice device) {
-  // https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VkDescriptorPoolCreateFlagBits
-  VkDescriptorPoolCreateFlags flags = 0;
-
-  VkDescriptorPoolSize pool_sizes[] = {
-      {
-          .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-          .descriptorCount = POOL_SIZE_DESCRIPTOR_COUNT,
-      },
-      {
-          .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-          .descriptorCount = POOL_SIZE_DESCRIPTOR_COUNT,
-      },
-  };
-
-  VkDescriptorPoolCreateInfo descriptor_pool_ci = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .pNext = NULL,
-      .flags = flags,
-      .maxSets = POOL_SIZE_DESCRIPTOR_COUNT,
-      .poolSizeCount = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
-      .pPoolSizes = pool_sizes,
-  };
-
-  VkDescriptorPool descriptor_pool;
-  VkResult result = vkCreateDescriptorPool(device, &descriptor_pool_ci, NULL, &descriptor_pool);
-  VK_CHECK(result, "Failed to create descriptor pool");
-  return descriptor_pool;
-}
-
 static void
 stage_data(const VulkanContext *ctx, StagingArena *arena, const void *data, u32 size, VkBuffer dst, u32 dst_offset) {
   assert(arena->offset + size <= arena->total_size);
@@ -2110,152 +2110,6 @@ create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *set_layouts,
   VkResult result = vkAllocateDescriptorSets(device, &descriptor_set_allocate_info, &descriptor_set);
   VK_CHECK(result, "Failed to allocate descriptor set");
   return descriptor_set;
-}
-
-DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *context) {
-  DescriptorSetBuilder builder;
-  memset(&builder, 0, sizeof(builder));
-  builder.device = context->device;
-  return builder;
-};
-
-void add_uniform_buffer_descriptor_set(
-    DescriptorSetBuilder *builder,
-    const UniformBuffer *uniform_buffer,
-    u32 offset,
-    u32 range,
-    u32 binding,
-    u32 descriptor_count,
-    VkShaderStageFlags stage_flags,
-    bool dynamic
-) {
-  assert(builder->write_descriptor_count < MAX_DESCRIPTOR_WRITES);
-  assert(builder->buffer_info_count < MAX_DESCRIPTOR_BUFFER_INFOS);
-  assert(builder->binding_count < MAX_LAYOUT_BINDINGS);
-
-  VkDescriptorType descriptor_type =
-      dynamic ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-
-  builder->layout_bindings[builder->binding_count++] = {
-      .binding = binding,
-      .descriptorType = descriptor_type,
-      .descriptorCount = descriptor_count,
-      .stageFlags = stage_flags,
-      .pImmutableSamplers = NULL,
-  };
-
-  VkDescriptorBufferInfo *descriptor_buffer_info = &builder->descriptor_buffer_infos[builder->buffer_info_count++];
-  *descriptor_buffer_info = {
-      .buffer = uniform_buffer->vulkan_buffer.buffer,
-      .offset = offset,
-      .range = range,
-  };
-
-  builder->descriptor_writes[builder->write_descriptor_count++] = {
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .pNext = NULL,
-      .dstSet = VK_NULL_HANDLE,
-      .dstBinding = binding,
-      .dstArrayElement = 0,
-      .descriptorCount = descriptor_count,
-      .descriptorType = descriptor_type,
-      .pImageInfo = NULL,
-      .pBufferInfo = descriptor_buffer_info,
-      .pTexelBufferView = NULL,
-  };
-}
-
-void add_image_descriptor_set(
-    DescriptorSetBuilder *builder,
-    VkImageView image_view,
-    VkSampler sampler,
-    u32 binding,
-    u32 descriptor_count,
-    VkShaderStageFlags stage_flags
-) {
-  assert(builder->write_descriptor_count < MAX_DESCRIPTOR_WRITES);
-  assert(builder->image_info_count < MAX_DESCRIPTOR_IMAGE_INFOS);
-  assert(builder->binding_count < MAX_LAYOUT_BINDINGS);
-
-  // TODO handle separate textures and samplers
-  VkDescriptorType descriptor_type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-  builder->layout_bindings[builder->binding_count++] = {
-      .binding = binding,
-      .descriptorType = descriptor_type,
-      .descriptorCount = descriptor_count,
-      .stageFlags = stage_flags,
-      .pImmutableSamplers = NULL, // TODO maybe
-  };
-
-  VkDescriptorImageInfo *descriptor_image_info = &builder->descriptor_image_infos[builder->image_info_count];
-  *descriptor_image_info = {
-      .sampler = sampler,
-      .imageView = image_view,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-  };
-  builder->image_info_count++;
-
-  builder->descriptor_writes[builder->write_descriptor_count++] = {
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .pNext = NULL,
-      .dstSet = VK_NULL_HANDLE,
-      .dstBinding = binding,
-      .dstArrayElement = 0,
-      .descriptorCount = descriptor_count,
-      .descriptorType = descriptor_type,
-      .pImageInfo = descriptor_image_info,
-      .pBufferInfo = NULL,
-      .pTexelBufferView = NULL,
-  };
-}
-
-DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescriptorPool descriptor_pool) {
-  // Layout
-  VkDescriptorSetLayoutCreateInfo descriptor_set_layout_ci = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .bindingCount = builder->binding_count,
-      .pBindings = builder->layout_bindings,
-  };
-
-  VkDescriptorSetLayout descriptor_set_layout;
-  VkResult result =
-      vkCreateDescriptorSetLayout(builder->device, &descriptor_set_layout_ci, NULL, &descriptor_set_layout);
-  VK_CHECK(result, "Failed to create descriptor set layout");
-
-  // Descriptor set
-  VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .pNext = NULL,
-      .descriptorPool = descriptor_pool,
-      .descriptorSetCount = 1,
-      .pSetLayouts = &descriptor_set_layout,
-  };
-
-  VkDescriptorSet descriptor_set;
-  result = vkAllocateDescriptorSets(builder->device, &descriptor_set_allocate_info, &descriptor_set);
-  VK_CHECK(result, "Failed to allocate descriptor set");
-
-  DescriptorSetHandle handle = {
-      .descriptor_set_layout = descriptor_set_layout,
-      .descriptor_set = descriptor_set,
-  };
-
-  for (u32 i = 0; i < builder->write_descriptor_count; i++) {
-    builder->descriptor_writes[i].dstSet = handle.descriptor_set;
-  }
-
-  vkUpdateDescriptorSets(
-      builder->device, builder->write_descriptor_count, builder->descriptor_writes, builder->copy_descriptor_count,
-      builder->descriptor_copies
-  );
-
-  return handle;
-}
-
-void destroy_descriptor_set_handle(VkDevice device, DescriptorSetHandle *handle) {
-  vkDestroyDescriptorSetLayout(device, handle->descriptor_set_layout, NULL);
 }
 
 void destroy_vulkan_material(VkDevice device, VulkanMaterial *mat) {

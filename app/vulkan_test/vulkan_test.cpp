@@ -1,3 +1,4 @@
+#include "assets.h"
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include "camera.h"
@@ -6,105 +7,9 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/gtx/string_cast.hpp"
 #include "tuke_engine.h"
-#include "utils.h"
 #include "vulkan/vulkan_base.h"
+#include "vulkan_test_common.h"
 #include "window.h"
-
-// clang-format off
-const f32 triangle_vertices[] = {
-  0.0f, -0.5f, 0.0f,  1.0f, 0.0f, 0.0f, 
-  0.5f, 0.5f, 0.0f,   0.0f, 1.0f, 0.0f,
-  -0.5f, 0.5f, 0.0f,  0.0f, 0.0f, 1.0f
-};
-
-const f32 square_vertices[] = {
-  0.33f, 0.33f, 0.0f, 0.0f, 0.0f, 1.0f,
-  0.33f, 0.67f, 0.0f, 0.0f, 0.0f, 1.0f,
-  0.67f, 0.67f, 0.0f, 0.0f, 0.0f, 1.0f,
-  0.33f, 0.33f, 0.0f, 0.0f, 0.0f, 1.0f,
-  0.67f, 0.33f, 0.0f, 0.0f, 0.0f, 1.0f,
-  0.67f, 0.67f, 0.0f, 0.0f, 0.0f, 1.0f,
-};
-
-// TL, BL, BR, TR
-const f32 unit_square_positions[] = {
-   // x, y, z, u, v
-  -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 
-  -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
-   0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
-   0.5f,  0.5f, 0.0f, 1.0f, 1.0f
-};
-
-const u16 unit_square_indices[] = {
-  0, 1, 2, 0, 2, 3,
-};
-
-const u32 instanced_quad_count = 5;
-const f32 quad_positions[] = {
-  -0.5, -0.5
-  -0.1, -0.1
-  -0.1, -0.1
-  -0.3, -0.3
-  -0.3, -0.3
-};
-
-const f32 cube_vertices[] = {
-    // Front face (+Z)
-    // xyz,              nx, ny, nz, u, v
-    -0.5f, -0.5f,  0.5f, 0, 0, 1, 0, 0,
-     0.5f, -0.5f,  0.5f, 0, 0, 1, 1, 0,
-     0.5f,  0.5f,  0.5f, 0, 0, 1, 1, 1,
-
-    -0.5f, -0.5f,  0.5f, 0, 0, 1, 0, 0,
-     0.5f,  0.5f,  0.5f, 0, 0, 1, 1, 1,
-    -0.5f,  0.5f,  0.5f, 0, 0, 1, 0, 1,
-
-     //Back face (-Z)
-     0.5f, -0.5f, -0.5f, 0, 0, -1, 0, 0,
-    -0.5f, -0.5f, -0.5f, 0, 0, -1, 1, 0,
-    -0.5f,  0.5f, -0.5f, 0, 0, -1, 1, 1,
-
-     0.5f, -0.5f, -0.5f, 0, 0, -1, 0, 0,
-    -0.5f,  0.5f, -0.5f, 0, 0, -1, 1, 1,
-     0.5f,  0.5f, -0.5f, 0, 0, -1, 0, 1,
-
-     //Left face (-X)
-    -0.5f, -0.5f, -0.5f, -1, 0, 0, 0, 0,
-    -0.5f, -0.5f,  0.5f, -1, 0, 0, 1, 0,
-    -0.5f,  0.5f,  0.5f, -1, 0, 0, 1, 1,
-
-    -0.5f, -0.5f, -0.5f, -1, 0, 0, 0, 0,
-    -0.5f,  0.5f,  0.5f, -1, 0, 0, 1, 1,
-    -0.5f,  0.5f, -0.5f, -1, 0, 0, 0, 1,
-
-     //Right face (+X)
-     0.5f, -0.5f,  0.5f, 1, 0, 0, 0, 0,
-     0.5f, -0.5f, -0.5f, 1, 0, 0, 1, 0,
-     0.5f,  0.5f, -0.5f, 1, 0, 0, 1, 1,
-
-     0.5f, -0.5f,  0.5f, 1, 0, 0, 0, 0,
-     0.5f,  0.5f, -0.5f, 1, 0, 0, 1, 1,
-     0.5f,  0.5f,  0.5f, 1, 0, 0, 0, 1,
-
-     //Top face (+Y)
-    -0.5f,  0.5f,  0.5f, 0, 1, 0, 0, 0,
-     0.5f,  0.5f,  0.5f, 0, 1, 0, 1, 0,
-     0.5f,  0.5f, -0.5f, 0, 1, 0, 1, 1,
-
-    -0.5f,  0.5f,  0.5f, 0, 1, 0, 0, 0,
-     0.5f,  0.5f, -0.5f, 0, 1, 0, 1, 1,
-    -0.5f,  0.5f, -0.5f, 0, 1, 0, 0, 1,
-
-     //Bottom face (-Y)
-    -0.5f, -0.5f, -0.5f, 0, -1, 0, 0, 0,
-     0.5f, -0.5f, -0.5f, 0, -1, 0, 1, 0,
-     0.5f, -0.5f,  0.5f, 0, -1, 0, 1, 1,
-
-    -0.5f, -0.5f, -0.5f, 0, -1, 0, 0, 0,
-     0.5f, -0.5f,  0.5f, 0, -1, 0, 1, 1,
-    -0.5f, -0.5f,  0.5f, 0, -1, 0, 0, 1,
-};
-// clang-format on
 
 enum TextureId {
   TEXTURE_GENERIC_GIRL,
@@ -122,37 +27,17 @@ int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
   VulkanWindowInfo window_info = create_glfw_vulkan_window_info(window);
   VulkanContext ctx = create_vulkan_context("Disastrous Vulkan Test", window_info);
-  VkDescriptorPool descriptor_pool = create_descriptor_pool(ctx.device);
+
+  VkDescriptorSetLayout layouts[NUM_DESCRIPTOR_SET_LAYOUTS] = {};
+  set_descriptor_set_layouts(&ctx, layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
+
   ViewportState viewport_state = create_viewport_state_xy(ctx.swapchain_extent, 0, 0);
   const VkClearValue clear_values[NUM_ATTACHMENTS] = {
       {.color = {{0.01, 0.01, 0.01, 1.0}}}, {.depthStencil = {.depth = 1.0f, .stencil = 0}}
   };
 
-  // Asset system lol
   VulkanTexture textures[NUM_TEXTURES];
-  STBHandle stbs[NUM_TEXTURES];
-  u32 max_size = 0;
-  for (u32 i = 0; i < NUM_TEXTURES; i++) {
-    stbs[i] = load_texture(texture_names[i]);
-    u32 size = stbs[i].width * stbs[i].height * stbs[i].n_channels;
-    max_size = (size > max_size) ? size : max_size;
-  }
-
-  VulkanBuffer staging_buffer = create_buffer(&ctx, BUFFER_TYPE_STAGING, max_size);
-  void *texture_data;
-  VkResult result =
-      vkMapMemory(ctx.device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data);
-  VK_CHECK(result, "Failed to map staging buffer memory");
-
-  for (u32 i = 0; i < NUM_TEXTURES; i++) {
-    textures[i] = create_vulkan_texture(
-        &ctx, stbs[i].width, stbs[i].height, stbs[i].n_channels, stbs[i].data, staging_buffer, texture_data
-    );
-    free_stb_handle(&stbs[i]);
-  }
-
-  vkUnmapMemory(ctx.device, staging_buffer.memory);
-  destroy_vulkan_buffer(&ctx, staging_buffer);
+  load_vulkan_textures(&ctx, texture_names, NUM_TEXTURES, textures);
 
   VkSampler sampler = create_sampler(ctx.device);
   ColorDepthFramebuffer offscreen_framebuffer =
@@ -161,207 +46,169 @@ int main() {
   BufferUploadQueue buffer_upload_queue = create_buffer_upload_queue();
   const BufferHandle *triangle_vertices_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, triangle_vertices);
   const BufferHandle *square_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, square_vertices);
-  const BufferHandle *unit_square_position_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, unit_square_positions);
-  const BufferHandle *quad_position_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, quad_positions);
-  const BufferHandle *unit_square_indices_slice = UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
+  const BufferHandle *unit_square_pos_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, unit_square_positions);
+  const BufferHandle *quad_pos_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, quad_positions);
+  const BufferHandle *unit_square_idx_slice = UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
   const BufferHandle *cube_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, cube_vertices);
-  (void)unit_square_indices_slice;
+  (void)unit_square_idx_slice;
 
   BufferManager buffer_manager = flush_buffers(&ctx, &buffer_upload_queue);
-  VulkanBuffer *vertex_buffer = &buffer_manager.vertex_buffer;
-  VulkanBuffer *index_buffer = &buffer_manager.index_buffer;
+  VkBuffer vbuf = buffer_manager.vertex_buffer.buffer;
+  VkBuffer ibuf = buffer_manager.index_buffer.buffer;
 
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
-  UniformWrite mvp_handle = push_uniform(&ub_manager, sizeof(MVPUniform));
-  UniformWrite cube_model_handle = push_uniform(&ub_manager, sizeof(CubeModel));
-  UniformWrite x_handle = push_uniform(&ub_manager, sizeof(UniformBufferObject));
-  UniformWrite light_position_handle = push_uniform(&ub_manager, sizeof(LightPosition));
-  UniformWrite camera_vp_handle = push_uniform(&ub_manager, sizeof(CameraVP));
-  UniformBuffer global_uniform_buffer = create_uniform_buffer(&ctx, ub_manager.current_offset);
+  UniformWrite mvp_write = push_uniform(&ub_manager, sizeof(MVPUniform));
+  UniformWrite cube_model_write = push_uniform(&ub_manager, sizeof(CubeModel));
+  UniformWrite x_write = push_uniform(&ub_manager, sizeof(UniformBufferObject));
+  UniformWrite light_pos_write = push_uniform(&ub_manager, sizeof(LightPosition));
+  UniformWrite camera_vp_write = push_uniform(&ub_manager, sizeof(CameraVP));
+  UniformBuffer ub = create_uniform_buffer(&ctx, ub_manager.current_offset);
 
-  // It is unacceptable that I need to think this hard about sets and bindings in the app.
-  // Stateful builders are kind of ugly.
-  // for simple.frag.in, x uniform is set/binding 0/0
-  DescriptorSetBuilder simple_set_builder = create_descriptor_set_builder(&ctx);
+  // triangle: SIMPLE set=0 (binding 0=x, 1=camera_vp, 2=light_position)
+  VulkanMaterial triangle_mat;
+  init_program_spec(&ctx, offscreen_framebuffer.render_pass, &common_simple_program_spec, &triangle_mat);
+  {
+    VkDescriptorBufferInfo x_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = x_write.offset, .range = x_write.size
+    };
+    VkDescriptorBufferInfo vp_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = camera_vp_write.offset, .range = camera_vp_write.size
+    };
+    VkDescriptorBufferInfo light_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = light_pos_write.offset, .range = light_pos_write.size
+    };
+    VkWriteDescriptorSet writes[3];
+    writes[0] = fill_write(&triangle_mat, 0, 0);
+    writes[0].pBufferInfo = &x_info;
+    writes[1] = fill_write(&triangle_mat, 0, 1);
+    writes[1].pBufferInfo = &vp_info;
+    writes[2] = fill_write(&triangle_mat, 0, 2);
+    writes[2].pBufferInfo = &light_info;
+    vkUpdateDescriptorSets(ctx.device, 3, writes, 0, NULL);
+  }
 
-  add_uniform_buffer_descriptor_set(
-      &simple_set_builder, &global_uniform_buffer, x_handle.offset, x_handle.size, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
-      false
-  );
-  add_uniform_buffer_descriptor_set(
-      &simple_set_builder, &global_uniform_buffer, camera_vp_handle.offset, camera_vp_handle.size, 1, 1,
-      VK_SHADER_STAGE_VERTEX_BIT, false
-  );
-  add_uniform_buffer_descriptor_set(
-      &simple_set_builder, &global_uniform_buffer, light_position_handle.offset, light_position_handle.size, 2, 1,
-      VK_SHADER_STAGE_VERTEX_BIT, false
-  );
-  DescriptorSetHandle simple_descriptor = build_descriptor_set(&simple_set_builder, descriptor_pool);
-  VkPipelineLayout x_pipeline_layout = create_pipeline_layout(ctx.device, &simple_descriptor.descriptor_set_layout, 1);
+  // square: GLOBAL set=0 (binding 0=x, 1=camera_vp, 2=light_position)
+  VulkanMaterial square_mat;
+  init_program_spec(&ctx, offscreen_framebuffer.render_pass, &common_square_program_spec, &square_mat);
+  {
+    VkDescriptorBufferInfo x_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = x_write.offset, .range = x_write.size
+    };
+    VkDescriptorBufferInfo vp_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = camera_vp_write.offset, .range = camera_vp_write.size
+    };
+    VkDescriptorBufferInfo light_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = light_pos_write.offset, .range = light_pos_write.size
+    };
+    VkWriteDescriptorSet writes[3];
+    writes[0] = fill_write(&square_mat, 0, 0);
+    writes[0].pBufferInfo = &x_info;
+    writes[1] = fill_write(&square_mat, 0, 1);
+    writes[1].pBufferInfo = &vp_info;
+    writes[2] = fill_write(&square_mat, 0, 2);
+    writes[2].pBufferInfo = &light_info;
+    vkUpdateDescriptorSets(ctx.device, 3, writes, 0, NULL);
+  }
 
-  // instanced quad: the mvp uniform is set/binding 0/0, the float is 0/1
-  DescriptorSetBuilder mvp_set_builder = create_descriptor_set_builder(&ctx);
-  add_uniform_buffer_descriptor_set(
-      &mvp_set_builder, &global_uniform_buffer, mvp_handle.offset, mvp_handle.size, 0, 1, VK_SHADER_STAGE_VERTEX_BIT,
-      false
-  );
-  add_uniform_buffer_descriptor_set(
-      &mvp_set_builder, &global_uniform_buffer, x_handle.offset, x_handle.size, 1, 1, VK_SHADER_STAGE_VERTEX_BIT, false
-  );
-  add_image_descriptor_set(&mvp_set_builder, textures[2].image_view, sampler, 2, 1, VK_SHADER_STAGE_FRAGMENT_BIT);
+  // instanced_quad: set=0 PLACEHOLDER binding 2=tex, set=1 INSTANCED_QUAD binding 0=mvp binding 1=x
+  VulkanMaterial instanced_quad_mat;
+  init_program_spec(&ctx, offscreen_framebuffer.render_pass, &common_instanced_quad_program_spec, &instanced_quad_mat);
+  {
+    VkDescriptorImageInfo img_info = {
+        .sampler = sampler,
+        .imageView = textures[TEXTURE_GIRL_FACE_NORMAL_MAP].image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+    VkDescriptorBufferInfo mvp_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = mvp_write.offset, .range = mvp_write.size
+    };
+    VkDescriptorBufferInfo x_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = x_write.offset, .range = x_write.size
+    };
+    VkWriteDescriptorSet writes[3];
+    writes[0] = fill_write(&instanced_quad_mat, 0, 2);
+    writes[0].pImageInfo = &img_info;
+    writes[1] = fill_write(&instanced_quad_mat, 1, 0);
+    writes[1].pBufferInfo = &mvp_info;
+    writes[2] = fill_write(&instanced_quad_mat, 1, 1);
+    writes[2].pBufferInfo = &x_info;
+    vkUpdateDescriptorSets(ctx.device, 3, writes, 0, NULL);
+  }
 
-  DescriptorSetHandle mvp_descriptor = build_descriptor_set(&mvp_set_builder, descriptor_pool);
+  // cube: CUBE set=0 (binding 0=cube_model, 1=light_position, 2=camera_vp)
+  VulkanMaterial cube_mat;
+  init_program_spec(&ctx, offscreen_framebuffer.render_pass, &common_cube_program_spec, &cube_mat);
+  {
+    VkDescriptorBufferInfo model_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = cube_model_write.offset, .range = cube_model_write.size
+    };
+    VkDescriptorBufferInfo light_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = light_pos_write.offset, .range = light_pos_write.size
+    };
+    VkDescriptorBufferInfo vp_info = {
+        .buffer = ub.vulkan_buffer.buffer, .offset = camera_vp_write.offset, .range = camera_vp_write.size
+    };
+    VkWriteDescriptorSet writes[3];
+    writes[0] = fill_write(&cube_mat, 0, 0);
+    writes[0].pBufferInfo = &model_info;
+    writes[1] = fill_write(&cube_mat, 0, 1);
+    writes[1].pBufferInfo = &light_info;
+    writes[2] = fill_write(&cube_mat, 0, 2);
+    writes[2].pBufferInfo = &vp_info;
+    vkUpdateDescriptorSets(ctx.device, 3, writes, 0, NULL);
+  }
 
-  VkPipelineLayout mvp_pipeline_layout = create_pipeline_layout(ctx.device, &mvp_descriptor.descriptor_set_layout, 1);
+  // fullscreen_quad: PLACEHOLDER set=0 binding 0=offscreen image
+  VulkanMaterial fullscreen_quad_mat;
+  init_program_spec(&ctx, ctx.render_pass, &common_fullscreen_quad_program_spec, &fullscreen_quad_mat);
+  {
+    VkDescriptorImageInfo img_info = {
+        .sampler = sampler,
+        .imageView = offscreen_framebuffer.color_image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+    VkWriteDescriptorSet write = fill_write(&fullscreen_quad_mat, 0, 0);
+    write.pImageInfo = &img_info;
+    vkUpdateDescriptorSets(ctx.device, 1, &write, 0, NULL);
+  }
 
-  // cube descriptor set
-  DescriptorSetBuilder cube_set_builder = create_descriptor_set_builder(&ctx);
-  add_uniform_buffer_descriptor_set(
-      &cube_set_builder, &global_uniform_buffer, cube_model_handle.offset, cube_model_handle.size, 0, 1,
-      VK_SHADER_STAGE_VERTEX_BIT, false
-  );
-  add_uniform_buffer_descriptor_set(
-      &cube_set_builder, &global_uniform_buffer, light_position_handle.offset, light_position_handle.size, 1, 1,
-      VK_SHADER_STAGE_FRAGMENT_BIT, false
-  );
-  add_uniform_buffer_descriptor_set(
-      &cube_set_builder, &global_uniform_buffer, camera_vp_handle.offset, camera_vp_handle.size, 2, 1,
-      VK_SHADER_STAGE_VERTEX_BIT, false
-  );
-  DescriptorSetHandle cube_descriptor = build_descriptor_set(&cube_set_builder, descriptor_pool);
-
-  VkPipelineLayout cube_pipeline_layout = create_pipeline_layout(ctx.device, &cube_descriptor.descriptor_set_layout, 1);
-
-  // fullscreen quad descriptor set
-  DescriptorSetBuilder fullscreen_quad_set_builder = create_descriptor_set_builder(&ctx);
-  add_image_descriptor_set(
-      &fullscreen_quad_set_builder, offscreen_framebuffer.color_image_view, sampler, 0, 1, VK_SHADER_STAGE_FRAGMENT_BIT
-  );
-  DescriptorSetHandle fullscreen_quad_descriptor = build_descriptor_set(&fullscreen_quad_set_builder, descriptor_pool);
-  assert(fullscreen_quad_set_builder.layout_bindings[0].stageFlags == VK_SHADER_STAGE_FRAGMENT_BIT);
-  VkPipelineLayout fullscreen_quad_pipeline_layout =
-      create_pipeline_layout(ctx.device, &fullscreen_quad_descriptor.descriptor_set_layout, 1);
-
-  // create pipelines
-  VkPipeline triangle_pipeline = shader_handles_to_graphics_pipeline(
-      &ctx, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT, SHADER_HANDLE_COMMON_SIMPLE_FRAG,
-      x_pipeline_layout
-  );
-
-  VkPipeline square_pipeline = shader_handles_to_graphics_pipeline(
-      &ctx, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_SIMPLE_VERT, SHADER_HANDLE_COMMON_SQUARE_FRAG,
-      x_pipeline_layout
-  );
-
-  VkPipeline instanced_quad_pipeline = shader_handles_to_graphics_pipeline(
-      &ctx, offscreen_framebuffer.render_pass, SHADER_HANDLE_COMMON_INSTANCED_QUAD_VERT,
-      SHADER_HANDLE_COMMON_INSTANCED_QUAD_FRAG, mvp_pipeline_layout
-  );
-
-  // Really need to pare this down. All this ceremony is so I can override cull mode
-  const ShaderSpec *cube_vert_spec = generated_shader_specs[SHADER_HANDLE_COMMON_CUBE_VERT];
-  const ShaderSpec *cube_frag_spec = generated_shader_specs[SHADER_HANDLE_COMMON_CUBE_FRAG];
-  VkShaderModule cube_vert = create_shader_module(ctx.device, cube_vert_spec->spv, cube_vert_spec->spv_size);
-  VkShaderModule cube_frag = create_shader_module(ctx.device, cube_frag_spec->spv, cube_frag_spec->spv_size);
-  PipelineConfig cube_pipeline_config = {
-      .vertex_shader = cube_vert,
-      .fragment_shader = cube_frag,
-      .stage_count = 2,
-      .vertex_input_state_create_info = &generated_vulkan_vertex_layouts[cube_vert_spec->vertex_layout_id],
-      .render_pass = offscreen_framebuffer.render_pass,
-      .pipeline_layout = cube_pipeline_layout,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .primitive_restart_enabled = VK_FALSE,
-      .polygon_mode = VK_POLYGON_MODE_FILL,
-      .cull_mode = VK_CULL_MODE_FRONT_BIT,
-      .front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .sample_count_flag = VK_SAMPLE_COUNT_1_BIT,
-      .blend_mode = BLEND_MODE_ALPHA,
-  };
-  VkPipeline cube_pipeline = create_graphics_pipeline(ctx.device, &cube_pipeline_config, ctx.pipeline_cache);
-  vkDestroyShaderModule(ctx.device, cube_vert, NULL);
-  vkDestroyShaderModule(ctx.device, cube_frag, NULL);
-
-  VkPipeline fullscreen_quad_pipeline = shader_handles_to_graphics_pipeline(
-      &ctx, ctx.render_pass, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_VERT, SHADER_HANDLE_COMMON_FULLSCREEN_QUAD_FRAG,
-      fullscreen_quad_pipeline_layout
-  );
-
-  RenderCall triangle_render_call = {
+  VulkanMesh triangle_mesh = {
       .num_vertices = 3,
       .instance_count = 1,
-      .pipeline = triangle_pipeline,
       .num_vertex_buffers = 1,
-      .vertex_buffer_offsets[0] = triangle_vertices_slice->offset,
-      .vertex_buffers[0] = vertex_buffer->buffer,
-      .pipeline_layout = x_pipeline_layout,
-      .num_descriptor_sets = 1,
-      .descriptor_sets[0] = simple_descriptor.descriptor_set,
-      .is_indexed = false,
+      .vertex_buffers = {vbuf},
+      .vertex_buffer_offsets = {triangle_vertices_slice->offset},
   };
-
-  RenderCall square_render_call = {
+  VulkanMesh square_mesh = {
       .num_vertices = 6,
       .instance_count = 1,
-      .pipeline = square_pipeline,
       .num_vertex_buffers = 1,
-      .vertex_buffer_offsets[0] = square_slice->offset,
-      .vertex_buffers[0] = vertex_buffer->buffer,
-      .pipeline_layout = x_pipeline_layout,
-      .num_descriptor_sets = 1,
-      .descriptor_sets[0] = simple_descriptor.descriptor_set,
-      .is_indexed = false,
+      .vertex_buffers = {vbuf},
+      .vertex_buffer_offsets = {square_slice->offset},
   };
-
-  RenderCall cube_render_call = {
+  VulkanMesh instanced_quad_mesh = {
+      .instance_count = instanced_quad_count,
+      .num_indices = 6,
+      .num_vertex_buffers = 2,
+      .vertex_buffers = {vbuf, vbuf},
+      .vertex_buffer_offsets = {unit_square_pos_slice->offset, quad_pos_slice->offset},
+      .index_buffer_offset = 0,
+      .index_buffer = ibuf,
+  };
+  VulkanMesh cube_mesh = {
       .num_vertices = 36,
       .instance_count = 1,
-      .pipeline = cube_pipeline,
       .num_vertex_buffers = 1,
-      .vertex_buffer_offsets[0] = cube_slice->offset,
-      .vertex_buffers[0] = vertex_buffer->buffer,
-      .pipeline_layout = cube_pipeline_layout,
-      .num_descriptor_sets = 1,
-      .descriptor_sets[0] = cube_descriptor.descriptor_set,
-      .is_indexed = false,
+      .vertex_buffers = {vbuf},
+      .vertex_buffer_offsets = {cube_slice->offset},
   };
-
-  RenderCall instanced_render_call = {
-      .num_indices = 6,
-      .instance_count = instanced_quad_count,
-      .pipeline = instanced_quad_pipeline,
-      .num_vertex_buffers = 2,
-      .vertex_buffer_offsets[0] = unit_square_position_slice->offset,
-      .vertex_buffer_offsets[1] = quad_position_slice->offset,
-      .vertex_buffers[0] = vertex_buffer->buffer,
-      .vertex_buffers[1] = vertex_buffer->buffer,
-      .pipeline_layout = mvp_pipeline_layout,
-      .num_descriptor_sets = 1,
-      .descriptor_sets[0] = mvp_descriptor.descriptor_set,
-      .index_buffer = index_buffer->buffer,
-      .index_buffer_offset = 0,
-      .is_indexed = true,
-  };
-
-  RenderCall fullscreen_quad_render_call = {
-      .num_vertices = 3,
-      .instance_count = 1,
-      .pipeline = fullscreen_quad_pipeline,
-      .num_vertex_buffers = 0,
-      .pipeline_layout = fullscreen_quad_pipeline_layout,
-      .num_descriptor_sets = 1,
-      .descriptor_sets[0] = fullscreen_quad_descriptor.descriptor_set,
-      .is_indexed = false,
-  };
+  VulkanMesh fullscreen_quad_mesh = {.num_vertices = 3, .instance_count = 1};
 
   MVPUniform mvp;
   mvp.projection = glm::mat4(1.0f);
   mvp.view = glm::mat4(1.0f);
 
   const glm::vec3 cube_translation_vector = {1.5f, -1.3f, 1.5f};
-  const f32 root3 = 0.57735026919;
-  const glm::vec3 cube_rotation_axis = {root3, root3, root3};
-  (void)cube_rotation_axis;
 
   Camera camera = create_camera(CAMERA_TYPE_3D);
   camera.position = {0.0f, 0.0f, 5.0f};
@@ -374,19 +221,18 @@ int main() {
     i32 height, width;
     glfwGetWindowSize(window, &width, &height);
     update_key_inputs_glfw(&inputs, window);
-
     glfwPollEvents();
+
     f32 t = glfwGetTime();
     f32 dt = t - t0;
     t0 = t;
     f32 sint = sinf(t);
-    UniformBufferObject ubo = {.x = fabs(sint)};
 
+    UniformBufferObject ubo = {.x = fabsf(sint)};
     mvp.model = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
     mvp.model = glm::rotate(mvp.model, sint, glm::vec3(0.0f, 0.0f, 1.0f));
 
     glm::mat4 cube_model = glm::translate(glm::mat4(1.0f), cube_translation_vector);
-    // cube_model = glm::rotate(cube_model, t, cube_rotation_axis);
     cube_model = glm::scale(cube_model, {0.2f, 0.2f, 0.2f});
 
     glm::vec4 light_position(2 * sint, sint, 0.5f, 0.0f);
@@ -394,20 +240,15 @@ int main() {
     CameraMatrices camera_matrices = create_camera_matrices(&camera, width, height);
     camera_vp = camera_matrices.projection * camera_matrices.view;
 
+    write_to_uniform_buffer(&ub, &mvp, mvp_write);
+    write_to_uniform_buffer(&ub, &cube_model, cube_model_write);
+    write_to_uniform_buffer(&ub, &ubo, x_write);
+    write_to_uniform_buffer(&ub, &light_position, light_pos_write);
+    write_to_uniform_buffer(&ub, &camera_vp, camera_vp_write);
+
     begin_frame(&ctx);
-
-    // Should have a queue for these, something more automated
-    write_to_uniform_buffer(&global_uniform_buffer, &mvp, mvp_handle);
-    write_to_uniform_buffer(&global_uniform_buffer, &cube_model, cube_model_handle);
-    write_to_uniform_buffer(&global_uniform_buffer, &ubo, x_handle);
-    write_to_uniform_buffer(&global_uniform_buffer, &light_position, light_position_handle);
-    write_to_uniform_buffer(&global_uniform_buffer, &camera_vp, camera_vp_handle);
-
     VkCommandBuffer cmd = begin_command_buffer(&ctx);
 
-    // TODO do this through pipeline barriers
-    //      Do this per frame? Or just at init?
-    // transition to use as render target
     transition_image_layout(
         cmd, offscreen_framebuffer.color_image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     );
@@ -416,16 +257,12 @@ int main() {
         &ctx, cmd, offscreen_framebuffer.render_pass, offscreen_framebuffer.framebuffer, clear_values, NUM_ATTACHMENTS,
         viewport_state
     );
-
-    // Should have a queue for these, something more automated
-    render_mesh(cmd, &triangle_render_call);
-    render_mesh(cmd, &square_render_call);
-    render_mesh(cmd, &instanced_render_call);
-    render_mesh(cmd, &cube_render_call);
-
+    render_mesh_material(cmd, &triangle_mesh, &triangle_mat);
+    render_mesh_material(cmd, &square_mesh, &square_mat);
+    render_mesh_material(cmd, &instanced_quad_mesh, &instanced_quad_mat);
+    render_mesh_material(cmd, &cube_mesh, &cube_mat);
     vkCmdEndRenderPass(cmd);
 
-    // transition to use as sampler
     transition_image_layout(
         cmd, offscreen_framebuffer.color_image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     );
@@ -433,47 +270,31 @@ int main() {
     begin_render_pass(
         &ctx, cmd, ctx.render_pass, ctx.framebuffers[ctx.image_index], clear_values, NUM_ATTACHMENTS, viewport_state
     );
-    render_mesh(cmd, &fullscreen_quad_render_call);
+    render_mesh_material(cmd, &fullscreen_quad_mesh, &fullscreen_quad_mat);
     vkCmdEndRenderPass(cmd);
-    VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end command buffer");
 
-    submit_and_present(&ctx, cmd);
-    update_frame_index(&ctx);
+    end_frame(&ctx, cmd);
 
     glm::vec2 movement_direction = inputs_to_direction(&inputs);
-    f32 speed = 10.0f;
-    camera_move_3d(&camera, dt * speed * movement_direction);
+    camera_move_3d(&camera, dt * 10.0f * movement_direction);
   }
 
-  // This is all too manual. Need a deletion queue managed internally.
   vkDeviceWaitIdle(ctx.device);
 
   vkDestroySampler(ctx.device, sampler, NULL);
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
     destroy_vulkan_texture(ctx.device, &textures[i]);
   }
-
   destroy_color_depth_framebuffer(ctx.device, &offscreen_framebuffer);
-  destroy_descriptor_set_handle(ctx.device, &simple_descriptor);
-  destroy_descriptor_set_handle(ctx.device, &mvp_descriptor);
-  destroy_descriptor_set_handle(ctx.device, &cube_descriptor);
-  destroy_descriptor_set_handle(ctx.device, &fullscreen_quad_descriptor);
 
-  vkDestroyPipelineLayout(ctx.device, x_pipeline_layout, NULL);
-  vkDestroyPipelineLayout(ctx.device, mvp_pipeline_layout, NULL);
-  vkDestroyPipelineLayout(ctx.device, cube_pipeline_layout, NULL);
-  vkDestroyPipelineLayout(ctx.device, fullscreen_quad_pipeline_layout, NULL);
+  destroy_vulkan_material(ctx.device, &triangle_mat);
+  destroy_vulkan_material(ctx.device, &square_mat);
+  destroy_vulkan_material(ctx.device, &instanced_quad_mat);
+  destroy_vulkan_material(ctx.device, &cube_mat);
+  destroy_vulkan_material(ctx.device, &fullscreen_quad_mat);
 
-  vkDestroyPipeline(ctx.device, square_pipeline, NULL);
-  vkDestroyPipeline(ctx.device, triangle_pipeline, NULL);
-  vkDestroyPipeline(ctx.device, instanced_quad_pipeline, NULL);
-  vkDestroyPipeline(ctx.device, cube_pipeline, NULL);
-  vkDestroyPipeline(ctx.device, fullscreen_quad_pipeline, NULL);
-
-  destroy_uniform_buffer(&ctx, &global_uniform_buffer);
-  vkDestroyDescriptorPool(ctx.device, descriptor_pool, NULL);
+  destroy_uniform_buffer(&ctx, &ub);
   destroy_buffer_manager(&buffer_manager);
-
   destroy_vulkan_context(&ctx);
 
   return 0;

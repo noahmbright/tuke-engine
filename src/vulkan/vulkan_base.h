@@ -307,48 +307,6 @@ typedef struct {
   u32 offset;
 } StagingArena;
 
-// Final vulkan API used with this struct is vkUpdateDescriptorSets
-// vkUpdateDescriptorSets acts on arrays of descriptor writes and copies.
-// Before calling vkUpdateDescriptorSets, the set's layout and the set itself
-// are created with vkCreateDescriptorSetLayout and vkAllocateDescriptorSets.
-// TODO why are set layout creation and allocation separated? Layouts can be
-// reused in different allocations, I guess?
-// This struct manages the write/copy arrays. It also manages the bindings
-// that are used to create the layouts.
-typedef struct {
-  VkDevice device;
-
-  // Layout bindings: The shape of the descriptor.
-  //    binding ID, num descriptors, which stages, immutable samplers (?),
-  //    and descriptor type (sampler, uniform, storage buffer, etc.)
-  u32 binding_count;
-  VkDescriptorSetLayoutBinding layout_bindings[MAX_LAYOUT_BINDINGS];
-
-  // Writes: how to write specific resources to the descriptor.
-  //    Takes pointers to image/buffer infos + buffer views.
-  u32 write_descriptor_count;
-  VkWriteDescriptorSet descriptor_writes[MAX_DESCRIPTOR_WRITES];
-
-  // I never use these
-  u32 copy_descriptor_count;
-  VkCopyDescriptorSet descriptor_copies[MAX_DESCRIPTOR_COPIES];
-
-  // Info about particular buffers/images.
-  // Which buffer, offset, range.
-  u32 buffer_info_count;
-  VkDescriptorBufferInfo descriptor_buffer_infos[MAX_DESCRIPTOR_BUFFER_INFOS];
-
-  // Sampler, image view, and image layout.
-  u32 image_info_count;
-  VkDescriptorImageInfo descriptor_image_infos[MAX_DESCRIPTOR_IMAGE_INFOS];
-} DescriptorSetBuilder;
-
-// TODO want less things called "Handle"
-typedef struct {
-  VkDescriptorSet descriptor_set;
-  VkDescriptorSetLayout descriptor_set_layout;
-} DescriptorSetHandle;
-
 typedef struct {
   VkImage image;
   u32 height;
@@ -553,37 +511,10 @@ u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemory
 // Descriptor Sets
 void set_descriptor_set_layouts(VulkanContext *ctx, VkDescriptorSetLayout *layouts, u32 num_layouts);
 void reset_descriptor_set_layouts(VulkanContext *ctx);
-VkDescriptorPool create_descriptor_pool(VkDevice device);
 VkDescriptorSetLayout
 create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count);
 VkDescriptorSet
 create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *set_layouts, VkDescriptorPool descriptor_pool);
-
-// TODO RIP OUT DescriptorSetBuilder
-DescriptorSetBuilder create_descriptor_set_builder(VulkanContext *ctx);
-DescriptorSetHandle build_descriptor_set(DescriptorSetBuilder *builder, VkDescriptorPool descriptor_pool);
-
-void add_uniform_buffer_descriptor_set(
-    DescriptorSetBuilder *builder,
-    const UniformBuffer *uniform_buffer,
-    u32 offset,
-    u32 range,
-    u32 binding,
-    u32 descriptor_count,
-    VkShaderStageFlags stage_flags,
-    bool dynamic
-);
-
-void add_image_descriptor_set(
-    DescriptorSetBuilder *builder,
-    VkImageView image_view,
-    VkSampler sampler,
-    u32 binding,
-    u32 descriptor_count,
-    VkShaderStageFlags stage_flags
-);
-
-void destroy_descriptor_set_handle(VkDevice device, DescriptorSetHandle *handle);
 
 // Framebuffers
 // Generally need a better understanding of lifetime management/ownership for these

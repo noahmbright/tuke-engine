@@ -4,6 +4,7 @@
 #include "shaders.h"
 #include "vulkan_base.h"
 #include "window.h"
+#include <vulkan/vulkan_core.h>
 
 int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
@@ -72,7 +73,12 @@ int main() {
     end_frame(&ctx, cmd);
   }
 
-  // destroy_vulkan_context(&ctx);
+  vkDeviceWaitIdle(ctx.device);
+  vkDestroyRenderPass(ctx.device, rp, NULL);
+  vkDestroySampler(ctx.device, sampler, NULL);
+  destroy_vulkan_material(ctx.device, &mat);
+  destroy_vulkan_texture(ctx.device, &texture);
+  destroy_vulkan_context(&ctx);
 
   return 0;
 }
