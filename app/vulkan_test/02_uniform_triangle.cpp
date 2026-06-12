@@ -1,12 +1,9 @@
 #include "generated_shader_utils.h"
 
-#include "glfw_vulkan.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "shaders.h"
-#include "tuke_engine.h"
-#include "vulkan/vulkan_base.h"
+#include "vulkan_test_common.h"
 #include "window.h"
-#include <vulkan/vulkan_core.h>
 
 TriangleTransformation simulate(f64 t) {
   TriangleTransformation tt;
@@ -15,40 +12,22 @@ TriangleTransformation simulate(f64 t) {
 }
 
 int main() {
-  // Init woes documented in 01_triangle
   GLFWwindow *window = create_window(true /* is_vulkan */);
-  VulkanWindowInfo window_info = create_glfw_vulkan_window_info(window);
-  VulkanContext ctx = create_vulkan_context("Test 02: Uniform Triangle", window_info);
-
-  ViewportState viewport_state = create_viewport_state_xy(ctx.swapchain_extent, 0, 0);
-  const VkClearValue clear_values[NUM_ATTACHMENTS] = {
-      {.color = {{0.10, 0.01, 0.10, 1.0}}},
-      {
-          .depthStencil = {.depth = 1.0f, .stencil = 0},
-      }
-  };
-
-  // This is a first step in seeing what I need to move to get render pass out of the context
-  // Don't like needing to call find_depth_format() here. Considering moving inside the create()
-  VkFormat depth_format = find_depth_format(ctx.physical_device);
-  VkRenderPass rp = create_color_depth_render_pass(ctx.device, ctx.surface_format.format, depth_format);
+  VulkanTest t = init_vulkan_test(window);
 
   // Made a mistake with the wrong upload size here - used the wrong struct in the name.
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   UniformWrite handle = push_uniform(&ub_manager, sizeof(TriangleTransformation));
   UniformBuffer ubs[MAX_FRAMES_IN_FLIGHT];
   for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    ubs[i] = create_uniform_buffer(&ctx, ub_manager.current_offset);
+    ubs[i] = create_uniform_buffer(&t.ctx, ub_manager.current_offset);
   }
-
-  VkDescriptorSetLayout layouts[NUM_DESCRIPTOR_SET_LAYOUTS];
-  set_descriptor_set_layouts(&ctx, layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
 
   VulkanMaterial mats[MAX_FRAMES_IN_FLIGHT];
   // Know binding, descriptor count, and type from generated layout bindings - from reflection
   // These are needed for a write to particular buffer - runtime info.
   for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    init_program_spec(&ctx, rp, &common_uniform_bringup_program_spec, &mats[i]);
+    init_program_spec(&t.ctx, t.rp, &common_uniform_bringup_program_spec, &mats[i]);
 
     // This write stuff indexed by 0 should all be per descriptor in the material
     VkWriteDescriptorSet writes[MAX_DESCRIPTOR_SETS];
@@ -64,7 +43,7 @@ int main() {
     writes[0].pBufferInfo = &descriptor_buffer_info;
 
     u32 copy_count = 0;
-    vkUpdateDescriptorSets(ctx.device, write_count, writes, copy_count, NULL);
+    vkUpdateDescriptorSets(t.ctx.device, write_count, writes, copy_count, NULL);
   }
 
   VulkanMesh mesh = {
@@ -77,41 +56,40 @@ int main() {
   while (!glfwWindowShouldClose(window)) {
     // Input
     glfwPollEvents();
-    f64 t = glfwGetTime();
-    f64 dt = t - t0;
-    t0 = t;
+    f64 t1 = glfwGetTime();
+    f64 dt = t1 - t0;
+    t0 = t1;
     t_total += dt;
 
     // Simulate
     TriangleTransformation tt = simulate(t_total);
 
     // Render
-    begin_frame(&ctx);
-    VkCommandBuffer cmd = begin_command_buffer(&ctx);
+    begin_frame(&t.ctx);
+    VkCommandBuffer cmd = begin_command_buffer(&t.ctx);
 
     // Render passes need begun/ended. Can have multiple per frame.
-    VkFramebuffer fb = ctx.framebuffers[ctx.image_index];
-    begin_render_pass(&ctx, cmd, rp, fb, clear_values, NUM_ATTACHMENTS, viewport_state);
+    VkFramebuffer fb = t.ctx.framebuffers[t.ctx.image_index];
+    begin_render_pass(&t.ctx, cmd, t.rp, fb, t.clear_values, NUM_ATTACHMENTS, t.viewport_state);
 
     // This is a single draw action. Probably want some scheme for queuing this in the context
-    write_to_uniform_buffer(&ubs[ctx.current_frame_index], &tt, handle);
-    render_mesh_material(cmd, &mesh, &mats[ctx.current_frame_index]);
+    write_to_uniform_buffer(&ubs[t.ctx.current_frame_index], &tt, handle);
+    render_mesh_material(cmd, &mesh, &mats[t.ctx.current_frame_index]);
     vkCmdEndRenderPass(cmd);
 
     // end_frame() should empty that queue.
     // This queue filling/emptying wraps the command buffer filling and frame state management
     // with the correct buffers for this frame index.
-    end_frame(&ctx, cmd);
+    end_frame(&t.ctx, cmd);
   }
 
-  vkDeviceWaitIdle(ctx.device);
-  vkDestroyRenderPass(ctx.device, rp, NULL);
+  vkDeviceWaitIdle(t.ctx.device);
   for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    destroy_uniform_buffer(&ctx, &ubs[i]);
-    destroy_vulkan_material(ctx.device, &mats[i]);
+    destroy_uniform_buffer(&t.ctx, &ubs[i]);
+    destroy_vulkan_material(t.ctx.device, &mats[i]);
   }
 
-  destroy_vulkan_context(&ctx);
+  destroy_vulkan_test(&t);
 
   return 0;
 }

@@ -1043,8 +1043,6 @@ void recreate_swapchain(VulkanContext *context) {
   VkSurfaceCapabilitiesKHR surface_capabilities = get_surface_capabilities(context->physical_device, context->surface);
   context->swapchain_extent = get_swapchain_extent(0, 0, surface_capabilities);
 
-  // TODO Passing every single parameter here by a context deref is ugly lol
-  //      Also, does this just take too many parameters?
   context->swapchain = create_swapchain(
       context->device, context->physical_device, context->surface, context->queue_family_indices,
       context->surface_format, surface_capabilities, context->swapchain_extent
@@ -1559,7 +1557,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .pNext = NULL,
       .flags = 0,
       .topology = config->topology,
-      .primitiveRestartEnable = config->primitive_restart_enabled,
+      .primitiveRestartEnable = VK_FALSE,
   };
 
   VkOffset2D offset = {.x = 0, .y = 0};
@@ -1698,7 +1696,6 @@ VkPipeline create_default_graphics_pipeline(
       .render_pass = render_pass,
       .pipeline_layout = pipeline_layout,
       .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .primitive_restart_enabled = VK_FALSE,
       .polygon_mode = VK_POLYGON_MODE_FILL,
       .cull_mode = VK_CULL_MODE_NONE,
       .front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE,
@@ -1787,7 +1784,6 @@ void end_frame(VulkanContext *ctx, VkCommandBuffer cmd) {
   update_frame_index(ctx);
 }
 
-// TODO May want to pass the raw vulkan primitives here instead of the context
 void submit_and_present(const VulkanContext *ctx, VkCommandBuffer cmd) {
   const FrameSyncObjects *fso = &ctx->frame_sync_objects[ctx->current_frame_index];
 

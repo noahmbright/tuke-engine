@@ -221,21 +221,6 @@ typedef struct {
   VkMemoryPropertyFlags memory_property_flags;
 } VulkanBuffer;
 
-// Uniform buffer layout is currently managed manually via push_uniform, which
-// advances a linear offset and returns an (offset, size) handle. Callers are
-// responsible for:
-//   - passing data whose size matches the reserved slot size
-//   - ensuring structs whose sizes are not multiples of minUniformBufferOffsetAlignment
-//     don't leave the next slot unaligned (validation error on vkUpdateDescriptorSets)
-//
-// Potential improvements:
-//   - Store alignment in UniformBufferManager and round up current_offset after
-//     each push, so misalignment is structurally impossible.
-//   - Replace push_uniform entirely with a single mapped struct whose fields are
-//     the actual uniform types. offsetof() gives correct aligned offsets for free,
-//     and writes become direct field assignments through the mapped pointer.
-//   - Add explicit data_size to write_to_uniform_buffer so the copy size is always
-//     the caller's actual type size, not the reserved slot size.
 typedef struct {
   u32 current_offset;
 } UniformBufferManager;
@@ -252,19 +237,6 @@ typedef struct {
 } UniformBuffer;
 
 typedef struct {
-  VulkanBuffer vulkan_buffer;
-  u8 *mapped;
-  u32 size;
-} ReadOnlyStorageBuffer;
-
-typedef struct {
-  VulkanBuffer vulkan_buffer;
-  u8 *mapped;
-  u32 size;
-} ReadWriteStorageBuffer;
-
-// TODO this guy's on the chopping block.
-typedef struct {
   VkViewport viewport;
   VkRect2D scissor;
 } ViewportState;
@@ -279,7 +251,6 @@ typedef struct {
   VkRenderPass render_pass;
   VkPipelineLayout pipeline_layout;
   VkPrimitiveTopology topology;
-  VkBool32 primitive_restart_enabled; // TODO not sure what this is, maybe will rip out
   VkPolygonMode polygon_mode;
   VkCullModeFlags cull_mode;
   VkFrontFace front_face;
@@ -292,7 +263,6 @@ typedef enum {
   BUFFER_TYPE_STAGING,
   BUFFER_TYPE_VERTEX, // Vertex buffers can also be used for indices
   BUFFER_TYPE_UNIFORM,
-  BUFFER_TYPE_COHERENT_STREAMING,
 } BufferType;
 
 typedef struct {
