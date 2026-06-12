@@ -358,14 +358,6 @@ typedef struct {
   StagingArena staging_arena;
 } BufferManager;
 
-// TODO Audit this. Unused.
-typedef struct {
-  VulkanBuffer vulkan_buffer;
-  u8 *data;
-  u32 size;
-  u32 head;
-} CoherentStreamingBuffer;
-
 typedef struct {
   VkRenderPass render_pass;
   VkFramebuffer framebuffer;
@@ -428,9 +420,6 @@ void destroy_buffer_manager(BufferManager *buffer_manager);
 // They will fail on pointers
 #define UPLOAD_VERTEX_ARRAY(queue, array) (upload_data(&queue, BUFFER_TYPE_VERTEX, (void *)array, sizeof(array)))
 #define UPLOAD_INDEX_ARRAY(queue, array) (upload_data(&queue, BUFFER_TYPE_INDEX, (void *)array, sizeof(array)))
-
-CoherentStreamingBuffer create_coherent_streaming_buffer(const VulkanContext *ctx, u32 size);
-void write_to_streaming_buffer(CoherentStreamingBuffer *coherent_streaming_buffer, void *data, u32 size);
 
 // Materials
 void destroy_vulkan_material(VkDevice device, VulkanMaterial *mat);

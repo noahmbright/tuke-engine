@@ -1367,13 +1367,6 @@ VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type,
     return create_buffer_explicit(context, uniform_buffer_usage, size, uniform_buffer_memory_properties);
   }
 
-  case BUFFER_TYPE_COHERENT_STREAMING: {
-    VkBufferUsageFlags streaming_buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    VkMemoryPropertyFlags streaming_buffer_memory_properties =
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    return create_buffer_explicit(context, streaming_buffer_usage, size, streaming_buffer_memory_properties);
-  }
-
   case BUFFER_TYPE_READONLY_STORAGE: {
     VkBufferUsageFlags readonly_storage_buffer_usage =
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -2280,37 +2273,6 @@ UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager, u32 size
   };
   uniform_buffer_manager->current_offset += size;
   return uniform_write;
-}
-
-CoherentStreamingBuffer create_coherent_streaming_buffer(const VulkanContext *ctx, u32 size) {
-  CoherentStreamingBuffer coherent_streaming_buffer;
-
-  coherent_streaming_buffer.vulkan_buffer = create_buffer(ctx, BUFFER_TYPE_COHERENT_STREAMING, size);
-
-  vkMapMemory(
-      ctx->device, coherent_streaming_buffer.vulkan_buffer.memory, 0, size, 0, (void **)&coherent_streaming_buffer.data
-  );
-
-  coherent_streaming_buffer.size = size;
-  coherent_streaming_buffer.head = 0;
-
-  return coherent_streaming_buffer;
-}
-
-void write_to_streaming_buffer(CoherentStreamingBuffer *coherent_streaming_buffer, void *data, u32 size) {
-
-  assert(size <= coherent_streaming_buffer->size);
-
-  u8 *dest = coherent_streaming_buffer->data;
-  u32 offset = coherent_streaming_buffer->head;
-  bool overflowed = (offset + size > coherent_streaming_buffer->size);
-  if (overflowed) {
-    offset = 0;
-  }
-
-  memcpy(dest + offset, data, size);
-
-  coherent_streaming_buffer->head = overflowed ? size : offset + size;
 }
 
 ColorDepthFramebuffer create_color_depth_framebuffer(
