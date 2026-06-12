@@ -20,10 +20,9 @@ void init_buffers(State *state) {
   VulkanContext *ctx = &state->ctx;
 
   // big vertex/index buffers
-  BufferUploadQueue buffer_upload_queue = create_buffer_upload_queue();
-
-  UPLOAD_VERTEX_ARRAY(buffer_upload_queue, paddle_vertices);
-  UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
+  BufferUploadQueue buffer_upload_queue = {};
+  UPLOAD_ARRAY(buffer_upload_queue, paddle_vertices);
+  UPLOAD_ARRAY(buffer_upload_queue, unit_square_indices);
 
   state->buffer_manager = flush_buffers(ctx, &buffer_upload_queue);
 

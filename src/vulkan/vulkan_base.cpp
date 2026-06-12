@@ -753,7 +753,6 @@ create_default_image(const VulkanContext *context, u32 width, u32 height, VkImag
 }
 
 VkDeviceMemory allocate_and_bind_image_memory(const VulkanContext *ctx, VkImage image) {
-  // create memory
   VkMemoryRequirements memory_reqs;
   vkGetImageMemoryRequirements(ctx->device, image, &memory_reqs);
 
@@ -1289,105 +1288,72 @@ u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemory
   exit(1);
 }
 
-VulkanBuffer create_buffer_explicit(
-    const VulkanContext *context, VkBufferUsageFlags usage, VkDeviceSize size, VkMemoryPropertyFlags properties
-) {
+VulkanBuffer create_buffer(const VulkanContext *ctx, BufferType buffer_type, VkDeviceSize size) {
   assert(size > 0);
-  VulkanBuffer vulkan_buffer;
+  VkBufferUsageFlags usage;
+  VkMemoryPropertyFlags flags;
 
-  VkBufferCreateInfo buffer_create_info;
-  buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  buffer_create_info.pNext = 0;
-  buffer_create_info.flags = 0;
-  buffer_create_info.size = size;
+  switch (buffer_type) {
+  case BUFFER_TYPE_VERTEX:
+    usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    break;
+  case BUFFER_TYPE_STAGING:
+    usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    break;
+  case BUFFER_TYPE_UNIFORM:
+    usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    break;
+  default:
+    assert(false && "got an invalid buffer_type");
+  }
+
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkBufferUsageFlagBits.html
-  buffer_create_info.usage = usage;
-  // https://registry.khronos.org/vulkan/specs/latest/man/html/VkSharingMode.html
   // TODO learn when I might not want exclusive sharing
-  buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  buffer_create_info.queueFamilyIndexCount = 0;
-  buffer_create_info.pQueueFamilyIndices = NULL;
+  // https://registry.khronos.org/vulkan/specs/latest/man/html/VkSharingMode.html
+  VkBufferCreateInfo buffer_ci = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .pNext = 0,
+      .flags = 0,
+      .size = size,
+      .usage = usage,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .queueFamilyIndexCount = 0,
+      .pQueueFamilyIndices = NULL,
+  };
 
   VkBuffer buffer;
-  VkResult result = vkCreateBuffer(context->device, &buffer_create_info, NULL, &buffer);
+  VkResult result = vkCreateBuffer(ctx->device, &buffer_ci, NULL, &buffer);
   VK_CHECK(result, "Failed to create buffer");
-  vulkan_buffer.buffer = buffer;
 
-  VkMemoryRequirements memory_requirements;
-  vkGetBufferMemoryRequirements(context->device, buffer, &memory_requirements);
-  vulkan_buffer.memory_requirements = memory_requirements;
+  VkMemoryRequirements mem_reqs;
+  vkGetBufferMemoryRequirements(ctx->device, buffer, &mem_reqs);
 
-  VkMemoryAllocateInfo memory_allocate_info;
-  memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-  memory_allocate_info.pNext = 0;
-  memory_allocate_info.allocationSize = memory_requirements.size;
-  memory_allocate_info.memoryTypeIndex =
-      find_memory_type(context->physical_device, memory_requirements.memoryTypeBits, properties);
+  VkMemoryAllocateInfo memory_alloc_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = 0,
+      .allocationSize = mem_reqs.size,
+      .memoryTypeIndex = find_memory_type(ctx->physical_device, mem_reqs.memoryTypeBits, flags),
+  };
 
-  result = vkAllocateMemory(context->device, &memory_allocate_info, NULL, &vulkan_buffer.memory);
+  VkPhysicalDeviceMemoryProperties mem_properties;
+  vkGetPhysicalDeviceMemoryProperties(ctx->physical_device, &mem_properties);
+
+  VulkanBuffer vulkan_buffer = {
+      .buffer = buffer,
+      .memory_requirements = mem_reqs,
+      .memory_property_flags = mem_properties.memoryTypes[memory_alloc_info.memoryTypeIndex].propertyFlags,
+  };
+
+  result = vkAllocateMemory(ctx->device, &memory_alloc_info, NULL, &vulkan_buffer.memory);
   VK_CHECK(result, "Failed to allocate buffer memory");
 
-  VkPhysicalDeviceMemoryProperties memory_properties;
-  vkGetPhysicalDeviceMemoryProperties(context->physical_device, &memory_properties);
-  vulkan_buffer.memory_property_flags =
-      memory_properties.memoryTypes[memory_allocate_info.memoryTypeIndex].propertyFlags;
-
-  result = vkBindBufferMemory(context->device, buffer, vulkan_buffer.memory, 0);
+  result = vkBindBufferMemory(ctx->device, buffer, vulkan_buffer.memory, 0);
   VK_CHECK(result, "Failed to bind buffer memory");
 
   return vulkan_buffer;
-}
-
-VulkanBuffer create_buffer(const VulkanContext *context, BufferType buffer_type, VkDeviceSize size) {
-  switch (buffer_type) {
-  case BUFFER_TYPE_VERTEX: {
-    VkBufferUsageFlags vertex_buffer_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    VkMemoryPropertyFlags vertex_buffer_memory_properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    return create_buffer_explicit(context, vertex_buffer_usage, size, vertex_buffer_memory_properties);
-  }
-
-  case BUFFER_TYPE_INDEX: {
-    VkBufferUsageFlags index_buffer_usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    VkMemoryPropertyFlags index_buffer_memory_properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    return create_buffer_explicit(context, index_buffer_usage, size, index_buffer_memory_properties);
-  }
-
-  case BUFFER_TYPE_STAGING: {
-    VkBufferUsageFlags staging_buffer_usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    VkMemoryPropertyFlags staging_buffer_memory_properties =
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    return create_buffer_explicit(context, staging_buffer_usage, size, staging_buffer_memory_properties);
-  }
-
-    // TODO expand for dynamic uniform buffers, or add a second helper
-  case BUFFER_TYPE_UNIFORM: {
-    VkBufferUsageFlags uniform_buffer_usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    VkMemoryPropertyFlags uniform_buffer_memory_properties =
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    return create_buffer_explicit(context, uniform_buffer_usage, size, uniform_buffer_memory_properties);
-  }
-
-  case BUFFER_TYPE_READONLY_STORAGE: {
-    VkBufferUsageFlags readonly_storage_buffer_usage =
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    VkMemoryPropertyFlags readonly_storage_buffer_memory_properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    return create_buffer_explicit(
-        context, readonly_storage_buffer_usage, size, readonly_storage_buffer_memory_properties
-    );
-  }
-
-  case BUFFER_TYPE_READ_WRITE_STORAGE: {
-    VkBufferUsageFlags read_write_storage_buffer_usage =
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    VkMemoryPropertyFlags read_write_storage_buffer_memory_properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    return create_buffer_explicit(
-        context, read_write_storage_buffer_usage, size, read_write_storage_buffer_memory_properties
-    );
-  }
-
-  default:
-    assert(false && "create_buffer: got an invalid buffer_type");
-  }
 }
 
 void write_to_vulkan_buffer(
@@ -1938,21 +1904,6 @@ void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, Un
   memcpy(uniform_buffer->mapped + uniform_write.offset, data, uniform_write.size);
 }
 
-ReadOnlyStorageBuffer create_readonly_storage_buffer(const VulkanContext *ctx, u32 buffer_size) {
-  ReadOnlyStorageBuffer readonly_storage_buffer = {
-      .vulkan_buffer = create_buffer(ctx, BUFFER_TYPE_READONLY_STORAGE, buffer_size),
-      .size = buffer_size,
-  };
-
-  VkResult result = vkMapMemory(
-      ctx->device, readonly_storage_buffer.vulkan_buffer.memory, 0, buffer_size, 0,
-      (void **)&readonly_storage_buffer.mapped
-  );
-  VK_CHECK(result, "Failed to map storage buffer memory");
-
-  return readonly_storage_buffer;
-}
-
 // Can make textures in a GPU native format KTX: https://developer.imaginationtech.com/solutions/pvrtextool/
 VulkanTexture create_vulkan_texture(
     VulkanContext *ctx,
@@ -2174,78 +2125,52 @@ void render_mesh(VkCommandBuffer cmd, RenderCall *call) {
 }
 
 BufferUploadQueue create_buffer_upload_queue() {
-  BufferUploadQueue queue = {
-      .vertex_buffer_offset = 0,
-      .index_buffer_offset = 0,
-      .num_slices = 0,
-  };
-  memset(queue.slices, 0, sizeof(queue.slices));
+  BufferUploadQueue queue = {};
   return queue;
 }
 
-const BufferHandle *upload_data(BufferUploadQueue *queue, BufferType buffer_type, void *data, u64 size) {
+u64 upload_data(BufferUploadQueue *queue, void *data, u64 size) {
   assert(queue->num_slices < MAX_BUFFER_UPLOADS);
-  BufferHandle *handle = &queue->slices[queue->num_slices];
-  u64 offset = -1;
 
-  switch (buffer_type) {
-  case BUFFER_TYPE_INDEX:
-    offset = queue->index_buffer_offset;
-    queue->index_buffer_offset += size;
-    break;
-  case BUFFER_TYPE_VERTEX:
-    offset = queue->vertex_buffer_offset;
-    queue->vertex_buffer_offset += size;
-    break;
-  default:
-    assert(false);
-  }
+  u64 offset = queue->offset;
+  queue->offset += size;
 
-  handle->offset = offset;
-  handle->size = size;
-  handle->buffer_type = buffer_type;
-  handle->data = data;
-  ++queue->num_slices;
+  queue->slices[queue->num_slices++] = {
+      .offset = offset,
+      .size = size,
+      .data = data,
+  };
 
-  return handle;
+  return offset;
 }
 
 BufferManager flush_buffers(VulkanContext *ctx, BufferUploadQueue *queue) {
-  assert(queue->num_slices > 0);
-  u64 total_size = queue->vertex_buffer_offset + queue->index_buffer_offset;
+  BufferManager manager = {
+      .context = ctx,
+  };
 
-  VulkanBuffer staging_buffer = create_buffer(ctx, BUFFER_TYPE_STAGING, total_size);
+  u64 size = queue->offset;
+  if (size == 0) {
+    return manager;
+  }
+
+  assert(queue->num_slices > 0);
+  VulkanBuffer staging_buffer = create_buffer(ctx, BUFFER_TYPE_STAGING, size);
+
   StagingArena staging_arena = {
       .buffer = staging_buffer,
-      .total_size = total_size,
+      .total_size = size,
       .offset = 0,
       .num_copy_regions = 0,
       .copy_regions = {},
   };
-
-  BufferManager manager = {
-      .context = ctx,
-      .vertex_buffer = create_buffer(ctx, BUFFER_TYPE_VERTEX, queue->vertex_buffer_offset),
-      .index_buffer = create_buffer(ctx, BUFFER_TYPE_INDEX, queue->index_buffer_offset),
-      .staging_arena = staging_arena,
-  };
+  manager.staging_arena = staging_arena;
+  manager.vertex_buffer = create_buffer(ctx, BUFFER_TYPE_VERTEX, size);
 
   for (u32 i = 0; i < queue->num_slices; i++) {
-
-    const BufferHandle handle = queue->slices[i];
-    VkBuffer destination;
-    switch (handle.buffer_type) {
-    case BUFFER_TYPE_INDEX:
-      destination = manager.index_buffer.buffer;
-      break;
-    case BUFFER_TYPE_VERTEX:
-      destination = manager.vertex_buffer.buffer;
-      break;
-    default:
-      assert(false);
-    }
-
-    stage_data(ctx, &manager.staging_arena, handle.data, handle.size, destination, handle.offset);
+    VkBuffer destination = manager.vertex_buffer.buffer;
+    const BufferView view = queue->slices[i];
+    stage_data(ctx, &manager.staging_arena, view.data, view.size, destination, view.offset);
   }
 
   flush_staging_arena(ctx, &manager.staging_arena);
@@ -2299,13 +2224,13 @@ ColorDepthFramebuffer create_color_depth_framebuffer(
   return fb;
 }
 
-void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *color_depth_framebuffer) {
-  vkDestroyFramebuffer(device, color_depth_framebuffer->framebuffer, NULL);
-  vkDestroyImageView(device, color_depth_framebuffer->color_image_view, NULL);
-  vkDestroyImage(device, color_depth_framebuffer->color_image, NULL);
-  vkFreeMemory(device, color_depth_framebuffer->color_image_device_memory, NULL);
-  vkDestroyImageView(device, color_depth_framebuffer->depth_image_view, NULL);
-  vkDestroyImage(device, color_depth_framebuffer->depth_image, NULL);
-  vkFreeMemory(device, color_depth_framebuffer->depth_image_device_memory, NULL);
-  vkDestroyRenderPass(device, color_depth_framebuffer->render_pass, NULL);
+void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *fb) {
+  vkDestroyFramebuffer(device, fb->framebuffer, NULL);
+  vkDestroyImageView(device, fb->color_image_view, NULL);
+  vkDestroyImage(device, fb->color_image, NULL);
+  vkFreeMemory(device, fb->color_image_device_memory, NULL);
+  vkDestroyImageView(device, fb->depth_image_view, NULL);
+  vkDestroyImage(device, fb->depth_image, NULL);
+  vkFreeMemory(device, fb->depth_image_device_memory, NULL);
+  vkDestroyRenderPass(device, fb->render_pass, NULL);
 }

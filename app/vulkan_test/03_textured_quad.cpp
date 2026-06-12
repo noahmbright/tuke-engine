@@ -4,7 +4,6 @@
 #include "shaders.h"
 #include "vulkan_base.h"
 #include "window.h"
-#include <vulkan/vulkan_core.h>
 
 int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);

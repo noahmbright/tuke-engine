@@ -44,17 +44,14 @@ int main() {
       create_color_depth_framebuffer(&ctx, ctx.swapchain_extent, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D32_SFLOAT);
 
   BufferUploadQueue buffer_upload_queue = create_buffer_upload_queue();
-  const BufferHandle *triangle_vertices_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, triangle_vertices);
-  const BufferHandle *square_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, square_vertices);
-  const BufferHandle *unit_square_pos_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, unit_square_positions);
-  const BufferHandle *quad_pos_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, quad_positions);
-  const BufferHandle *unit_square_idx_slice = UPLOAD_INDEX_ARRAY(buffer_upload_queue, unit_square_indices);
-  const BufferHandle *cube_slice = UPLOAD_VERTEX_ARRAY(buffer_upload_queue, cube_vertices);
-  (void)unit_square_idx_slice;
+  u64 triangle_vertices_offset = UPLOAD_ARRAY(buffer_upload_queue, triangle_vertices);
+  u64 square_offset = UPLOAD_ARRAY(buffer_upload_queue, square_vertices);
+  u64 unit_square_pos_offset = UPLOAD_ARRAY(buffer_upload_queue, unit_square_positions);
+  u64 quad_pos_offset = UPLOAD_ARRAY(buffer_upload_queue, quad_positions);
+  u64 index_offset = UPLOAD_ARRAY(buffer_upload_queue, unit_square_indices);
+  u64 cube_offset = UPLOAD_ARRAY(buffer_upload_queue, cube_vertices);
 
   BufferManager buffer_manager = flush_buffers(&ctx, &buffer_upload_queue);
-  VkBuffer vbuf = buffer_manager.vertex_buffer.buffer;
-  VkBuffer ibuf = buffer_manager.index_buffer.buffer;
 
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   UniformWrite mvp_write = push_uniform(&ub_manager, sizeof(MVPUniform));
@@ -172,42 +169,40 @@ int main() {
     vkUpdateDescriptorSets(ctx.device, 1, &write, 0, NULL);
   }
 
+  VkBuffer vbuf = buffer_manager.vertex_buffer.buffer;
   VulkanMesh triangle_mesh = {
       .num_vertices = 3,
       .instance_count = 1,
       .num_vertex_buffers = 1,
       .vertex_buffers = {vbuf},
-      .vertex_buffer_offsets = {triangle_vertices_slice->offset},
+      .vertex_buffer_offsets = {triangle_vertices_offset},
   };
   VulkanMesh square_mesh = {
       .num_vertices = 6,
       .instance_count = 1,
       .num_vertex_buffers = 1,
       .vertex_buffers = {vbuf},
-      .vertex_buffer_offsets = {square_slice->offset},
+      .vertex_buffer_offsets = {square_offset},
   };
   VulkanMesh instanced_quad_mesh = {
       .instance_count = instanced_quad_count,
       .num_indices = 6,
       .num_vertex_buffers = 2,
       .vertex_buffers = {vbuf, vbuf},
-      .vertex_buffer_offsets = {unit_square_pos_slice->offset, quad_pos_slice->offset},
-      .index_buffer_offset = 0,
-      .index_buffer = ibuf,
+      .vertex_buffer_offsets = {unit_square_pos_offset, quad_pos_offset},
+      .index_buffer_offset = index_offset,
+      .index_buffer = buffer_manager.vertex_buffer.buffer,
   };
   VulkanMesh cube_mesh = {
       .num_vertices = 36,
       .instance_count = 1,
       .num_vertex_buffers = 1,
       .vertex_buffers = {vbuf},
-      .vertex_buffer_offsets = {cube_slice->offset},
+      .vertex_buffer_offsets = {cube_offset},
   };
   VulkanMesh fullscreen_quad_mesh = {.num_vertices = 3, .instance_count = 1};
 
-  MVPUniform mvp;
-  mvp.projection = glm::mat4(1.0f);
-  mvp.view = glm::mat4(1.0f);
-
+  MVPUniform mvp = {.projection = glm::mat4(1.0f), .view = glm::mat4(1.0f)};
   const glm::vec3 cube_translation_vector = {1.5f, -1.3f, 1.5f};
 
   Camera camera = create_camera(CAMERA_TYPE_3D);

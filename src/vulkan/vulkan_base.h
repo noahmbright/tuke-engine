@@ -290,12 +290,9 @@ typedef struct {
 
 typedef enum {
   BUFFER_TYPE_STAGING,
-  BUFFER_TYPE_VERTEX,
-  BUFFER_TYPE_INDEX,
+  BUFFER_TYPE_VERTEX, // Vertex buffers can also be used for indices
   BUFFER_TYPE_UNIFORM,
   BUFFER_TYPE_COHERENT_STREAMING,
-  BUFFER_TYPE_READONLY_STORAGE,
-  BUFFER_TYPE_READ_WRITE_STORAGE,
 } BufferType;
 
 typedef struct {
@@ -340,14 +337,12 @@ typedef struct {
 typedef struct {
   u64 offset;
   u64 size;
-  BufferType buffer_type;
   void *data;
-} BufferHandle;
+} BufferView;
 
 typedef struct {
-  u64 vertex_buffer_offset;
-  u64 index_buffer_offset;
-  BufferHandle slices[MAX_BUFFER_UPLOADS];
+  u64 offset;
+  BufferView slices[MAX_BUFFER_UPLOADS];
   u32 num_slices;
 } BufferUploadQueue;
 
@@ -412,14 +407,12 @@ void write_to_vulkan_buffer(
 );
 
 BufferUploadQueue create_buffer_upload_queue();
-const BufferHandle *upload_data(BufferUploadQueue *queue, BufferType buffer_type, void *data, u64 size);
+u64 upload_data(BufferUploadQueue *queue, void *data, u64 size);
 BufferManager flush_buffers(VulkanContext *ctx, BufferUploadQueue *queue);
 void destroy_buffer_manager(BufferManager *buffer_manager);
 
-// These macros are specifically for arrays, e.g., f32 array[], with the [];
-// They will fail on pointers
-#define UPLOAD_VERTEX_ARRAY(queue, array) (upload_data(&queue, BUFFER_TYPE_VERTEX, (void *)array, sizeof(array)))
-#define UPLOAD_INDEX_ARRAY(queue, array) (upload_data(&queue, BUFFER_TYPE_INDEX, (void *)array, sizeof(array)))
+// This macro is specifically for arrays, e.g., f32 array[], with the []; It fails on pointers because sizeof().
+#define UPLOAD_ARRAY(queue, array) (upload_data(&queue, (void *)array, sizeof(array)))
 
 // Materials
 void destroy_vulkan_material(VkDevice device, VulkanMaterial *mat);
