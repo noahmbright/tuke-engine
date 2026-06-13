@@ -198,6 +198,7 @@ typedef struct {
   VkPhysicalDevice physical_device;
   VkPhysicalDeviceProperties physical_device_properties;
   VkDescriptorPool descriptor_pool;
+  VkFormat depth_format;
 
   VkCommandPool graphics_cmd_pool;
   VkCommandPool compute_cmd_pool;
@@ -480,7 +481,6 @@ VkFramebuffer create_framebuffer(
     VkExtent2D extent
 );
 
-// TODO Backend only?
 ColorDepthFramebuffer
 create_color_depth_framebuffer(const VulkanContext *ctx, VkExtent2D extent, VkFormat color_fmt, VkFormat depth_fmt);
 void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *color_depth_framebuffer);

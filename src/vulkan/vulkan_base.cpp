@@ -7,42 +7,42 @@
 #include <vulkan/vulkan_beta.h>
 #include <vulkan/vulkan_core.h>
 
-void update_frame_index(VulkanContext *context) {
-  context->current_frame_index = (context->current_frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
+void update_frame_index(VulkanContext *ctx) {
+  ctx->current_frame_index = (ctx->current_frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
-void destroy_swapchain(VulkanContext *context) {
-  SwapchainStorage *storage = &context->swapchain_storage;
+void destroy_swapchain(VulkanContext *ctx) {
+  SwapchainStorage *storage = &ctx->swapchain_storage;
 
   // framebuffers
   for (u32 i = 0; i < storage->image_count; ++i) {
-    vkDestroyFramebuffer(context->device, context->framebuffers[i], NULL);
-    context->framebuffers[i] = VK_NULL_HANDLE;
+    vkDestroyFramebuffer(ctx->device, ctx->framebuffers[i], NULL);
+    ctx->framebuffers[i] = VK_NULL_HANDLE;
   }
 
   // swapchain image views
   for (u32 i = 0; i < storage->image_count; i++) {
     if (storage->use_static) {
-      vkDestroyImageView(context->device, storage->as.static_storage.image_views[i], NULL);
+      vkDestroyImageView(ctx->device, storage->as.static_storage.image_views[i], NULL);
     } else {
-      vkDestroyImageView(context->device, storage->as.dynamic_storage.image_views[i], NULL);
+      vkDestroyImageView(ctx->device, storage->as.dynamic_storage.image_views[i], NULL);
     }
   }
 
-  if (!context->swapchain_storage.use_static) {
+  if (!ctx->swapchain_storage.use_static) {
     free(storage->as.dynamic_storage.image_views);
     free(storage->as.dynamic_storage.images);
   }
 
   for (u32 i = 0; i < NUM_SWAPCHAIN_IMAGES; i++) {
     DepthBuffer *depth_buffer = &storage->depth_buffers[i];
-    vkDestroyImage(context->device, depth_buffer->image, NULL);
-    vkDestroyImageView(context->device, depth_buffer->image_view, NULL);
-    vkFreeMemory(context->device, depth_buffer->device_memory, NULL);
+    vkDestroyImage(ctx->device, depth_buffer->image, NULL);
+    vkDestroyImageView(ctx->device, depth_buffer->image_view, NULL);
+    vkFreeMemory(ctx->device, depth_buffer->device_memory, NULL);
   }
 
-  if (context->swapchain) {
-    vkDestroySwapchainKHR(context->device, context->swapchain, NULL);
+  if (ctx->swapchain) {
+    vkDestroySwapchainKHR(ctx->device, ctx->swapchain, NULL);
   } else {
     printf("%s(): Tried to destroy null swapchain\n", __func__);
   }
@@ -786,34 +786,36 @@ VkFormat find_depth_format(VkPhysicalDevice physical_device) {
   exit(1);
 }
 
-DepthBuffer create_depth_buffer(VulkanContext *context, VkFormat depth_format) {
+DepthBuffer create_depth_buffer(VulkanContext *ctx) {
+  bool requires_stencil =
+      (ctx->depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT) || (ctx->depth_format == VK_FORMAT_D24_UNORM_S8_UINT);
+  VkImageAspectFlags stencil_flag = requires_stencil ? VK_IMAGE_ASPECT_STENCIL_BIT : 0;
+  VkImageAspectFlags flags = VK_IMAGE_ASPECT_DEPTH_BIT | stencil_flag;
 
+  VkExtent2D extent = ctx->swapchain_extent;
   VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-  VkImageAspectFlagBits aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
-  VkExtent2D extent = context->swapchain_extent;
-
   DepthBuffer depth_buffer;
-  depth_buffer.image = create_default_image(context, extent.width, extent.height, usage, depth_format);
-  depth_buffer.device_memory = allocate_and_bind_image_memory(context, depth_buffer.image);
-  depth_buffer.image_view = create_default_image_view(context, depth_buffer.image, depth_format, aspect);
+  depth_buffer.image = create_default_image(ctx, extent.width, extent.height, usage, ctx->depth_format);
+  depth_buffer.device_memory = allocate_and_bind_image_memory(ctx, depth_buffer.image);
+  depth_buffer.image_view = create_default_image_view(ctx, depth_buffer.image, ctx->depth_format, flags);
 
-  VkCommandBuffer cmd = begin_single_use_command_buffer(context);
+  VkCommandBuffer cmd = begin_single_use_command_buffer(ctx);
   VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
   VkImageLayout new_layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
   transition_image_layout(cmd, depth_buffer.image, old_layout, new_layout);
-  end_single_use_command_buffer(context, cmd);
+  end_single_use_command_buffer(ctx, cmd);
 
   return depth_buffer;
 }
 
-SwapchainStorage create_swapchain_storage(VulkanContext *context, VkFormat depth_format) {
+static SwapchainStorage create_swapchain_storage(VulkanContext *ctx) {
   SwapchainStorage storage;
   storage.use_static = true;
 
   // Query swapchain for image count. The swapchain owns the images we present to, so it is necessary
   // to ask for them. We cannot hardcode them in the application.
   u32 swapchain_image_count;
-  VkResult result = vkGetSwapchainImagesKHR(context->device, context->swapchain, &swapchain_image_count, NULL);
+  VkResult result = vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &swapchain_image_count, NULL);
 
   VkImage *images;
   VkImageView *image_views;
@@ -833,27 +835,27 @@ SwapchainStorage create_swapchain_storage(VulkanContext *context, VkFormat depth
     image_views = storage.as.static_storage.image_views;
   }
 
-  result = vkGetSwapchainImagesKHR(context->device, context->swapchain, &swapchain_image_count, images);
+  result = vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &swapchain_image_count, images);
   VK_CHECK(result, "Failed to get swapchain images");
   storage.image_count = swapchain_image_count;
 
   for (u32 i = 0; i < swapchain_image_count; i++) {
     VkImageAspectFlags aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT;
-    VkFormat surface_format = context->surface_format.format;
+    VkFormat surface_format = ctx->surface_format.format;
 
     if (storage.use_static) {
       VkImage image = images[i];
-      image_views[i] = create_default_image_view(context, image, surface_format, aspect_flags);
+      image_views[i] = create_default_image_view(ctx, image, surface_format, aspect_flags);
     } else {
       VkImage image = images[i];
-      image_views[i] = create_default_image_view(context, image, surface_format, aspect_flags);
+      image_views[i] = create_default_image_view(ctx, image, surface_format, aspect_flags);
     }
   }
 
   // TODO Want to better manage depth buffers and not have a hardcoded depth/color framebuffer in the context
   // TODO why am I using NUM_SWAPCHAIN_IMAGES instead of swapchain_image_count?
   for (u32 i = 0; i < NUM_SWAPCHAIN_IMAGES; i++) {
-    storage.depth_buffers[i] = create_depth_buffer(context, depth_format);
+    storage.depth_buffers[i] = create_depth_buffer(ctx);
   }
 
   return storage;
@@ -1048,11 +1050,9 @@ void recreate_swapchain(VulkanContext *context) {
       context->surface_format, surface_capabilities, context->swapchain_extent
   );
 
-  VkFormat format = find_depth_format(context->physical_device);
-
   // Why am I not assigning the result of this?
   // Why am I doing it after creating the swapchain?
-  create_swapchain_storage(context, format);
+  create_swapchain_storage(context);
 
   init_framebuffers(context);
 }
@@ -1205,6 +1205,7 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
   // pick_physical_device() initializes context.queue_family_indices through a side effect.
   ctx.physical_device = pick_physical_device(ctx.instance, ctx.surface, &ctx.queue_family_indices);
   vkGetPhysicalDeviceProperties(ctx.physical_device, &ctx.physical_device_properties);
+  ctx.depth_format = find_depth_format(ctx.physical_device);
 
   const QueueFamilyIndices indices = ctx.queue_family_indices;
   ctx.present_queue_index_is_different_than_graphics = (indices.graphics_family != indices.present_family);
@@ -1245,12 +1246,11 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
   vkGetDeviceQueue(ctx.device, indices.graphics_family, 0, &ctx.graphics_queue);
   vkGetDeviceQueue(ctx.device, indices.present_family, 0, &ctx.present_queue);
   vkGetDeviceQueue(ctx.device, indices.compute_family, 0, &ctx.compute_queue);
-  VkFormat depth_format = find_depth_format(ctx.physical_device);
-  ctx.swapchain_storage = create_swapchain_storage(&ctx, depth_format);
+  ctx.swapchain_storage = create_swapchain_storage(&ctx);
 
   // TODO sync this with init_framebuffers()
   // don't need a depth attachment here
-  ctx.render_pass = create_color_depth_render_pass(ctx.device, ctx.surface_format.format, depth_format);
+  ctx.render_pass = create_color_depth_render_pass(ctx.device, ctx.surface_format.format, ctx.depth_format);
   init_framebuffers(&ctx);
 
   // Regular command buffers need to be created after the swapchain, which depends on the transient command buffers.

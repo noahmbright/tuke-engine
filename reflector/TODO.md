@@ -9,6 +9,19 @@ already handled correctly by the per-field `alignas` the reflector emits.
 
 ---
 
+## Reflector / Shader Ergonomics (High Priority)
+
+**Dev/release shader compilation split.**
+Dev builds should compile shaders from source at startup (subprocess to glslc/glslangValidator,
+same machinery the reflector already uses). Release builds use SPIR-V baked as C arrays by the
+reflector (already emitted). Single `#ifdef TUKE_DEV` branch in `get_shader_spirv(handle)` —
+`VkShaderModule` creation is identical in both paths. This is the low-cost path to hot reload:
+startup recompile first (trivial), file watching later. Pipeline recreation on change requires
+the render loop to hold pipelines by index/pointer so the handle can be swapped; `vkDeviceWaitIdle`
+is acceptable for dev. Double-buffered pipelines needed only for seamless reload without a hitch.
+
+---
+
 ## Shader Program Concept
 
 **Combined shader file format.**

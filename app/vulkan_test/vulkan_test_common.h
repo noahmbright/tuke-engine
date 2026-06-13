@@ -16,8 +16,7 @@ static inline VulkanTest init_vulkan_test(GLFWwindow *window) {
   VulkanWindowInfo window_info = create_glfw_vulkan_window_info(window);
   VulkanContext ctx = create_vulkan_context("Test 02: Uniform Triangle", window_info);
   ViewportState viewport_state = create_viewport_state_xy(ctx.swapchain_extent, 0, 0);
-  VkFormat depth_format = find_depth_format(ctx.physical_device);
-  VkRenderPass rp = create_color_depth_render_pass(ctx.device, ctx.surface_format.format, depth_format);
+  VkRenderPass rp = create_color_depth_render_pass(ctx.device, ctx.surface_format.format, ctx.depth_format);
 
   VulkanTest test = {
       .ctx = ctx,
