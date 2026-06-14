@@ -137,20 +137,24 @@ static const f32 f_vertices[] = {
 
     // Top rung
     0.1, 0.0, 0.0,
-    1.0, 0.0, 0.0,
+    0.5, 0.0, 0.0,
     0.1, 0.1, 0.0,
-    1.0, 0.1, 0.0,
+    0.5, 0.1, 0.0,
 
     // Middle rung 
-    0.1, 0.2, 0.0,
-    0.3, 0.2, 0.0,
+    0.1, 0.4, 0.0,
+    0.3, 0.4, 0.0,
     0.1, 0.5, 0.0,
     0.3, 0.5, 0.0,
 };
+
+static const u32 num_f_vertices = ARRAY_SIZE(f_vertices) / 3;
 
 static const u16 f_indices[] = {
     0, 1, 2,   2, 1,  3,
     4, 5, 6,   6, 5,  7,
     8, 9, 10, 10, 9, 11,
 };
+
+static const u32 num_f_indices = ARRAY_SIZE(f_indices);
 // clang-format on

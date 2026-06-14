@@ -68,6 +68,10 @@ void destroy_vulkan_context(VulkanContext *ctx) {
 
   destroy_swapchain(ctx);
 
+  for (u32 i = 0; i < NUM_SAMPLERS; i++) {
+    vkDestroySampler(ctx->device, ctx->samplers[i], NULL);
+  }
+
   vkDestroyDescriptorPool(ctx->device, ctx->descriptor_pool, NULL);
   vkDestroyRenderPass(ctx->device, ctx->render_pass, NULL);
   vkDestroyDevice(ctx->device, NULL);
@@ -679,9 +683,8 @@ void transition_image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout o
   vkCmdPipelineBarrier(cmd, src_stage, dst_stage, 0, 0, NULL, 0, NULL, 1, &image_memory_barrier);
 }
 
-VkImageView create_default_image_view(
-    const VulkanContext *context, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags
-) {
+VkImageView
+create_default_image_view(const VulkanContext *ctx, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags) {
   // TODO allow for depth and stencil attachments
   VkImageViewCreateInfo image_view_create_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -702,14 +705,14 @@ VkImageView create_default_image_view(
   };
 
   VkImageView image_view;
-  VkResult result = vkCreateImageView(context->device, &image_view_create_info, NULL, &image_view);
+  VkResult result = vkCreateImageView(ctx->device, &image_view_create_info, NULL, &image_view);
   VK_CHECK(result, "Failed to create image view");
 
   return image_view;
 }
 
 VkImage
-create_default_image(const VulkanContext *context, u32 width, u32 height, VkImageUsageFlags usage, VkFormat format) {
+create_default_image(const VulkanContext *ctx, u32 width, u32 height, VkImageUsageFlags usage, VkFormat format) {
   // TODO Better understand all these fields
   //      When do I need more samples? Need mipmap support
   //      Don't understand queue families
@@ -735,10 +738,24 @@ create_default_image(const VulkanContext *context, u32 width, u32 height, VkImag
   };
 
   VkImage image;
-  VkResult result = vkCreateImage(context->device, &texture_image_info, NULL, &image);
+  VkResult result = vkCreateImage(ctx->device, &texture_image_info, NULL, &image);
   VK_CHECK(result, "Failed to create image");
 
   return image;
+}
+
+static u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties) {
+  VkPhysicalDeviceMemoryProperties mem_properties;
+  vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_properties);
+
+  for (u32 i = 0; i < mem_properties.memoryTypeCount; i++) {
+    if ((type_filter & (1 << i)) && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties) {
+      return i;
+    }
+  }
+
+  fprintf(stderr, "Failed to find suitable memory type.\n");
+  exit(1);
 }
 
 VkDeviceMemory allocate_and_bind_image_memory(const VulkanContext *ctx, VkImage image) {
@@ -1213,15 +1230,13 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
   init_framebuffers(&ctx);
 
   // Regular command buffers need to be created after the swapchain, which depends on the transient command buffers.
-  allocate_command_buffers(
-      ctx.device, ctx.graphics_cmd_pool, ctx.swapchain_storage.image_count, ctx.graphics_cmd_buffers
-  );
-
-  allocate_command_buffers(
-      ctx.device, ctx.compute_cmd_pool, ctx.swapchain_storage.image_count, ctx.compute_cmd_buffers
-  );
+  u32 image_count = ctx.swapchain_storage.image_count;
+  allocate_command_buffers(ctx.device, ctx.graphics_cmd_pool, image_count, ctx.graphics_cmd_buffers);
+  allocate_command_buffers(ctx.device, ctx.compute_cmd_pool, image_count, ctx.compute_cmd_buffers);
 
   ctx.pipeline_cache = create_pipeline_cache(ctx.device);
+
+  ctx.samplers[SAMPLER_LINEAR_CLAMP] = create_sampler(ctx.device);
 
   VkResult result = vkWaitForFences(
       ctx.device, 1, &ctx.frame_sync_objects[ctx.current_frame_index].in_flight_fence, VK_TRUE, UINT64_MAX
@@ -1229,20 +1244,6 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
   VK_CHECK(result, "Failed to wait for fences");
 
   return ctx;
-}
-
-u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties) {
-  VkPhysicalDeviceMemoryProperties mem_properties;
-
-  vkGetPhysicalDeviceMemoryProperties(physical_device, &mem_properties);
-  for (u32 i = 0; i < mem_properties.memoryTypeCount; i++) {
-    if ((type_filter & (1 << i)) && (mem_properties.memoryTypes[i].propertyFlags & properties) == properties) {
-      return i;
-    }
-  }
-
-  fprintf(stderr, "Failed to find suitable memory type.\n");
-  exit(1);
 }
 
 VulkanBuffer create_buffer(const VulkanContext *ctx, BufferType buffer_type, VkDeviceSize size) {
@@ -1358,21 +1359,21 @@ void destroy_vulkan_buffer(const VulkanContext *ctx, VulkanBuffer buffer) {
   vkFreeMemory(ctx->device, buffer.memory, NULL);
 }
 
-VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context) {
-  assert(context);
-  assert(context->device != VK_NULL_HANDLE);
-  assert(context->transient_cmd_pool != VK_NULL_HANDLE);
+VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *ctx) {
+  assert(ctx);
+  assert(ctx->device != VK_NULL_HANDLE);
+  assert(ctx->transient_cmd_pool != VK_NULL_HANDLE);
 
   VkCommandBufferAllocateInfo allocate_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
       .pNext = 0,
-      .commandPool = context->transient_cmd_pool,
+      .commandPool = ctx->transient_cmd_pool,
       .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
       .commandBufferCount = 1,
   };
 
   VkCommandBuffer command_buffer;
-  VkResult result = vkAllocateCommandBuffers(context->device, &allocate_info, &command_buffer);
+  VkResult result = vkAllocateCommandBuffers(ctx->device, &allocate_info, &command_buffer);
   VK_CHECK(result, "Failed to allocate command buffer");
 
   VkCommandBufferBeginInfo begin_info = {
@@ -1388,7 +1389,7 @@ VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *context) {
   return command_buffer;
 }
 
-void end_single_use_command_buffer(const VulkanContext *context, VkCommandBuffer command_buffer) {
+void end_single_use_command_buffer(const VulkanContext *ctx, VkCommandBuffer command_buffer) {
   VkResult result = vkEndCommandBuffer(command_buffer);
   VK_CHECK(result, "Failed to end command buffer");
 
@@ -1404,13 +1405,13 @@ void end_single_use_command_buffer(const VulkanContext *context, VkCommandBuffer
       .pSignalSemaphores = 0,
   };
 
-  result = vkQueueSubmit(context->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+  result = vkQueueSubmit(ctx->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
   VK_CHECK(result, "Failed to submit queue");
   // TODO Why wait idle here?
-  result = vkQueueWaitIdle(context->graphics_queue);
+  result = vkQueueWaitIdle(ctx->graphics_queue);
   VK_CHECK(result, "Failed to wait for queue idle");
 
-  vkFreeCommandBuffers(context->device, context->transient_cmd_pool, 1, &command_buffer);
+  vkFreeCommandBuffers(ctx->device, ctx->transient_cmd_pool, 1, &command_buffer);
 }
 
 VkShaderModule create_shader_module(VkDevice device, const u32 *code, u32 code_size) {
@@ -1712,7 +1713,7 @@ VkCommandBuffer begin_command_buffer(const VulkanContext *ctx) {
 }
 
 void begin_render_pass(
-    const VulkanContext *context,
+    const VulkanContext *ctx,
     VkCommandBuffer cmd,
     VkRenderPass render_pass,
     VkFramebuffer framebuffer,
@@ -1726,7 +1727,7 @@ void begin_render_pass(
       .renderPass = render_pass,
       .framebuffer = framebuffer,
       .renderArea.offset = viewport_state.scissor.offset,
-      .renderArea.extent = context->swapchain_extent,
+      .renderArea.extent = ctx->swapchain_extent,
       .clearValueCount = clear_value_count,
       .pClearValues = clear_value,
   };
@@ -1814,12 +1815,12 @@ stage_data(const VulkanContext *ctx, StagingArena *arena, const void *data, u32 
   arena->offset += size;
 }
 
-static void flush_staging_arena(const VulkanContext *context, StagingArena *arena) {
+static void flush_staging_arena(const VulkanContext *ctx, StagingArena *arena) {
   if (arena->num_copy_regions == 0) {
     return;
   }
 
-  VkCommandBuffer cmd = begin_single_use_command_buffer(context);
+  VkCommandBuffer cmd = begin_single_use_command_buffer(ctx);
   VkBuffer current_destination = arena->dst_buffers[0];
   u32 start = 0;
 
@@ -1837,7 +1838,7 @@ static void flush_staging_arena(const VulkanContext *context, StagingArena *aren
       cmd, arena->buffer.buffer, current_destination, arena->num_copy_regions - start, arena->copy_regions + start
   );
 
-  end_single_use_command_buffer(context, cmd);
+  end_single_use_command_buffer(ctx, cmd);
 }
 
 UniformBuffer create_uniform_buffer(const VulkanContext *ctx, u32 size) {
@@ -1851,8 +1852,8 @@ UniformBuffer create_uniform_buffer(const VulkanContext *ctx, u32 size) {
   return ub;
 }
 
-void destroy_uniform_buffer(const VulkanContext *context, UniformBuffer *uniform_buffer) {
-  destroy_vulkan_buffer(context, uniform_buffer->vulkan_buffer);
+void destroy_uniform_buffer(const VulkanContext *ctx, UniformBuffer *uniform_buffer) {
+  destroy_vulkan_buffer(ctx, uniform_buffer->vulkan_buffer);
 }
 
 void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, UniformWrite uniform_write) {
@@ -1934,7 +1935,6 @@ void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture) {
 }
 
 // https://docs.vulkan.org/spec/latest/chapters/textures.html
-// TODO give this any modularity at all
 VkSampler create_sampler(VkDevice device) {
   VkSamplerCreateInfo sampler_create_info = {
       .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -1951,7 +1951,7 @@ VkSampler create_sampler(VkDevice device) {
       .maxAnisotropy = 0.0f,
       .compareEnable = VK_FALSE,
       .compareOp = VK_COMPARE_OP_LESS,
-      .minLod = 1.0f,
+      .minLod = 0.0f,
       .maxLod = 1.0f,
       .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
       .unnormalizedCoordinates = VK_FALSE,
@@ -2101,7 +2101,7 @@ u64 upload_data(BufferUploadQueue *queue, void *data, u64 size) {
 
 BufferManager flush_buffers(VulkanContext *ctx, BufferUploadQueue *queue) {
   BufferManager manager = {
-      .context = ctx,
+      .ctx = ctx,
   };
 
   u64 size = queue->offset;
@@ -2120,10 +2120,10 @@ BufferManager flush_buffers(VulkanContext *ctx, BufferUploadQueue *queue) {
       .copy_regions = {},
   };
   manager.staging_arena = staging_arena;
-  manager.vertex_buffer = create_buffer(ctx, BUFFER_TYPE_VERTEX, size);
+  manager.buffer = create_buffer(ctx, BUFFER_TYPE_VERTEX, size);
 
   for (u32 i = 0; i < queue->num_slices; i++) {
-    VkBuffer destination = manager.vertex_buffer.buffer;
+    VkBuffer destination = manager.buffer.buffer;
     const BufferView view = queue->slices[i];
     stage_data(ctx, &manager.staging_arena, view.data, view.size, destination, view.offset);
   }
@@ -2133,9 +2133,8 @@ BufferManager flush_buffers(VulkanContext *ctx, BufferUploadQueue *queue) {
 }
 
 void destroy_buffer_manager(BufferManager *buffer_manager) {
-  VulkanContext *ctx = buffer_manager->context;
-  destroy_vulkan_buffer(ctx, buffer_manager->vertex_buffer);
-  destroy_vulkan_buffer(ctx, buffer_manager->index_buffer);
+  VulkanContext *ctx = buffer_manager->ctx;
+  destroy_vulkan_buffer(ctx, buffer_manager->buffer);
   destroy_vulkan_buffer(ctx, buffer_manager->staging_arena.buffer);
 }
 
@@ -2156,25 +2155,25 @@ UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager, u32 size
 }
 
 ColorDepthFramebuffer create_color_depth_framebuffer(
-    const VulkanContext *context, VkExtent2D extent, VkFormat color_format, VkFormat depth_format
+    const VulkanContext *ctx, VkExtent2D extent, VkFormat color_format, VkFormat depth_format
 ) {
   ColorDepthFramebuffer fb;
-  fb.render_pass = create_color_depth_render_pass(context->device, color_format, depth_format);
+  fb.render_pass = create_color_depth_render_pass(ctx->device, color_format, depth_format);
 
   // Color
   VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  fb.color_image = create_default_image(context, extent.width, extent.height, usage, color_format);
-  fb.color_image_device_memory = allocate_and_bind_image_memory(context, fb.color_image);
-  fb.color_image_view = create_default_image_view(context, fb.color_image, color_format, VK_IMAGE_ASPECT_COLOR_BIT);
+  fb.color_image = create_default_image(ctx, extent.width, extent.height, usage, color_format);
+  fb.color_image_device_memory = allocate_and_bind_image_memory(ctx, fb.color_image);
+  fb.color_image_view = create_default_image_view(ctx, fb.color_image, color_format, VK_IMAGE_ASPECT_COLOR_BIT);
 
   // Depth
   usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  fb.depth_image = create_default_image(context, extent.width, extent.height, usage, depth_format);
-  fb.depth_image_device_memory = allocate_and_bind_image_memory(context, fb.depth_image);
-  fb.depth_image_view = create_default_image_view(context, fb.depth_image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
+  fb.depth_image = create_default_image(ctx, extent.width, extent.height, usage, depth_format);
+  fb.depth_image_device_memory = allocate_and_bind_image_memory(ctx, fb.depth_image);
+  fb.depth_image_view = create_default_image_view(ctx, fb.depth_image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 
   VkImageView offscreen_image_views[] = {fb.color_image_view, fb.depth_image_view};
-  fb.framebuffer = create_framebuffer(context->device, fb.render_pass, 2, offscreen_image_views, extent);
+  fb.framebuffer = create_framebuffer(ctx->device, fb.render_pass, 2, offscreen_image_views, extent);
 
   return fb;
 }

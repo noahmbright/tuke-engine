@@ -39,7 +39,6 @@ int main() {
   u64 quad_pos_offset = UPLOAD_ARRAY(buffer_upload_queue, quad_positions);
   u64 index_offset = UPLOAD_ARRAY(buffer_upload_queue, unit_square_indices);
   u64 cube_offset = UPLOAD_ARRAY(buffer_upload_queue, cube_vertices);
-
   BufferManager buffer_manager = flush_buffers(&t.ctx, &buffer_upload_queue);
 
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
@@ -160,7 +159,7 @@ int main() {
     vkUpdateDescriptorSets(t.ctx.device, 1, &write, 0, NULL);
   }
 
-  VkBuffer vbuf = buffer_manager.vertex_buffer.buffer;
+  VkBuffer vbuf = buffer_manager.buffer.buffer;
   VulkanMesh triangle_mesh = {
       .num_vertices = 3,
       .instance_count = 1,
@@ -182,7 +181,7 @@ int main() {
       .vertex_buffers = {vbuf, vbuf},
       .vertex_buffer_offsets = {unit_square_pos_offset, quad_pos_offset},
       .index_buffer_offset = index_offset,
-      .index_buffer = buffer_manager.vertex_buffer.buffer,
+      .index_buffer = buffer_manager.buffer.buffer,
   };
   VulkanMesh cube_mesh = {
       .num_vertices = 36,

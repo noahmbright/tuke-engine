@@ -21,10 +21,22 @@ void init_buffers(State *state) {
 
   // big vertex/index buffers
   BufferUploadQueue buffer_upload_queue = {};
-  UPLOAD_ARRAY(buffer_upload_queue, paddle_vertices);
-  UPLOAD_ARRAY(buffer_upload_queue, unit_square_indices);
+  u64 paddle_vertices_offset = UPLOAD_ARRAY(buffer_upload_queue, paddle_vertices);
+  u64 unit_square_indices_offset = UPLOAD_ARRAY(buffer_upload_queue, unit_square_indices);
 
   state->buffer_manager = flush_buffers(ctx, &buffer_upload_queue);
+
+  // This should not be managed by the state raw - need a renderer or something
+  // This is also not very clear - I forget why one mesh handles unit square indices and paddle vertices
+  state->mesh = {
+      .num_indices = 6,
+      .instance_count = 1,
+      .num_vertex_buffers = 1,
+      .vertex_buffers = {state->buffer_manager.buffer.buffer},
+      .vertex_buffer_offsets = {paddle_vertices_offset},
+      .index_buffer = state->buffer_manager.buffer.buffer,
+      .index_buffer_offset = unit_square_indices_offset,
+  };
 
   // uniform buffer
   // TODO can I come up with a scheme for coordinating UBOs and the location of
@@ -271,19 +283,10 @@ void render(State *state) {
   vkCmdSetViewport(command_buffer, 0, 1, &state->viewport_state.viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &state->viewport_state.scissor);
 
-  VulkanMesh mesh = {
-      .num_indices = 6,
-      .instance_count = 1,
-      .num_vertex_buffers = 1,
-      .vertex_buffers = {state->buffer_manager.vertex_buffer.buffer},
-      .vertex_buffer_offsets = {0},
-      .index_buffer = state->buffer_manager.index_buffer.buffer,
-  };
+  render_mesh_material(command_buffer, &state->mesh, &state->background_material);
 
-  render_mesh_material(command_buffer, &mesh, &state->background_material);
-
-  mesh.instance_count = InstanceDataUBO_model_array_size;
-  render_mesh_material(command_buffer, &mesh, &state->paddle_material);
+  state->mesh.instance_count = InstanceDataUBO_model_array_size;
+  render_mesh_material(command_buffer, &state->mesh, &state->paddle_material);
 
   vkCmdEndRenderPass(command_buffer);
   VK_CHECK(vkEndCommandBuffer(command_buffer), "Failed to end command buffer");

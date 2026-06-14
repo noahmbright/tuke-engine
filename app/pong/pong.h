@@ -80,7 +80,6 @@ enum TextureID {
   NUM_TEXTURES
 };
 
-
 enum GameMode {
   GAMEMODE_PAUSED,
   GAMEMODE_PLAYING,
@@ -96,7 +95,6 @@ enum PongMode {
   PONG_MODE_BETWEEN_POINTS,
   PONG_MODE_LIVE_BALL,
 };
-
 
 struct UniformWrites {
   UniformWrite camera_vp;
@@ -154,6 +152,7 @@ struct State {
   BufferManager buffer_manager;
   InstanceDataUBO instance_data;
 
+  VulkanMesh mesh;
   VulkanMaterial background_material;
   VulkanMaterial paddle_material;
 

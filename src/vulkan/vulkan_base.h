@@ -140,11 +140,10 @@ typedef struct {
   DepthBuffer depth_buffers[NUM_SWAPCHAIN_IMAGES];
 } SwapchainStorage;
 
-typedef struct {
-  VkShaderModule module;
-  VkShaderStageFlagBits stage;
-  const char *entry_point;
-} ShaderModule;
+typedef enum {
+  SAMPLER_LINEAR_CLAMP,
+  NUM_SAMPLERS,
+} SamplerType;
 
 typedef struct {
   VkDevice device;
@@ -198,6 +197,8 @@ typedef struct {
   // Descriptor Set Layouts must outlive pipeline layouts, which need to outlive pipelines.
   VkDescriptorSetLayout *descriptor_set_layouts;
   u32 num_descriptor_set_layouts;
+
+  VkSampler samplers[NUM_SAMPLERS];
 } VulkanContext;
 
 typedef struct {
@@ -303,9 +304,8 @@ typedef struct {
 } BufferUploadQueue;
 
 typedef struct {
-  VulkanContext *context;
-  VulkanBuffer vertex_buffer;
-  VulkanBuffer index_buffer;
+  VulkanContext *ctx;
+  VulkanBuffer buffer;
   StagingArena staging_arena;
 } BufferManager;
 
@@ -341,8 +341,18 @@ typedef struct {
   VkDescriptorSet descriptor_sets[MAX_DESCRIPTOR_SETS];
   u32 num_descriptor_sets;
   const VkWriteDescriptorSet *descriptor_set_writes[MAX_DESCRIPTOR_SETS];
+  u32 indirection_table[MAX_DESCRIPTOR_SETS];
   u32 descriptor_set_write_lens[MAX_DESCRIPTOR_SETS];
 } VulkanMaterial;
+
+typedef struct {
+  u32 set_id; // When enum, used for indirection lookup. Could also be used raw.
+  u32 binding;
+  union {
+    VkDescriptorBufferInfo buffer_info;
+    VkDescriptorImageInfo image_info;
+  };
+} DescriptorWrite;
 
 ////////////////////////////////////////////////////////////////
 //////////////////////// PUBLIC API ////////////////////////////
@@ -444,8 +454,6 @@ UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager, u32 size
 VkVertexInputBindingDescription create_instanced_vertex_binding_description(u32 binding, u32 stride);
 VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u32 stride);
 
-u32 find_memory_type(VkPhysicalDevice physical_device, u32 type_filter, VkMemoryPropertyFlags properties);
-
 // Descriptor Sets
 void set_descriptor_set_layouts(VulkanContext *ctx, VkDescriptorSetLayout *layouts, u32 num_layouts);
 void reset_descriptor_set_layouts(VulkanContext *ctx);
@@ -498,6 +506,7 @@ static inline VkWriteDescriptorSet fill_write(const VulkanMaterial *mat, u32 set
       return w;
     }
   }
+
   assert(false);
   return {};
 }

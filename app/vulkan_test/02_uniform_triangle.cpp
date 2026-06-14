@@ -17,7 +17,7 @@ int main() {
 
   // Made a mistake with the wrong upload size here - used the wrong struct in the name.
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
-  UniformWrite handle = push_uniform(&ub_manager, sizeof(TriangleTransformation));
+  UniformWrite uniform_write = push_uniform(&ub_manager, sizeof(TriangleTransformation));
   UniformBuffer ubs[MAX_FRAMES_IN_FLIGHT];
   for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
     ubs[i] = create_uniform_buffer(&t.ctx, ub_manager.current_offset);
@@ -37,8 +37,8 @@ int main() {
 
     VkDescriptorBufferInfo descriptor_buffer_info = {
         .buffer = ubs[i].vulkan_buffer.buffer,
-        .offset = handle.offset,
-        .range = handle.size,
+        .offset = uniform_write.offset,
+        .range = uniform_write.size,
     };
     writes[0].pBufferInfo = &descriptor_buffer_info;
 
@@ -73,7 +73,7 @@ int main() {
     begin_render_pass(&t.ctx, cmd, t.rp, fb, t.clear_values, NUM_ATTACHMENTS, t.viewport_state);
 
     // This is a single draw action. Probably want some scheme for queuing this in the context
-    write_to_uniform_buffer(&ubs[t.ctx.current_frame_index], &tt, handle);
+    write_to_uniform_buffer(&ubs[t.ctx.current_frame_index], &tt, uniform_write);
     render_mesh_material(cmd, &mesh, &mats[t.ctx.current_frame_index]);
     vkCmdEndRenderPass(cmd);
 

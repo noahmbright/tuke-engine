@@ -39,6 +39,44 @@ inline VkPipeline shader_handles_to_graphics_pipeline(
   return pipeline;
 }
 
+inline void
+update_vulkan_material(const VulkanContext *ctx, const DescriptorWrite *writes, u32 num_writes, VulkanMaterial *mat) {
+  assert(num_writes < 16);
+  VkWriteDescriptorSet vk_writes[16] = {};
+
+  for (u32 write_idx = 0; write_idx < num_writes; write_idx++) {
+    const DescriptorWrite *write = &writes[write_idx];
+
+    // Find set
+    u32 set = mat->num_descriptor_sets;
+    for (u32 i = 0; i < mat->num_descriptor_sets; i++) {
+      if (write->set_id == mat->indirection_table[i]) {
+        set = i;
+        break;
+      }
+    }
+    assert(set != mat->num_descriptor_sets);
+
+    const VkWriteDescriptorSet *templates = mat->descriptor_set_writes[set];
+
+    u32 len = mat->descriptor_set_write_lens[set];
+    for (u32 i = 0; i < len; i++) {
+      if (templates[i].dstBinding == write->binding) {
+        vk_writes[write_idx] = templates[i];
+        vk_writes[write_idx].dstSet = mat->descriptor_sets[set];
+
+        if (vk_writes[write_idx].descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+          vk_writes[write_idx].pBufferInfo = &writes[write_idx].buffer_info;
+        } else if (vk_writes[write_idx].descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+          vk_writes[write_idx].pImageInfo = &writes[write_idx].image_info;
+        }
+      }
+    }
+  }
+
+  vkUpdateDescriptorSets(ctx->device, num_writes, vk_writes, 0, NULL);
+}
+
 // TODO would like this render pass removed
 inline void
 init_program_spec(VulkanContext *ctx, VkRenderPass render_pass, const ProgramSpec *spec, VulkanMaterial *mat) {
@@ -66,6 +104,8 @@ init_program_spec(VulkanContext *ctx, VkRenderPass render_pass, const ProgramSpe
     mat->descriptor_sets[i] = descriptor_set;
     mat->descriptor_set_writes[i] = spec->write_templates[i];
     mat->descriptor_set_write_lens[i] = spec->binding_list_lens[i];
+
+    mat->indirection_table[i] = spec->binding_list_ids[i];
   }
   mat->num_descriptor_sets = spec->num_descriptor_set_layouts;
 

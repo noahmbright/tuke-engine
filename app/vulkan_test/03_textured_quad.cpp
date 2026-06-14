@@ -1,6 +1,7 @@
 #include "generated_shader_utils.h"
 
 #include "shaders.h"
+#include "tuke_engine.h"
 #include "vulkan_test_common.h"
 #include "window.h"
 
@@ -26,15 +27,19 @@ int main() {
   VulkanMaterial mat;
   init_program_spec(&t.ctx, t.rp, &common_textured_quad_bringup_program_spec, &mat);
 
-  VkSampler sampler = create_sampler(t.ctx.device);
-  VkDescriptorImageInfo image_info = {
-      .sampler = sampler,
-      .imageView = texture.image_view,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  DescriptorWrite writes[] = {
+      {
+          .set_id = LAYOUT_ID_TEXTURED_QUAD_BRINGUP,
+          .binding = 0,
+          .image_info = {
+              .sampler = t.ctx.samplers[SAMPLER_LINEAR_CLAMP],
+              .imageView = texture.image_view,
+              .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+          },
+      },
   };
-  VkWriteDescriptorSet writes = fill_write(&mat, 0, 0);
-  writes.pImageInfo = &image_info;
-  vkUpdateDescriptorSets(t.ctx.device, 1, &writes, 0, NULL);
+
+  update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &mat);
 
   VulkanMesh mesh = {
       .num_vertices = 6,
@@ -57,7 +62,6 @@ int main() {
   }
 
   vkDeviceWaitIdle(t.ctx.device);
-  vkDestroySampler(t.ctx.device, sampler, NULL);
   destroy_vulkan_material(t.ctx.device, &mat);
   destroy_vulkan_texture(t.ctx.device, &texture);
   destroy_vulkan_test(&t);

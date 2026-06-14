@@ -1,5 +1,4 @@
 #include "physics.h"
-#include "glm/glm.hpp"
 #include "tuke_engine.h"
 
 glm::vec3 random_unit_vec3(RNG *rng) {
