@@ -22,16 +22,7 @@ void destroy_swapchain(VulkanContext *ctx) {
 
   // swapchain image views
   for (u32 i = 0; i < storage->image_count; i++) {
-    if (storage->use_static) {
-      vkDestroyImageView(ctx->device, storage->as.static_storage.image_views[i], NULL);
-    } else {
-      vkDestroyImageView(ctx->device, storage->as.dynamic_storage.image_views[i], NULL);
-    }
-  }
-
-  if (!ctx->swapchain_storage.use_static) {
-    free(storage->as.dynamic_storage.image_views);
-    free(storage->as.dynamic_storage.images);
+    vkDestroyImageView(ctx->device, storage->image_views[i], NULL);
   }
 
   for (u32 i = 0; i < NUM_SWAPCHAIN_IMAGES; i++) {
@@ -545,8 +536,6 @@ VkSwapchainKHR create_swapchain(
     }
   }
 
-  // TODO Need to better understand all these fields, and better understand swapchain creation in
-  //      general. I may want to move away from the static/dynamic storage thing in the context.
   // TODO What is v-sync?
   // https://registry.khronos.org/vulkan/specs/latest/man/html/VkSwapchainCreateInfoKHR.html
   VkSwapchainCreateInfoKHR swapchain_ci = {
@@ -810,51 +799,27 @@ DepthBuffer create_depth_buffer(VulkanContext *ctx) {
 
 static SwapchainStorage create_swapchain_storage(VulkanContext *ctx) {
   SwapchainStorage storage;
-  storage.use_static = true;
 
   // Query swapchain for image count. The swapchain owns the images we present to, so it is necessary
   // to ask for them. We cannot hardcode them in the application.
-  u32 swapchain_image_count;
-  VkResult result = vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &swapchain_image_count, NULL);
-
-  VkImage *images;
-  VkImageView *image_views;
-  if (swapchain_image_count > NUM_SWAPCHAIN_IMAGES) {
-    storage.use_static = false;
-    storage.as.dynamic_storage.images = (VkImage *)malloc(swapchain_image_count * sizeof(VkImage));
-    storage.as.dynamic_storage.image_views = (VkImageView *)malloc(swapchain_image_count * sizeof(VkImageView));
-
-    if (!storage.as.dynamic_storage.images || !storage.as.dynamic_storage.image_views) {
-      fprintf(stderr, "Failed to allocate memory for swapchain storage\n");
-      exit(1);
-    }
-    images = storage.as.dynamic_storage.images;
-    image_views = storage.as.dynamic_storage.image_views;
-  } else {
-    images = storage.as.static_storage.images;
-    image_views = storage.as.static_storage.image_views;
-  }
-
-  result = vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &swapchain_image_count, images);
+  u32 image_count;
+  VkResult result = vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &image_count, NULL);
   VK_CHECK(result, "Failed to get swapchain images");
-  storage.image_count = swapchain_image_count;
 
-  for (u32 i = 0; i < swapchain_image_count; i++) {
+  assert(image_count < NUM_SWAPCHAIN_IMAGES);
+  storage.image_count = image_count;
+
+  result = vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &image_count, storage.images);
+  VK_CHECK(result, "Failed to get swapchain images");
+
+  VkFormat surface_format = ctx->surface_format.format;
+  for (u32 i = 0; i < image_count; i++) {
     VkImageAspectFlags aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT;
-    VkFormat surface_format = ctx->surface_format.format;
-
-    if (storage.use_static) {
-      VkImage image = images[i];
-      image_views[i] = create_default_image_view(ctx, image, surface_format, aspect_flags);
-    } else {
-      VkImage image = images[i];
-      image_views[i] = create_default_image_view(ctx, image, surface_format, aspect_flags);
-    }
+    storage.image_views[i] = create_default_image_view(ctx, storage.images[i], surface_format, aspect_flags);
   }
 
   // TODO Want to better manage depth buffers and not have a hardcoded depth/color framebuffer in the context
-  // TODO why am I using NUM_SWAPCHAIN_IMAGES instead of swapchain_image_count?
-  for (u32 i = 0; i < NUM_SWAPCHAIN_IMAGES; i++) {
+  for (u32 i = 0; i < storage.image_count; i++) {
     storage.depth_buffers[i] = create_depth_buffer(ctx);
   }
 
@@ -1006,8 +971,7 @@ VkFramebuffer create_framebuffer(
     VkImageView *image_view_attachments,
     VkExtent2D extent
 ) {
-
-  VkFramebufferCreateInfo framebuffer_create_info = {
+  VkFramebufferCreateInfo framebuffer_ci = {
       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
@@ -1020,7 +984,7 @@ VkFramebuffer create_framebuffer(
   };
 
   VkFramebuffer framebuffer;
-  VkResult result = vkCreateFramebuffer(device, &framebuffer_create_info, NULL, &framebuffer);
+  VkResult result = vkCreateFramebuffer(device, &framebuffer_ci, NULL, &framebuffer);
   VK_CHECK(result, "Failed to create framebuffer");
   return framebuffer;
 }
@@ -1029,32 +993,27 @@ void init_framebuffers(VulkanContext *ctx) {
   for (u32 i = 0; i < ctx->swapchain_storage.image_count; i++) {
 
     const SwapchainStorage *storage = &ctx->swapchain_storage;
-    VkImageView color_view =
-        storage->use_static ? storage->as.static_storage.image_views[i] : storage->as.dynamic_storage.image_views[i];
-
+    VkImageView color_view = storage->image_views[i];
     VkImageView views[] = {color_view, ctx->swapchain_storage.depth_buffers[i].image_view};
     ctx->framebuffers[i] =
         create_framebuffer(ctx->device, ctx->render_pass, NUM_ATTACHMENTS, views, ctx->swapchain_extent);
   }
 }
 
-void recreate_swapchain(VulkanContext *context) {
-  vkDeviceWaitIdle(context->device);
-  destroy_swapchain(context);
+void recreate_swapchain(VulkanContext *ctx) {
+  vkDeviceWaitIdle(ctx->device);
+  destroy_swapchain(ctx);
 
-  VkSurfaceCapabilitiesKHR surface_capabilities = get_surface_capabilities(context->physical_device, context->surface);
-  context->swapchain_extent = get_swapchain_extent(0, 0, surface_capabilities);
+  VkSurfaceCapabilitiesKHR surface_capabilities = get_surface_capabilities(ctx->physical_device, ctx->surface);
+  ctx->swapchain_extent = get_swapchain_extent(0, 0, surface_capabilities);
 
-  context->swapchain = create_swapchain(
-      context->device, context->physical_device, context->surface, context->queue_family_indices,
-      context->surface_format, surface_capabilities, context->swapchain_extent
+  ctx->swapchain = create_swapchain(
+      ctx->device, ctx->physical_device, ctx->surface, ctx->queue_family_indices, ctx->surface_format,
+      surface_capabilities, ctx->swapchain_extent
   );
 
-  // Why am I not assigning the result of this?
-  // Why am I doing it after creating the swapchain?
-  create_swapchain_storage(context);
-
-  init_framebuffers(context);
+  ctx->swapchain_storage = create_swapchain_storage(ctx);
+  init_framebuffers(ctx);
 }
 
 void create_frame_sync_objects(VkDevice device, FrameSyncObjects *frame_sync_objects) {
@@ -1736,9 +1695,9 @@ void begin_frame(VulkanContext *ctx) {
   }
 }
 
-VkCommandBuffer begin_command_buffer(const VulkanContext *context) {
-  VkCommandBuffer command_buffer = context->graphics_cmd_buffers[context->image_index];
-  assert(command_buffer != VK_NULL_HANDLE);
+VkCommandBuffer begin_command_buffer(const VulkanContext *ctx) {
+  VkCommandBuffer cmd = ctx->graphics_cmd_buffers[ctx->image_index];
+  assert(cmd != VK_NULL_HANDLE);
 
   VkCommandBufferBeginInfo command_buffer_begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -1747,9 +1706,9 @@ VkCommandBuffer begin_command_buffer(const VulkanContext *context) {
       .pInheritanceInfo = NULL,
   };
 
-  VkResult result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+  VkResult result = vkBeginCommandBuffer(cmd, &command_buffer_begin_info);
   VK_CHECK(result, "Failed to vkBeginCommandBuffer()");
-  return command_buffer;
+  return cmd;
 }
 
 void begin_render_pass(

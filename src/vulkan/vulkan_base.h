@@ -117,8 +117,6 @@ typedef struct {
   int compute_family;
 } QueueFamilyIndices;
 
-// History: here is the first C typedef struct of this project's life cycle.
-//          At least, the first one I noticed (may have copied another one before, whoops)
 typedef struct {
   u32 extension_count;
   const char **extensions;
@@ -128,7 +126,6 @@ typedef struct {
   int height;
 } VulkanWindowInfo;
 
-// TODO is this necessary as a swapchain member?
 typedef struct {
   VkImage image;
   VkImageView image_view;
@@ -136,20 +133,9 @@ typedef struct {
 } DepthBuffer;
 
 typedef struct {
-  bool use_static;
-
   u32 image_count;
-  union {
-    struct {
-      VkImage images[NUM_SWAPCHAIN_IMAGES];
-      VkImageView image_views[NUM_SWAPCHAIN_IMAGES];
-    } static_storage;
-
-    struct {
-      VkImage *images;
-      VkImageView *image_views;
-    } dynamic_storage;
-  } as;
+  VkImage images[NUM_SWAPCHAIN_IMAGES];
+  VkImageView image_views[NUM_SWAPCHAIN_IMAGES];
 
   DepthBuffer depth_buffers[NUM_SWAPCHAIN_IMAGES];
 } SwapchainStorage;
@@ -210,7 +196,6 @@ typedef struct {
   bool present_queue_index_is_different_than_graphics;
 
   // Descriptor Set Layouts must outlive pipeline layouts, which need to outlive pipelines.
-  // Layouts are only touched at creation and destruction.
   VkDescriptorSetLayout *descriptor_set_layouts;
   u32 num_descriptor_set_layouts;
 } VulkanContext;
