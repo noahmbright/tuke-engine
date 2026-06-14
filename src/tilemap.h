@@ -1,5 +1,6 @@
 #pragma once
 
+#include "glm/glm.hpp"
 #include "tuke_engine.h"
 #include <stdio.h>
 
@@ -26,8 +27,10 @@ struct TileQuad {
 };
 
 inline void log_tile_vertex(const TileVertex *tile_vertex) {
-  printf("  %f %f %f, %f %f, %u\n", tile_vertex->position[0], tile_vertex->position[1], tile_vertex->position[2],
-         tile_vertex->texture_coords[0], tile_vertex->texture_coords[1], tile_vertex->texture_id);
+  printf(
+      "  %f %f %f, %f %f, %u\n", tile_vertex->position[0], tile_vertex->position[1], tile_vertex->position[2],
+      tile_vertex->texture_coords[0], tile_vertex->texture_coords[1], tile_vertex->texture_id
+  );
 }
 
 // by default, assume the center of the tilemap is at (0,0) in its local coordinate system

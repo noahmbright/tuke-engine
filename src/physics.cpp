@@ -1,4 +1,5 @@
 #include "physics.h"
+#include "glm/glm.hpp"
 #include "tuke_engine.h"
 
 glm::vec3 random_unit_vec3(RNG *rng) {
@@ -59,8 +60,8 @@ bool aabb_collision_vec2(glm::vec2 pos1, glm::vec2 size1, glm::vec2 pos2, glm::v
   return x_overlaps && y_overlaps;
 }
 
-static inline bool swept_aabb_get_entry_exit_times(f32 v_rel, f32 min1, f32 max1, f32 min2, f32 max2, f32 *t_entry_out,
-                                                   f32 *t_exit_out) {
+static inline bool
+swept_aabb_get_entry_exit_times(f32 v_rel, f32 min1, f32 max1, f32 min2, f32 max2, f32 *t_entry_out, f32 *t_exit_out) {
 
   // compute distances for entry/exit
   f32 d_entry, d_exit;
@@ -89,8 +90,9 @@ static inline bool swept_aabb_get_entry_exit_times(f32 v_rel, f32 min1, f32 max1
 }
 
 // https://www.gamedev.net/tutorials/programming/general-and-gameplay-programming/swept-aabb-collision-detection-and-response-r3084/
-SweptAABBCollisionCheck swept_aabb_collision(f32 dt, glm::vec3 pos1, glm::vec3 size1, glm::vec3 v1, glm::vec3 pos2,
-                                             glm::vec3 size2, glm::vec3 v2) {
+SweptAABBCollisionCheck swept_aabb_collision(
+    f32 dt, glm::vec3 pos1, glm::vec3 size1, glm::vec3 v1, glm::vec3 pos2, glm::vec3 size2, glm::vec3 v2
+) {
 
   SweptAABBCollisionCheck swept_aabb_collision_check;
   swept_aabb_collision_check.t = 0.0f;

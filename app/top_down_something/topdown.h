@@ -84,12 +84,6 @@ const f32 player_vertices[] = {
 inline void buffer_vp_matrix_to_gl_ubo(const CameraMatrices *camera_matrices, u32 ubo) {
   glm::mat4 vp = camera_matrices->projection * camera_matrices->view;
 
-#ifndef NDEBUG
-  if (matrix_has_nan(camera_matrices->view)) {
-    exit(1);
-  }
-#endif
-
   glBindBuffer(GL_UNIFORM_BUFFER, ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(vp), &vp);
 }
@@ -281,8 +275,9 @@ inline OverworldPlayerIntent overworld_process_inputs(const Inputs *inputs) {
   return player_intent;
 }
 
-static inline void move_player_in_tilemap(glm::vec2 movement_vector, const Tilemap *tilemap, glm::vec3 *player_pos,
-                                          u8 *x_tile, u8 *y_tile) {
+static inline void move_player_in_tilemap(
+    glm::vec2 movement_vector, const Tilemap *tilemap, glm::vec3 *player_pos, u8 *x_tile, u8 *y_tile
+) {
 
   const glm::vec3 tile_size(PLAYER_SIDE_LENGTH_METERS);
   glm::vec3 final_movement_vector(0.0f);

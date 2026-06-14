@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tuke_engine.h"
+#include "utils.h"
 
 // TODO do I need this?
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -42,9 +43,13 @@ const glm::vec3 CAMERA_DIRECTION0 = glm::vec3(0.0, 0.0, -1.0);
 const glm::vec3 CAMERA_UP0 = glm::vec3(0.0, 1.0, 0.0);
 const glm::vec3 CAMERA_RIGHT0 = glm::vec3(1.0, 0.0, 0.0);
 
-Camera create_camera(CameraType type, const glm::vec3 pos = CAMERA_POSITION0,
-                     const glm::vec3 direction = CAMERA_DIRECTION0, const glm::vec3 up = CAMERA_UP0,
-                     const glm::vec3 right = CAMERA_RIGHT0);
+Camera create_camera(
+    CameraType type,
+    const glm::vec3 pos = CAMERA_POSITION0,
+    const glm::vec3 direction = CAMERA_DIRECTION0,
+    const glm::vec3 up = CAMERA_UP0,
+    const glm::vec3 right = CAMERA_RIGHT0
+);
 
 // xpos and y pos are the positions of the mouse queried from GLFW
 // This function assumes that direction is always synced with pitch and yaw.
@@ -79,8 +84,10 @@ inline glm::mat4 camera_lookat_with_offset(const Camera *camera, glm::vec3 offse
 
 inline glm::mat4 camera_perspective_projection(const Camera *camera, u32 window_width, u32 window_height) {
   f32 aspect_ratio = f32(window_width) / f32(window_height);
-  glm::mat4 proj = glm::perspective(glm::radians(camera->fovy), aspect_ratio, CAMERA_PERSPECTIVE_PROJECTION_NEAR_Z,
-                                    CAMERA_PERSPECTIVE_PROJECTION_FAR_Z);
+  glm::mat4 proj = glm::perspective(
+      glm::radians(camera->fovy), aspect_ratio, CAMERA_PERSPECTIVE_PROJECTION_NEAR_Z,
+      CAMERA_PERSPECTIVE_PROJECTION_FAR_Z
+  );
   proj[1][1] = camera->y_needs_inverted ? -proj[1][1] : proj[1][1];
   return proj;
 }
@@ -92,8 +99,8 @@ inline CameraMatrices create_camera_matrices(const Camera *camera, u32 window_wi
   return camera_matrices;
 }
 
-inline CameraMatrices camera_matrices_with_offset(const Camera *camera, glm::vec3 offset, u32 window_width,
-                                                  u32 window_height) {
+inline CameraMatrices
+camera_matrices_with_offset(const Camera *camera, glm::vec3 offset, u32 window_width, u32 window_height) {
   CameraMatrices camera_matrices;
   camera_matrices.view = camera_lookat_with_offset(camera, offset);
   camera_matrices.projection = camera_perspective_projection(camera, window_width, window_height);

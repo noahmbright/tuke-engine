@@ -1,9 +1,9 @@
 #pragma once
 
-#include "glm/glm.hpp"
 #include <stdint.h>
 
-#define member_size(type, member) (sizeof(((type *)0)->member))
+#define MEMBER_SIZE(type, member) (sizeof(((type *)0)->member))
+#define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof(arr[0]))
 
 using u8 = uint8_t;
 using u16 = uint16_t;
@@ -23,21 +23,3 @@ const f32 PI_OVER_2 = PI / 2.0f;
 const f32 EPSILON = 1e-9;
 const f32 INFINITY_F32 = 1.0f / 0.0f;
 const f64 INFINITY_F64 = 1.0 / 0.0;
-
-static inline void log_vec3(const glm::vec3 *v) {
-  const char *fmt = "%+9.3f";
-  printf(fmt, v->x);
-  printf(" ");
-  printf(fmt, v->y);
-  printf(" ");
-  printf(fmt, v->z);
-  printf("\n");
-}
-
-static inline void log_vec2(const glm::vec2 *v) {
-  const char *fmt = "%+9.3f";
-  printf(fmt, v->x);
-  printf(" ");
-  printf(fmt, v->y);
-  printf("\n");
-}

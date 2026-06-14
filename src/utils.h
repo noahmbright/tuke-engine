@@ -2,6 +2,9 @@
 
 #include "tuke_engine.h"
 
+#include <glm/glm.hpp>
+#include <stdio.h>
+
 struct STBHandle {
   int width;
   int height;
@@ -41,3 +44,20 @@ inline bool matrix_has_nan(const glm::mat4 &mat) {
 }
 
 inline f32 sign_f32(f32 x) { return x >= 0.0f ? 1.0f : -1.0f; }
+static inline void log_vec3(const glm::vec3 *v) {
+  const char *fmt = "%+9.3f";
+  printf(fmt, v->x);
+  printf(" ");
+  printf(fmt, v->y);
+  printf(" ");
+  printf(fmt, v->z);
+  printf("\n");
+}
+
+static inline void log_vec2(const glm::vec2 *v) {
+  const char *fmt = "%+9.3f";
+  printf(fmt, v->x);
+  printf(" ");
+  printf(fmt, v->y);
+  printf("\n");
+}

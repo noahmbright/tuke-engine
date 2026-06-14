@@ -2,22 +2,21 @@
 #include "tuke_engine.h"
 
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #define SCRATCH_THRESHOLD (1024)
 
-void init_alias_method(AliasMethod *alias_method, u32 n, const f32 *weights,
-                       u64 seed) {
+void init_alias_method(AliasMethod *alias_method, u32 n, const f32 *weights, u64 seed) {
   alias_method->n = n;
   alias_method->rng = create_rng(seed);
 
   // set internal pointers correctly
   if (n > STATIC_ALIAS_THRESHOLD) {
-    alias_method->dynamic_buffer =
-        (u8 *)malloc(n * (sizeof(f32) + sizeof(u32)));
+    alias_method->dynamic_buffer = (u8 *)malloc(n * (sizeof(f32) + sizeof(u32)));
     assert(alias_method->dynamic_buffer);
     alias_method->probability_table = (f32 *)alias_method->dynamic_buffer;
-    alias_method->alias_table =
-        (u32 *)(alias_method->dynamic_buffer + n * sizeof(f32));
+    alias_method->alias_table = (u32 *)(alias_method->dynamic_buffer + n * sizeof(f32));
   } else {
     alias_method->dynamic_buffer = NULL;
     alias_method->probability_table = alias_method->static_probability_table;
@@ -72,8 +71,7 @@ void init_alias_method(AliasMethod *alias_method, u32 n, const f32 *weights,
 
     // the excess probability of getting l moved into s
     f32 delta_p = 1.0f - alias_method->probability_table[i_small];
-    alias_method->probability_table[i_large] =
-        alias_method->probability_table[i_large] - delta_p;
+    alias_method->probability_table[i_large] = alias_method->probability_table[i_large] - delta_p;
 
     if (alias_method->probability_table[i_large] < 1.0f) {
       small[small_top++] = i_large;
@@ -129,7 +127,6 @@ void log_alias_method(const AliasMethod *alias_method) {
 
   printf("i | probability[i] | alias[i] \n");
   for (u32 i = 0; i < alias_method->n; i++) {
-    printf("%d %f %d\n", i, alias_method->probability_table[i],
-           alias_method->alias_table[i]);
+    printf("%d %f %d\n", i, alias_method->probability_table[i], alias_method->alias_table[i]);
   }
 }

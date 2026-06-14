@@ -577,7 +577,7 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
   u32 enemy_program = shader_handles_to_gl_program(SHADER_HANDLE_TOPDOWN_ENEMY_VERT, SHADER_HANDLE_TOPDOWN_ENEMY_FRAG);
 
   GLMesh enemy_mesh;
-  enemy_mesh.vbos[0] = allocate_vbo(member_size(EnemyManager, render_data), GL_DYNAMIC_DRAW);
+  enemy_mesh.vbos[0] = allocate_vbo(MEMBER_SIZE(EnemyManager, render_data), GL_DYNAMIC_DRAW);
   enemy_mesh.num_vbos = 1;
   enemy_mesh.num_vertices = 4;
   init_gl_mesh_vao(&enemy_mesh, SHADER_HANDLE_TOPDOWN_ENEMY_VERT);
