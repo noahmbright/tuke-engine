@@ -60,6 +60,7 @@ void free_shader_to_compile_list(ShaderToCompileList *shader_to_compile_list) {
     if (shader_to_compile_list != NULL) {
       free((void *)shader_to_compile_list->shaders[i].source);
       free((void *)shader_to_compile_list->shaders[i].name);
+      free((void *)shader_to_compile_list->shaders[i].source_path);
       shader_to_compile_list->shaders[i].source = NULL;
     } else {
       fprintf(stderr, "Attemped to free memory from ShaderToCompile when null\n");
@@ -313,6 +314,7 @@ ShaderToCompileList collect_shaders_to_compile(
           .source_length = source_length,
           .name = shader_name,
           .name_len = shader_name_length,
+          .source_path = strdup(full_path),
       };
     } // nested loop over files in subdir
     closedir(subdirectory);

@@ -264,12 +264,11 @@ inline void token_vector_free(TokenVector *token_vector) {
   token_vector->tokens = NULL;
 }
 
-// parser state and APIs
 typedef struct {
-  const char *source;
-  u64 source_length;
+  bool success;
   TokenVector tokens;
   u32 token_index;
+  const ShaderToCompile *input;
 } Parser;
 
 typedef struct {

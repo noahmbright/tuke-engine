@@ -432,27 +432,28 @@ static TokenVector lex_string(const char *string, u64 string_length) {
 
 static void
 report_parser_error(Parser *parser, const char *token_start, TokenType recovery_token_type, const char *fmt, ...) {
-  const char *start = token_start, *end = token_start;
-  while (start > parser->source && *start != '\n') {
+  const char *start = token_start;
+  while (start > parser->input->source && *start != '\n') {
     start--;
   }
   if (*start == '\n') {
     start++;
   }
 
-  const char *source_end = parser->source + parser->source_length;
+  const char *source_end = parser->input->source + parser->input->source_length;
+  const char *end = token_start;
   while (end < source_end && *end != '\n') {
     end++;
   }
-  char buffer[512]; // stack buffer for formatted message
+  char buffer[2048];
   va_list args;
   va_start(args, fmt);
   vsnprintf(buffer, sizeof(buffer), fmt, args);
   va_end(args);
 
-  printf("%sERROR%s: ", RED, RESET);
-  printf("%s\n", buffer);                        // print message
-  printf("\t%.*s\n", (int)(end - start), start); // print offending line
+  printf("%sERROR%s: %s\n", RED, RESET, parser->input->source_path);
+  printf("       %s\n", buffer);                      // print message
+  printf("       %.*s\n", (int)(end - start), start); // print offending line
 
   while (still_valid(parser)) {
     Token cur_tok = get_current_token(parser);
@@ -461,6 +462,8 @@ report_parser_error(Parser *parser, const char *token_start, TokenType recovery_
     }
     advance(parser);
   }
+
+  parser->success = false;
 }
 
 static void parse_version_directive(Parser *parser, TemplateStringSlice *template_slice) {
@@ -1436,19 +1439,19 @@ static u32 find_label_set_number(ShaderProgram *prog, DescriptorSetLayout *layou
   return prog->num_descriptor_set_layouts - 1;
 }
 
-static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
+static bool parse_shader(const ShaderToCompile *input, ParsedShadersIR *ir) {
   Parser parser = {
-      .tokens = lex_string(input.source, input.source_length),
-      .source = input.source,
-      .source_length = input.source_length,
+      .success = true,
+      .tokens = lex_string(input->source, input->source_length),
       .token_index = 0,
+      .input = input,
   };
 
   u32 slice_idx = 0;
   ParsedShader *parsed_shader = &ir->parsed_shaders[ir->num_parsed_shaders++];
-  *parsed_shader = {.name = input.name, .stage = input.stage};
+  *parsed_shader = {.name = input->name, .stage = input->stage};
   VertexLayout vertex_layout = {};
-  TemplateStringSlice glsl_slice = {.start = input.source, .type = DIRECTIVE_TYPE_GLSL_SOURCE};
+  TemplateStringSlice glsl_slice = {.start = input->source, .type = DIRECTIVE_TYPE_GLSL_SOURCE};
   ShaderProgram *program = attach_shader_to_program(ir, parsed_shader);
 
   while (still_valid(&parser)) {
@@ -1464,7 +1467,7 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
       parsed_shader->slices[slice_idx++] = glsl_slice;
     }
 
-    TemplateStringSlice slice = {.start = input.source};
+    TemplateStringSlice slice = {.start = input->source};
 
     cur_tok = get_next_token(&parser);
     switch (cur_tok.type) {
@@ -1492,13 +1495,13 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
 
     case TOKEN_TYPE_DIRECTIVE_LOCATION: {
       slice.type = DIRECTIVE_TYPE_LOCATION;
-      LocationDirectiveParse location_parse = parse_location_directive(&parser, input.stage, &slice);
+      LocationDirectiveParse location_parse = parse_location_directive(&parser, input->stage, &slice);
       u32 location = location_parse.vertex_attribute.location;
 
       if (location_parse.vertex_attribute.glsl_type != GLSL_TYPE_NULL) {
         assert(input.stage == SHADER_STAGE_VERTEX);
         if (vertex_layout.attributes[location].is_valid) {
-          fprintf(stderr, "Found repeat location %u for vertex layout in %s.\n", location, input.name);
+          fprintf(stderr, "Found repeat location %u for vertex layout in %s.\n", location, input->name);
         } else {
           vertex_layout.attributes[location] = location_parse.vertex_attribute;
         }
@@ -1526,7 +1529,7 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
       slice.type = DIRECTIVE_TYPE_SET_BINDING;
 
       SetBindingDirectiveParse sb_parse = parse_set_binding_directive(&parser, &slice);
-      sb_parse.stage = input.stage;
+      sb_parse.stage = input->stage;
       glsl_slice.start = sb_parse.next_glsl_source_start;
 
       // May have a new struct, or may be a redefintion of one with the same name.
@@ -1536,8 +1539,8 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
         const GLSLStruct *matching_struct = search_structs(new_struct, ir);
 
         if (matching_struct == NULL) { // Discovered new struct.
-          sb_parse.glsl_struct.discovered_shader_name = input.name;
-          sb_parse.glsl_struct.discovered_shader_name_len = input.name_len;
+          sb_parse.glsl_struct.discovered_shader_name = input->name;
+          sb_parse.glsl_struct.discovered_shader_name_len = input->name_len;
 
           ir->structs[ir->num_structs] = sb_parse.glsl_struct;
           persistent_struct = &ir->structs[ir->num_structs++];
@@ -1548,7 +1551,7 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
           if (mismatch) {
             const GLSLStruct *match = matching_struct;
             fprintf(stderr, "Conflicting definitions for %.*s.\n", new_struct->type_name_len, new_struct->type_name);
-            fprintf(stderr, "New found in %.*s:\n", input.name_len, input.name);
+            fprintf(stderr, "New found in %.*s:\n", input->name_len, input->name);
             log_glsl_struct(stderr, new_struct);
             fprintf(stderr, "Old found in %.*s:\n", match->discovered_shader_name_len, match->discovered_shader_name);
             log_glsl_struct(stderr, matching_struct);
@@ -1582,8 +1585,8 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
 
       DescriptorBinding *binding = &layout->bindings[sb_parse.binding];
       if (binding_is_new) {
-        binding->discovered_shader_name = input.name;
-        binding->discovered_shader_name_len = input.name_len;
+        binding->discovered_shader_name = input->name;
+        binding->discovered_shader_name_len = input->name_len;
         binding->glsl_struct = persistent_struct;
       } else {
         if (binding->glsl_struct != persistent_struct) {
@@ -1591,7 +1594,7 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
               stderr, "Set %.*s, binding %u: conflicting struct types.\n", layout->name_length, layout->name,
               sb_parse.binding
           );
-          fprintf(stderr, "New found in %.*s:\n", input.name_len, input.name);
+          fprintf(stderr, "New found in %.*s:\n", input->name_len, input->name);
           log_glsl_struct(stderr, persistent_struct);
           fprintf(stderr, "Old found in %.*s:\n", binding->discovered_shader_name_len, binding->discovered_shader_name);
           log_glsl_struct(stderr, binding->glsl_struct);
@@ -1629,14 +1632,14 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
     parsed_shader->slices[slice_idx++] = slice;
   } // finished parsing
 
-  glsl_slice.end = input.source + input.source_length;
+  glsl_slice.end = input->source + input->source_length;
   if (glsl_slice.start != glsl_slice.end) {
     parsed_shader->slices[slice_idx++] = glsl_slice;
   }
 
   // TODO rwlocks
   // validate vertex layouts
-  if (input.stage == SHADER_STAGE_VERTEX) {
+  if (input->stage == SHADER_STAGE_VERTEX) {
     if (vertex_layout_validate_and_compute_offsets(&vertex_layout)) {
       // if this vertex layout is valid, check that it doesn't match an existing one
       const VertexLayout *matching_layout = NULL;
@@ -1655,14 +1658,14 @@ static bool parse_shader(ShaderToCompile input, ParsedShadersIR *ir) {
       }
     } else {
       // release locks?
-      fprintf(stderr, "Failed to validate vertex layout for %s.\n", input.name);
+      fprintf(stderr, "Failed to validate vertex layout for %s.\n", input->name);
       return true;
     }
   }
 
   parsed_shader->num_slices = slice_idx;
   token_vector_free(&parser.tokens);
-  return true;
+  return parser.success;
 }
 
 ParsedShadersIR parse_shaders(const ShaderToCompileList *shaders) {
@@ -1671,7 +1674,7 @@ ParsedShadersIR parse_shaders(const ShaderToCompileList *shaders) {
 
   ir.parsing_successful = true;
   for (u32 i = 0; i < shaders->num_shaders; i++) {
-    bool successful = parse_shader(shaders->shaders[i], &ir);
+    bool successful = parse_shader(&shaders->shaders[i], &ir);
     if (!successful) {
       ir.parsing_successful = false;
     }

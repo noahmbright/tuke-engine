@@ -11,13 +11,14 @@ struct SubdirectoryList {
   char subdirectories[MAX_NUM_SUBDIRECTORIES][SUBDIRECTORY_PATH_BUFFER_LENGTH];
 };
 
-// ShaderToCompile is the owner of source and name. Responsible for freeing both.
+// ShaderToCompile is the owner of source, name, and source_path. Responsible for freeing all three.
 struct ShaderToCompile {
   ShaderStage stage;
   const char *source;
   u64 source_length;
   const char *name;
   u32 name_len;
+  const char *source_path;
 };
 
 struct ShaderToCompileList {

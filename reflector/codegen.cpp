@@ -164,7 +164,10 @@ static void start_spirv_compilation(CompileJob *jobs, const GLSLSource *sources,
     }
 
     if (pid == 0) {
-      // we're the child, we are going to invoke the validator
+      int devnull = open("/dev/null", O_WRONLY);
+      dup2(devnull, STDOUT_FILENO);
+      close(devnull);
+
       // Child: exec glslangValidator
       // glslangValidator -S <stage> -V -o <out> <in>
       char *stage_str = (char *)shader_stage_to_string[sources[i].stage];
