@@ -65,3 +65,7 @@ This lets non-rendering code (simulation, asset system, UI logic) include only
 
 - Push constant parsing is a stub (`parse_push_constant_directive` does nothing).
 - Add `const char *source_path` to `ShaderSpec` for hot reload.
+- Emit per-label binding constants. For each binding in a label, emit
+  `#define BINDING_<LABEL>_<UPPERCASE_INSTANCE_NAME> <number>`. Data already
+  exists in the codegen loop that emits `<LABEL>_descriptor_set_layout_bindings[]`.
+  Eliminates raw binding numbers from `DescriptorWrite` call sites.
