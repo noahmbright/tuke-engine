@@ -47,7 +47,7 @@ int main() {
   }
 
   VulkanMesh mesh = {
-      .num_vertices = 3,
+      .vertex_count = 3,
       .instance_count = 1,
   };
 

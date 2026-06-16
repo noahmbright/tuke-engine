@@ -28,18 +28,17 @@ int main() {
   VulkanTexture textures[NUM_TEXTURES];
   load_vulkan_textures(&t.ctx, texture_names, NUM_TEXTURES, textures);
 
-  VkSampler sampler = create_sampler(t.ctx.device);
   ColorDepthFramebuffer offscreen_framebuffer =
       create_color_depth_framebuffer(&t.ctx, t.ctx.swapchain_extent, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D32_SFLOAT);
 
-  BufferUploadQueue buffer_upload_queue = create_buffer_upload_queue();
-  u64 triangle_vertices_offset = UPLOAD_ARRAY(buffer_upload_queue, triangle_vertices);
-  u64 square_offset = UPLOAD_ARRAY(buffer_upload_queue, square_vertices);
-  u64 unit_square_pos_offset = UPLOAD_ARRAY(buffer_upload_queue, unit_square_positions);
-  u64 quad_pos_offset = UPLOAD_ARRAY(buffer_upload_queue, quad_positions);
-  u64 index_offset = UPLOAD_ARRAY(buffer_upload_queue, unit_square_indices);
-  u64 cube_offset = UPLOAD_ARRAY(buffer_upload_queue, cube_vertices);
-  BufferManager buffer_manager = flush_buffers(&t.ctx, &buffer_upload_queue);
+  BufferManager buffer_manager = create_buffer_manager();
+  VulkanMesh *p_tri  = upload_arrays_single(&buffer_manager, triangle_vertices, sizeof(triangle_vertices), 3, NULL, 0, 0);
+  VulkanMesh *p_sq   = upload_arrays_single(&buffer_manager, square_vertices, sizeof(square_vertices), 6, NULL, 0, 0);
+  const void *iq_varrays[] = {unit_square_positions, quad_positions};
+  const u64   iq_vsizes[]  = {sizeof(unit_square_positions), sizeof(quad_positions)};
+  VulkanMesh *p_iq   = upload_arrays(&buffer_manager, iq_varrays, iq_vsizes, 0, 2, unit_square_indices, sizeof(unit_square_indices), 6);
+  VulkanMesh *p_cube = upload_arrays_single(&buffer_manager, cube_vertices, sizeof(cube_vertices), 36, NULL, 0, 0);
+  flush_buffers(&t.ctx, &buffer_manager);
 
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   UniformWrite mvp_write = push_uniform(&ub_manager, sizeof(MVPUniform));
@@ -49,148 +48,83 @@ int main() {
   UniformWrite camera_vp_write = push_uniform(&ub_manager, sizeof(CameraVP));
   UniformBuffer ub = create_uniform_buffer(&t.ctx, ub_manager.current_offset);
 
+  VkBuffer ubuf = ub.vulkan_buffer.buffer;
+
   // triangle: SIMPLE set=0 (binding 0=x, 1=camera_vp, 2=light_position)
   VulkanMaterial triangle_mat;
   init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_simple_program_spec, &triangle_mat);
   {
-    VkDescriptorBufferInfo x_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = x_write.offset, .range = x_write.size
+    DescriptorWrite writes[] = {
+        {.set_id = LAYOUT_ID_SIMPLE, .binding = 0, .buffer_info = {ubuf, x_write.offset, x_write.size}},
+        {.set_id = LAYOUT_ID_SIMPLE, .binding = 1, .buffer_info = {ubuf, camera_vp_write.offset, camera_vp_write.size}},
+        {.set_id = LAYOUT_ID_SIMPLE, .binding = 2, .buffer_info = {ubuf, light_pos_write.offset, light_pos_write.size}},
     };
-    VkDescriptorBufferInfo vp_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = camera_vp_write.offset, .range = camera_vp_write.size
-    };
-    VkDescriptorBufferInfo light_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = light_pos_write.offset, .range = light_pos_write.size
-    };
-    VkWriteDescriptorSet writes[3];
-    writes[0] = fill_write(&triangle_mat, 0, 0);
-    writes[0].pBufferInfo = &x_info;
-    writes[1] = fill_write(&triangle_mat, 0, 1);
-    writes[1].pBufferInfo = &vp_info;
-    writes[2] = fill_write(&triangle_mat, 0, 2);
-    writes[2].pBufferInfo = &light_info;
-    vkUpdateDescriptorSets(t.ctx.device, 3, writes, 0, NULL);
+    update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &triangle_mat);
   }
 
   // square: GLOBAL set=0 (binding 0=x, 1=camera_vp, 2=light_position)
   VulkanMaterial square_mat;
   init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_square_program_spec, &square_mat);
   {
-    VkDescriptorBufferInfo x_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = x_write.offset, .range = x_write.size
+    DescriptorWrite writes[] = {
+        {.set_id = LAYOUT_ID_GLOBAL, .binding = 0, .buffer_info = {ubuf, x_write.offset, x_write.size}},
+        {.set_id = LAYOUT_ID_GLOBAL, .binding = 1, .buffer_info = {ubuf, camera_vp_write.offset, camera_vp_write.size}},
+        {.set_id = LAYOUT_ID_GLOBAL, .binding = 2, .buffer_info = {ubuf, light_pos_write.offset, light_pos_write.size}},
     };
-    VkDescriptorBufferInfo vp_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = camera_vp_write.offset, .range = camera_vp_write.size
-    };
-    VkDescriptorBufferInfo light_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = light_pos_write.offset, .range = light_pos_write.size
-    };
-    VkWriteDescriptorSet writes[3];
-    writes[0] = fill_write(&square_mat, 0, 0);
-    writes[0].pBufferInfo = &x_info;
-    writes[1] = fill_write(&square_mat, 0, 1);
-    writes[1].pBufferInfo = &vp_info;
-    writes[2] = fill_write(&square_mat, 0, 2);
-    writes[2].pBufferInfo = &light_info;
-    vkUpdateDescriptorSets(t.ctx.device, 3, writes, 0, NULL);
+    update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &square_mat);
   }
 
-  // instanced_quad: set=0 PLACEHOLDER binding 2=tex, set=1 INSTANCED_QUAD binding 0=mvp binding 1=x
+  // instanced_quad: INSTANCED_QUAD set=0 (binding 0=mvp, 1=x, 2=tex)
   VulkanMaterial instanced_quad_mat;
   init_program_spec(
       &t.ctx, offscreen_framebuffer.render_pass, &common_instanced_quad_program_spec, &instanced_quad_mat
   );
   {
-    VkDescriptorImageInfo img_info = {
-        .sampler = sampler,
-        .imageView = textures[TEXTURE_GIRL_FACE_NORMAL_MAP].image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    DescriptorWrite writes[] = {
+        {.set_id = LAYOUT_ID_INSTANCED_QUAD, .binding = 0, .buffer_info = {ubuf, mvp_write.offset, mvp_write.size}},
+        {.set_id = LAYOUT_ID_INSTANCED_QUAD, .binding = 1, .buffer_info = {ubuf, x_write.offset, x_write.size}},
+        {.set_id = LAYOUT_ID_INSTANCED_QUAD, .binding = 2, .image_info = {
+            .sampler = t.ctx.samplers[SAMPLER_LINEAR_CLAMP],
+            .imageView = textures[TEXTURE_GIRL_FACE_NORMAL_MAP].image_view,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        }},
     };
-    VkDescriptorBufferInfo mvp_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = mvp_write.offset, .range = mvp_write.size
-    };
-    VkDescriptorBufferInfo x_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = x_write.offset, .range = x_write.size
-    };
-    VkWriteDescriptorSet writes[3];
-    writes[0] = fill_write(&instanced_quad_mat, 0, 2);
-    writes[0].pImageInfo = &img_info;
-    writes[1] = fill_write(&instanced_quad_mat, 1, 0);
-    writes[1].pBufferInfo = &mvp_info;
-    writes[2] = fill_write(&instanced_quad_mat, 1, 1);
-    writes[2].pBufferInfo = &x_info;
-    vkUpdateDescriptorSets(t.ctx.device, 3, writes, 0, NULL);
+    update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &instanced_quad_mat);
   }
 
   // cube: CUBE set=0 (binding 0=cube_model, 1=light_position, 2=camera_vp)
   VulkanMaterial cube_mat;
   init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_cube_program_spec, &cube_mat);
   {
-    VkDescriptorBufferInfo model_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = cube_model_write.offset, .range = cube_model_write.size
+    DescriptorWrite writes[] = {
+        {.set_id = LAYOUT_ID_CUBE, .binding = 0, .buffer_info = {ubuf, cube_model_write.offset, cube_model_write.size}},
+        {.set_id = LAYOUT_ID_CUBE, .binding = 1, .buffer_info = {ubuf, light_pos_write.offset, light_pos_write.size}},
+        {.set_id = LAYOUT_ID_CUBE, .binding = 2, .buffer_info = {ubuf, camera_vp_write.offset, camera_vp_write.size}},
     };
-    VkDescriptorBufferInfo light_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = light_pos_write.offset, .range = light_pos_write.size
-    };
-    VkDescriptorBufferInfo vp_info = {
-        .buffer = ub.vulkan_buffer.buffer, .offset = camera_vp_write.offset, .range = camera_vp_write.size
-    };
-    VkWriteDescriptorSet writes[3];
-    writes[0] = fill_write(&cube_mat, 0, 0);
-    writes[0].pBufferInfo = &model_info;
-    writes[1] = fill_write(&cube_mat, 0, 1);
-    writes[1].pBufferInfo = &light_info;
-    writes[2] = fill_write(&cube_mat, 0, 2);
-    writes[2].pBufferInfo = &vp_info;
-    vkUpdateDescriptorSets(t.ctx.device, 3, writes, 0, NULL);
+    update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &cube_mat);
   }
 
   // fullscreen_quad: PLACEHOLDER set=0 binding 0=offscreen image
   VulkanMaterial fullscreen_quad_mat;
   init_program_spec(&t.ctx, t.ctx.render_pass, &common_fullscreen_quad_program_spec, &fullscreen_quad_mat);
   {
-    VkDescriptorImageInfo img_info = {
-        .sampler = sampler,
-        .imageView = offscreen_framebuffer.color_image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    DescriptorWrite write = {
+        .set_id = LAYOUT_ID_PLACEHOLDER,
+        .binding = 0,
+        .image_info = {
+            .sampler = t.ctx.samplers[SAMPLER_LINEAR_CLAMP],
+            .imageView = offscreen_framebuffer.color_image_view,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        },
     };
-    VkWriteDescriptorSet write = fill_write(&fullscreen_quad_mat, 0, 0);
-    write.pImageInfo = &img_info;
-    vkUpdateDescriptorSets(t.ctx.device, 1, &write, 0, NULL);
+    update_vulkan_material(&t.ctx, &write, 1, &fullscreen_quad_mat);
   }
 
-  VkBuffer vbuf = buffer_manager.buffer.buffer;
-  VulkanMesh triangle_mesh = {
-      .num_vertices = 3,
-      .instance_count = 1,
-      .num_vertex_buffers = 1,
-      .vertex_buffers = {vbuf},
-      .vertex_buffer_offsets = {triangle_vertices_offset},
-  };
-  VulkanMesh square_mesh = {
-      .num_vertices = 6,
-      .instance_count = 1,
-      .num_vertex_buffers = 1,
-      .vertex_buffers = {vbuf},
-      .vertex_buffer_offsets = {square_offset},
-  };
-  VulkanMesh instanced_quad_mesh = {
-      .instance_count = 5,
-      .num_indices = 6,
-      .num_vertex_buffers = 2,
-      .vertex_buffers = {vbuf, vbuf},
-      .vertex_buffer_offsets = {unit_square_pos_offset, quad_pos_offset},
-      .index_buffer_offset = index_offset,
-      .index_buffer = buffer_manager.buffer.buffer,
-  };
-  VulkanMesh cube_mesh = {
-      .num_vertices = 36,
-      .instance_count = 1,
-      .num_vertex_buffers = 1,
-      .vertex_buffers = {vbuf},
-      .vertex_buffer_offsets = {cube_offset},
-  };
-  VulkanMesh fullscreen_quad_mesh = {.num_vertices = 3, .instance_count = 1};
+  VulkanMesh triangle_mesh = *p_tri; triangle_mesh.instance_count = 1;
+  VulkanMesh square_mesh = *p_sq; square_mesh.instance_count = 1;
+  VulkanMesh instanced_quad_mesh = *p_iq; instanced_quad_mesh.instance_count = 5;
+  VulkanMesh cube_mesh = *p_cube; cube_mesh.instance_count = 1;
+  VulkanMesh fullscreen_quad_mesh = {.vertex_count = 3, .instance_count = 1};
 
   MVPUniform mvp = {.projection = glm::mat4(1.0f), .view = glm::mat4(1.0f)};
   const glm::vec3 cube_translation_vector = {1.5f, -1.3f, 1.5f};
@@ -267,7 +201,6 @@ int main() {
 
   vkDeviceWaitIdle(t.ctx.device);
 
-  vkDestroySampler(t.ctx.device, sampler, NULL);
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
     destroy_vulkan_texture(t.ctx.device, &textures[i]);
   }

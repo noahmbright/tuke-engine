@@ -10,29 +10,10 @@ int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
   VulkanTest t = init_vulkan_test(window);
 
-  BufferUploadQueue queue = create_buffer_upload_queue();
-  u64 vertex_offset = UPLOAD_ARRAY(queue, f_vertices);
-  u64 index_offset = UPLOAD_ARRAY(queue, f_indices);
-  BufferManager buffer_manager = flush_buffers(&t.ctx, &queue);
-
-  // This feels like a little too much wiring.
-  // Could extend the return of UPLOAD_ARRAY to give more metadata about a mesh, and
-  // use that to construct the VulkanMesh object.
-  // Meshes can in principle have multiple vertex buffers
-  //    - non interleaved data, separate vertex/instance rated data
-  // Construction from a MeshUpload would requre an array of them per VulkanMesh
-  // - OR -
-  // could have uploads take arrays and return a data structure summarizing the upload of arrays
-  VulkanMesh mesh = {
-      .num_vertices = num_f_vertices,
-      .instance_count = 1,
-      .num_indices = num_f_indices,
-      .num_vertex_buffers = 1,
-      .vertex_buffers = {buffer_manager.buffer.buffer},
-      .index_buffer = buffer_manager.buffer.buffer,
-      .vertex_buffer_offsets = {vertex_offset},
-      .index_buffer_offset = index_offset,
-  };
+  BufferManager buffer_manager = create_buffer_manager();
+  VulkanMesh *mesh = UPLOAD_ARRAYS(buffer_manager, f_vertices, f_indices, num_f_indices);
+  flush_buffers(&t.ctx, &buffer_manager);
+  mesh->instance_count = 1;
 
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   UniformWrite model_write = push_uniform(&ub_manager, sizeof(ColoredPosModel));
@@ -88,7 +69,7 @@ int main() {
 
       ColoredPosModel model = {.mat = glm::translate(glm::mat4(1.0), glm::vec3(x, -0.5f, 0.5f + z))};
       write_to_uniform_buffer(&ubs[i], &model, model_write);
-      render_mesh_material(cmd, &mesh, &mats[i]);
+      render_mesh_material(cmd, mesh, &mats[i]);
     }
     vkCmdEndRenderPass(cmd);
 

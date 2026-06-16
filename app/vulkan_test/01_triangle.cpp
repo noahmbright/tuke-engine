@@ -12,7 +12,7 @@ int main() {
   // TODO dynamic rendering and removing render passes
   // Why do framebuffers own render passes?
   VulkanMesh mesh = {
-      .num_vertices = 3,
+      .vertex_count = 3,
       .instance_count = 1,
   };
 

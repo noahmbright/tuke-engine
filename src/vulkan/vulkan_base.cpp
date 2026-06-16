@@ -1314,7 +1314,7 @@ VulkanBuffer create_buffer(const VulkanContext *ctx, BufferType buffer_type, VkD
   return vulkan_buffer;
 }
 
-void write_to_vulkan_buffer(
+static void write_to_vulkan_buffer(
     const VulkanContext *ctx, const void *src_data, VkDeviceSize size, VkDeviceSize offset, VulkanBuffer vulkan_buffer
 ) {
   if (!(vulkan_buffer.memory_property_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
@@ -2038,104 +2038,122 @@ void render_mesh_material(VkCommandBuffer cmd, const VulkanMesh *mesh, const Vul
 
   u32 first_instance = 0;
   i32 vertex_offset = 0;
-  if (mesh->num_indices > 0) {
+  if (mesh->index_count > 0) {
     vkCmdBindIndexBuffer(cmd, mesh->index_buffer, mesh->index_buffer_offset, VK_INDEX_TYPE_UINT16);
     u32 first_index = 0;
-    vkCmdDrawIndexed(cmd, mesh->num_indices, mesh->instance_count, first_index, vertex_offset, first_instance);
+    vkCmdDrawIndexed(cmd, mesh->index_count, mesh->instance_count, first_index, vertex_offset, first_instance);
   } else {
     u32 first_vertex = 0;
-    vkCmdDraw(cmd, mesh->num_vertices, mesh->instance_count, first_vertex, first_instance);
+    vkCmdDraw(cmd, mesh->vertex_count, mesh->instance_count, first_vertex, first_instance);
   }
 }
 
-void render_mesh(VkCommandBuffer cmd, RenderCall *call) {
-  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, call->pipeline);
-
-  u32 first_binding = 0;
-  if (call->num_vertex_buffers > 0) {
-    vkCmdBindVertexBuffers(
-        cmd, first_binding, call->num_vertex_buffers, call->vertex_buffers, call->vertex_buffer_offsets
-    );
-  }
-
-  if (call->num_descriptor_sets > 0) {
-    u32 first_set = 0;
-    u32 dynamic_offset_count = 0;
-    vkCmdBindDescriptorSets(
-        cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, call->pipeline_layout, first_set, call->num_descriptor_sets,
-        call->descriptor_sets, dynamic_offset_count, NULL
-    );
-  }
-
-  u32 first_instance = 0;
-  i32 vertex_offset = 0;
-  if (call->is_indexed) {
-    vkCmdBindIndexBuffer(cmd, call->index_buffer, call->index_buffer_offset, VK_INDEX_TYPE_UINT16);
-    u32 first_index = 0;
-    vkCmdDrawIndexed(cmd, call->num_indices, call->instance_count, first_index, vertex_offset, first_instance);
-  } else {
-    u32 first_vertex = 0;
-    vkCmdDraw(cmd, call->num_vertices, call->instance_count, first_vertex, first_instance);
-  }
+BufferManager create_buffer_manager() {
+  BufferManager m = {};
+  return m;
 }
 
-BufferUploadQueue create_buffer_upload_queue() {
-  BufferUploadQueue queue = {};
-  return queue;
+// Implementation must manage the individual meshes and their vertex buffers,
+// as well as the Manager's underlying buffer.
+// The manager maintains a master offset, which each individual mesh tracks
+VulkanMesh *upload_arrays(
+    BufferManager *mgr,
+    const void **vertex_arrays,
+    const u64 *vertex_byte_sizes,
+    u32 vertex_count,
+    u32 num_vertex_arrays,
+    const void *index_array,
+    u32 index_array_byte_size,
+    u32 index_count
+) {
+  u32 num_index_arrays = (index_array == NULL) ? 0 : 1;
+  assert(mgr->num_views + num_vertex_arrays + num_index_arrays < MAX_BUFFER_UPLOADS);
+
+  VulkanMesh *mesh = &mgr->meshes[mgr->num_meshes++];
+  mesh->vertex_count = vertex_count;
+  mesh->num_vertex_buffers = num_vertex_arrays;
+
+  // Vertex
+  assert(num_vertex_arrays < MAX_VERTEX_BINDINGS);
+  for (u32 i = 0; i < num_vertex_arrays; i++) {
+    mesh->vertex_buffer_offsets[i] = mgr->offset;
+
+    mgr->offsets[mgr->num_views] = mgr->offset;
+    mgr->sizes[mgr->num_views] = vertex_byte_sizes[i];
+    mgr->datas[mgr->num_views] = vertex_arrays[i];
+
+    mgr->offset += vertex_byte_sizes[i];
+    mgr->num_views++;
+  }
+
+  // Index
+  if (index_array != NULL) {
+    mesh->index_count = index_count;
+    mesh->index_buffer_offset = mgr->offset;
+
+    mgr->offsets[mgr->num_views] = mgr->offset;
+    mgr->sizes[mgr->num_views] = index_array_byte_size;
+    mgr->datas[mgr->num_views] = index_array;
+
+    mgr->offset += index_array_byte_size;
+    mgr->num_views++;
+  }
+
+  return mesh;
 }
 
-u64 upload_data(BufferUploadQueue *queue, void *data, u64 size) {
-  assert(queue->num_slices < MAX_BUFFER_UPLOADS);
-
-  u64 offset = queue->offset;
-  queue->offset += size;
-
-  queue->slices[queue->num_slices++] = {
-      .offset = offset,
-      .size = size,
-      .data = data,
-  };
-
-  return offset;
+VulkanMesh *upload_arrays_single(
+    BufferManager *mgr,
+    const void *vertex_array,
+    const u64 vertex_byte_size,
+    u32 vertex_count,
+    const void *index_array,
+    u32 index_array_byte_size,
+    u32 index_count
+) {
+  return upload_arrays(
+      mgr, &vertex_array, &vertex_byte_size, vertex_count, 1, index_array, index_array_byte_size, index_count
+  );
 }
 
-BufferManager flush_buffers(VulkanContext *ctx, BufferUploadQueue *queue) {
-  BufferManager manager = {
-      .ctx = ctx,
-  };
+void flush_buffers(VulkanContext *ctx, BufferManager *mgr) {
+  mgr->ctx = ctx;
 
-  u64 size = queue->offset;
+  u64 size = mgr->offset;
   if (size == 0) {
-    return manager;
+    return;
+  }
+  assert(mgr->num_views > 0);
+
+  // Validate buffers
+  mgr->buffer = create_buffer(ctx, BUFFER_TYPE_VERTEX, size);
+  for (u32 i = 0; i < mgr->num_meshes; i++) {
+    for (u32 j = 0; j < mgr->meshes[i].num_vertex_buffers; j++) {
+      mgr->meshes[i].vertex_buffers[j] = mgr->buffer.buffer;
+    }
+    mgr->meshes[i].index_buffer = mgr->buffer.buffer;
   }
 
-  assert(queue->num_slices > 0);
   VulkanBuffer staging_buffer = create_buffer(ctx, BUFFER_TYPE_STAGING, size);
-
-  StagingArena staging_arena = {
+  StagingArena arena = {
       .buffer = staging_buffer,
       .total_size = size,
       .offset = 0,
       .num_copy_regions = 0,
       .copy_regions = {},
   };
-  manager.staging_arena = staging_arena;
-  manager.buffer = create_buffer(ctx, BUFFER_TYPE_VERTEX, size);
 
-  for (u32 i = 0; i < queue->num_slices; i++) {
-    VkBuffer destination = manager.buffer.buffer;
-    const BufferView view = queue->slices[i];
-    stage_data(ctx, &manager.staging_arena, view.data, view.size, destination, view.offset);
+  for (u32 i = 0; i < mgr->num_views; i++) {
+    VkBuffer dst = mgr->buffer.buffer;
+    stage_data(ctx, &arena, mgr->datas[i], mgr->sizes[i], dst, mgr->offsets[i]);
   }
 
-  flush_staging_arena(ctx, &manager.staging_arena);
-  return manager;
+  flush_staging_arena(ctx, &arena);
+  destroy_vulkan_buffer(ctx, staging_buffer);
 }
 
 void destroy_buffer_manager(BufferManager *buffer_manager) {
-  VulkanContext *ctx = buffer_manager->ctx;
-  destroy_vulkan_buffer(ctx, buffer_manager->buffer);
-  destroy_vulkan_buffer(ctx, buffer_manager->staging_arena.buffer);
+  destroy_vulkan_buffer(buffer_manager->ctx, buffer_manager->buffer);
 }
 
 UniformBufferManager create_uniform_buffer_manager() {

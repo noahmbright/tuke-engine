@@ -1,6 +1,5 @@
 # Vulkan Test TODO
 
-- 04: Textured cube (indexed geometry, depth testing)
 - 05: Phong lighting (ambient + diffuse + specular, light direction uniform)
 - 06: Normal mapping (TBN matrix, tangent as vertex attribute)
 - 07: Push constants (per-draw data without descriptor overhead)

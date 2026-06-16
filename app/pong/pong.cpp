@@ -20,23 +20,13 @@ void init_buffers(State *state) {
   VulkanContext *ctx = &state->ctx;
 
   // big vertex/index buffers
-  BufferUploadQueue buffer_upload_queue = {};
-  u64 paddle_vertices_offset = UPLOAD_ARRAY(buffer_upload_queue, paddle_vertices);
-  u64 unit_square_indices_offset = UPLOAD_ARRAY(buffer_upload_queue, unit_square_indices);
-
-  state->buffer_manager = flush_buffers(ctx, &buffer_upload_queue);
-
   // This should not be managed by the state raw - need a renderer or something
   // This is also not very clear - I forget why one mesh handles unit square indices and paddle vertices
-  state->mesh = {
-      .num_indices = 6,
-      .instance_count = 1,
-      .num_vertex_buffers = 1,
-      .vertex_buffers = {state->buffer_manager.buffer.buffer},
-      .vertex_buffer_offsets = {paddle_vertices_offset},
-      .index_buffer = state->buffer_manager.buffer.buffer,
-      .index_buffer_offset = unit_square_indices_offset,
-  };
+  state->buffer_manager = create_buffer_manager();
+  VulkanMesh *mesh_ptr = UPLOAD_ARRAYS(state->buffer_manager, paddle_vertices, unit_square_indices, ARRAY_SIZE(unit_square_indices));
+  flush_buffers(ctx, &state->buffer_manager);
+  state->mesh = *mesh_ptr;
+  state->mesh.instance_count = 1;
 
   // uniform buffer
   // TODO can I come up with a scheme for coordinating UBOs and the location of
@@ -71,14 +61,12 @@ void init_background_material(State *state) {
   };
 
   // set 0 = PLACEHOLDER, set 1 = PONG_GLOBAL
-  VkWriteDescriptorSet writes[3];
-  writes[0] = fill_write(mat, 0, 1);
-  writes[0].pImageInfo = &image_info;
-  writes[1] = fill_write(mat, 1, 0);
-  writes[1].pBufferInfo = &vp_info;
-  writes[2] = fill_write(mat, 1, 1);
-  writes[2].pBufferInfo = &model_info;
-  vkUpdateDescriptorSets(state->ctx.device, 3, writes, 0, NULL);
+  DescriptorWrite writes[] = {
+      {.set_id = LAYOUT_ID_PLACEHOLDER, .binding = 1, .image_info = image_info},
+      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 0, .buffer_info = vp_info},
+      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 1, .buffer_info = model_info},
+  };
+  update_vulkan_material(&state->ctx, writes, ARRAY_SIZE(writes), mat);
 }
 
 void init_paddles_material(State *state) {
@@ -99,12 +87,11 @@ void init_paddles_material(State *state) {
   };
 
   // set 0 = PONG_GLOBAL
-  VkWriteDescriptorSet writes[2];
-  writes[0] = fill_write(mat, 0, 0);
-  writes[0].pBufferInfo = &vp_info;
-  writes[1] = fill_write(mat, 0, 2);
-  writes[1].pBufferInfo = &instance_info;
-  vkUpdateDescriptorSets(state->ctx.device, 2, writes, 0, NULL);
+  DescriptorWrite writes[] = {
+      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 0, .buffer_info = vp_info},
+      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 2, .buffer_info = instance_info},
+  };
+  update_vulkan_material(&state->ctx, writes, ARRAY_SIZE(writes), mat);
 }
 
 static void init_transforms(State *state) {

@@ -42,7 +42,7 @@ int main() {
   update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &mat);
 
   VulkanMesh mesh = {
-      .num_vertices = 6,
+      .vertex_count = 6,
       .instance_count = 1,
   };
 

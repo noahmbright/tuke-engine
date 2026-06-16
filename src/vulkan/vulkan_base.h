@@ -292,21 +292,41 @@ typedef struct {
 } RenderCall;
 
 typedef struct {
-  u64 offset;
-  u64 size;
-  void *data;
-} BufferView;
+  VkPipeline pipeline;
+  VkPipelineLayout pipeline_layout;
+  VkDescriptorSet descriptor_sets[MAX_DESCRIPTOR_SETS];
+  u32 num_descriptor_sets;
+  const VkWriteDescriptorSet *descriptor_set_writes[MAX_DESCRIPTOR_SETS];
+  u32 indirection_table[MAX_DESCRIPTOR_SETS];
+  u32 descriptor_set_write_lens[MAX_DESCRIPTOR_SETS];
+} VulkanMaterial;
 
 typedef struct {
-  u64 offset;
-  BufferView slices[MAX_BUFFER_UPLOADS];
-  u32 num_slices;
-} BufferUploadQueue;
+  u32 vertex_count;
+  u32 instance_count; // TODO This belongs at callsites
+  u32 index_count;
+
+  VkBuffer vertex_buffers[MAX_VERTEX_BINDINGS];
+  VkDeviceSize vertex_buffer_offsets[MAX_VERTEX_BINDINGS];
+  u32 num_vertex_buffers;
+
+  VkDeviceSize index_buffer_offset;
+  VkBuffer index_buffer;
+} VulkanMesh;
 
 typedef struct {
   VulkanContext *ctx;
   VulkanBuffer buffer;
-  StagingArena staging_arena;
+  u64 offset;
+
+  // SoA of buffer views. Needed for uploading data into staging buffer on flush.
+  u64 offsets[MAX_BUFFER_UPLOADS];
+  u64 sizes[MAX_BUFFER_UPLOADS];
+  const void *datas[MAX_BUFFER_UPLOADS];
+  u32 num_views;
+
+  VulkanMesh meshes[MAX_BUFFER_UPLOADS];
+  u32 num_meshes;
 } BufferManager;
 
 typedef struct {
@@ -321,29 +341,6 @@ typedef struct {
   VkDeviceMemory depth_image_device_memory;
   VkImageView depth_image_view;
 } ColorDepthFramebuffer;
-
-typedef struct {
-  u32 num_vertices;
-  u32 instance_count;
-  u32 num_indices;
-
-  u32 num_vertex_buffers;
-  VkBuffer vertex_buffers[MAX_VERTEX_BINDINGS];
-  VkDeviceSize vertex_buffer_offsets[MAX_VERTEX_BINDINGS];
-
-  VkDeviceSize index_buffer_offset;
-  VkBuffer index_buffer;
-} VulkanMesh;
-
-typedef struct {
-  VkPipeline pipeline;
-  VkPipelineLayout pipeline_layout;
-  VkDescriptorSet descriptor_sets[MAX_DESCRIPTOR_SETS];
-  u32 num_descriptor_sets;
-  const VkWriteDescriptorSet *descriptor_set_writes[MAX_DESCRIPTOR_SETS];
-  u32 indirection_table[MAX_DESCRIPTOR_SETS];
-  u32 descriptor_set_write_lens[MAX_DESCRIPTOR_SETS];
-} VulkanMaterial;
 
 typedef struct {
   u32 set_id; // When enum, used for indirection lookup. Could also be used raw.
@@ -362,39 +359,65 @@ typedef struct {
 VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_info);
 void destroy_vulkan_context(VulkanContext *);
 
-// Buffers
-VulkanBuffer create_buffer_explicit(
-    const VulkanContext *ctx, VkBufferUsageFlags usage, VkDeviceSize size, VkMemoryPropertyFlags properties
-);
+////////////////////////////// Buffers /////////////////////////////
 VulkanBuffer create_buffer(const VulkanContext *ctx, BufferType buffer_type, VkDeviceSize size);
 void destroy_vulkan_buffer(const VulkanContext *ctx, VulkanBuffer buffer);
-void write_to_vulkan_buffer(
-    VulkanContext *ctx, const void *src_data, VkDeviceSize size, VkDeviceSize offset, VulkanBuffer vulkan_buffer
+BufferManager create_buffer_manager();
+
+// Used for uploading all the different arrays for a single mesh.
+// Meshes can in principle have multiple vertex buffers
+//  e.g. non interleaved data, separate vertex/instance rated data
+//
+//  This is the most general API, but common cases are single vertex/index buffer.
+//  Specializations below.c
+VulkanMesh *upload_arrays(
+    BufferManager *mgr,
+    const void **vertex_arrays,
+    const u64 *vertex_byte_sizes,
+    u32 vertex_count,
+    u32 num_vertex_arrays,
+    const void *index_array,
+    u32 index_array_byte_size,
+    u32 index_count
 );
 
-BufferUploadQueue create_buffer_upload_queue();
-u64 upload_data(BufferUploadQueue *queue, void *data, u64 size);
-BufferManager flush_buffers(VulkanContext *ctx, BufferUploadQueue *queue);
+// Wrapper over upload arrays for single array case.
+// Used to get around C++ bullshit that makes taking address of temporaries hard.
+VulkanMesh *upload_arrays_single(
+    BufferManager *mgr,
+    const void *vertex_array,
+    const u64 vertex_byte_size,
+    u32 vertex_count,
+    const void *index_array,
+    u32 index_array_byte_size,
+    u32 index_count
+);
+
+// Upload macros specifically for arrays, e.g., f32 array[], with the [];
+// Will fail on pointers because of the use of sizeof()
+#define UPLOAD_VERTEX_ARRAY(mgr, array, vertex_count)                                                                  \
+  (upload_arrays(mgr, array, sizeof(array), vertex_count, 1, NULL, 0, 0))
+
+#define UPLOAD_ARRAYS(mgr, vertex_array, index_array, index_count)                                                     \
+  (upload_arrays_single(&mgr, vertex_array, sizeof(vertex_array), 0, index_array, sizeof(index_array), index_count))
+
+void flush_buffers(VulkanContext *ctx, BufferManager *mgr);
 void destroy_buffer_manager(BufferManager *buffer_manager);
 
-// This macro is specifically for arrays, e.g., f32 array[], with the []; It fails on pointers because sizeof().
-#define UPLOAD_ARRAY(queue, array) (upload_data(&queue, (void *)array, sizeof(array)))
-
-// Materials
+////////////////////////////// Materials //////////////////////////////
 void destroy_vulkan_material(VkDevice device, VulkanMaterial *mat);
 
-// Rendering APIs
-void render_mesh(VkCommandBuffer command_buffer, RenderCall *render_call);
+////////////////////////////// Rendering APIs //////////////////////////////
 void render_mesh_material(VkCommandBuffer cmd, const VulkanMesh *mesh, const VulkanMaterial *mat);
 
-// Command buffers
+////////////////////////////// Command buffers //////////////////////////////
 VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *ctx);
 void end_single_use_command_buffer(const VulkanContext *ctx, VkCommandBuffer command_buffer);
 
-// Shaders
+////////////////////////////// Shaders //////////////////////////////
 VkShaderModule create_shader_module(VkDevice device, const u32 *code, u32 code_size);
 
-// Pipelines
+////////////////////////////// Pipelines //////////////////////////////
 VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *config, VkPipelineCache pipeline_cache);
 
 VkPipeline create_default_graphics_pipeline(
@@ -409,7 +432,7 @@ VkPipeline create_default_graphics_pipeline(
 VkPipelineLayout
 create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts, u32 set_layout_count);
 
-// Per Frame Commands
+/////////////////////////////// Per Frame Commands //////////////////////////////
 void begin_frame(VulkanContext *ctx);
 VkCommandBuffer begin_command_buffer(const VulkanContext *ctx);
 void update_frame_index(VulkanContext *ctx);
@@ -419,7 +442,7 @@ void submit_and_present(const VulkanContext *ctx, VkCommandBuffer command_buffer
 ViewportState create_viewport_state_offset(VkExtent2D swapchain_extent, VkOffset2D offset);
 ViewportState create_viewport_state_xy(VkExtent2D swapchain_extent, u32 x, u32 y);
 
-// Render passes
+////////////////////////////// Render passes //////////////////////////////
 void begin_render_pass(
     const VulkanContext *ctx,
     VkCommandBuffer command_buffer,
@@ -494,19 +517,3 @@ VulkanTexture create_vulkan_texture(
 
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
 VkSampler create_sampler(VkDevice device);
-
-// TODO remove when a better system for automating these writes is in place
-static inline VkWriteDescriptorSet fill_write(const VulkanMaterial *mat, u32 set_idx, u32 binding) {
-  u32 len = mat->descriptor_set_write_lens[set_idx];
-  const VkWriteDescriptorSet *templates = mat->descriptor_set_writes[set_idx];
-  for (u32 i = 0; i < len; i++) {
-    if (templates[i].dstBinding == binding) {
-      VkWriteDescriptorSet w = templates[i];
-      w.dstSet = mat->descriptor_sets[set_idx];
-      return w;
-    }
-  }
-
-  assert(false);
-  return {};
-}
