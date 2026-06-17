@@ -1,0 +1,22 @@
+#version {{ VERSION }}
+
+{{ LOCATION 0 }} in vec2 uv;
+
+{{ LOCATION 0 }} out vec4 frag_color;
+
+void main(){
+
+    vec2 rect_min = vec2(0.025, 0.05);
+    vec2 rect_max = vec2(0.200, 0.10);
+    bool in_rect =  uv.x < rect_max.x
+                 && uv.x > rect_min.x
+                 && uv.y < rect_max.y
+                 && uv.y > rect_min.y;
+
+    if (in_rect){
+        frag_color = vec4(0.7, 0.5, 0.4, 1.0);
+    } else {
+        discard;
+    }
+}
+
