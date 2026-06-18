@@ -59,6 +59,7 @@ typedef int32_t i32;
 #define POOL_SIZE_DESCRIPTOR_COUNT (1024)
 
 #define MAX_BUFFER_UPLOADS (32)
+#define MAX_UNIFORMS_PER_BUFFER (256)
 
 inline const char *vk_result_string(VkResult result) {
   switch (result) {
@@ -209,7 +210,9 @@ typedef struct {
 } VulkanBuffer;
 
 typedef struct {
-  u32 current_offset;
+  u64 current_offset;
+  VkDescriptorBufferInfo buffer_infos[MAX_UNIFORMS_PER_BUFFER];
+  u32 num_buffer_infos;
 } UniformBufferManager;
 
 typedef struct {
@@ -220,7 +223,7 @@ typedef struct {
 typedef struct {
   VulkanBuffer vulkan_buffer;
   u8 *mapped;
-  u32 size;
+  u64 size;
 } UniformBuffer;
 
 typedef struct {
@@ -396,7 +399,7 @@ VulkanMesh *upload_arrays_single(
 // Upload macros specifically for arrays, e.g., f32 array[], with the [];
 // Will fail on pointers because of the use of sizeof()
 #define UPLOAD_VERTEX_ARRAY(mgr, array, vertex_count)                                                                  \
-  (upload_arrays(mgr, array, sizeof(array), vertex_count, 1, NULL, 0, 0))
+  (upload_arrays_single(&mgr, array, sizeof(array), vertex_count, NULL, 0, 0))
 
 #define UPLOAD_ARRAYS(mgr, vertex_array, index_array, index_count)                                                     \
   (upload_arrays_single(&mgr, vertex_array, sizeof(vertex_array), 0, index_array, sizeof(index_array), index_count))
@@ -467,11 +470,11 @@ VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat color_form
 VkRenderPass create_color_render_pass(VkDevice device, VkFormat format);
 
 // Uniforms
-UniformBuffer create_uniform_buffer(const VulkanContext *ctx, u32 buffer_size);
+UniformBuffer finalize_ub(const VulkanContext *ctx, UniformBufferManager *mgr);
 void destroy_uniform_buffer(const VulkanContext *ctx, UniformBuffer *uniform_buffer);
-void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, UniformWrite uniform_write);
+void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, VkDescriptorBufferInfo uniform_write);
 UniformBufferManager create_uniform_buffer_manager();
-UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager, u32 size);
+VkDescriptorBufferInfo *push_uniform(UniformBufferManager *uniform_buffer_manager, u64 size);
 
 // Vertex Buffers
 VkVertexInputBindingDescription create_instanced_vertex_binding_description(u32 binding, u32 stride);

@@ -28,8 +28,7 @@ void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
   camera->right = glm::cross(camera->direction, camera->up);
 }
 
-Camera create_camera(CameraType type, const glm::vec3 pos, const glm::vec3 direction, const glm::vec3 up,
-                     const glm::vec3 right) {
+Camera create_camera(CameraType type, glm::vec3 pos, glm::vec3 direction, glm::vec3 up, glm::vec3 right) {
   Camera camera;
   camera.type = type;
   camera.position = pos;
@@ -41,29 +40,16 @@ Camera create_camera(CameraType type, const glm::vec3 pos, const glm::vec3 direc
   f32 xy_magnitude = glm::length(glm::vec2{camera.direction.x, camera.direction.y});
   f32 xz_magnitude = glm::length(glm::vec2{camera.direction.x, camera.direction.z});
 
-  const f32 tolerance = 1e-5;
-  if (xy_magnitude < tolerance) {
+  if (xy_magnitude < EPSILON) {
     camera.yaw = -1.57;
   } else {
     camera.yaw = glm::atan(camera.direction.z / xy_magnitude);
   }
 
-  if (xz_magnitude <= tolerance) {
+  if (xz_magnitude <= EPSILON) {
     camera.pitch = -3.14;
   } else {
     camera.pitch = glm::atan(camera.direction.y / xz_magnitude);
-  }
-
-  switch (camera.type) {
-
-  case CAMERA_TYPE_2D:
-    camera.move_camera_function = camera_move_2d;
-    break;
-
-  case CAMERA_TYPE_FPS: // TODO FPS
-  case CAMERA_TYPE_3D:
-    camera.move_camera_function = camera_move_3d;
-    break;
   }
 
   camera.y_needs_inverted = false;

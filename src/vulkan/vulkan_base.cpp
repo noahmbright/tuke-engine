@@ -1841,11 +1841,16 @@ static void flush_staging_arena(const VulkanContext *ctx, StagingArena *arena) {
   end_single_use_command_buffer(ctx, cmd);
 }
 
-UniformBuffer create_uniform_buffer(const VulkanContext *ctx, u32 size) {
+UniformBuffer finalize_ub(const VulkanContext *ctx, UniformBufferManager *mgr) {
+  u64 size = mgr->current_offset;
   UniformBuffer ub = {
       .vulkan_buffer = create_buffer(ctx, BUFFER_TYPE_UNIFORM, size),
       .size = size,
   };
+
+  for (u32 i = 0; i < mgr->num_buffer_infos; i++) {
+    mgr->buffer_infos[i].buffer = ub.vulkan_buffer.buffer;
+  }
 
   VkResult result = vkMapMemory(ctx->device, ub.vulkan_buffer.memory, 0, size, 0, (void **)&ub.mapped);
   VK_CHECK(result, "Failed to map uniform buffer memory");
@@ -1856,8 +1861,8 @@ void destroy_uniform_buffer(const VulkanContext *ctx, UniformBuffer *uniform_buf
   destroy_vulkan_buffer(ctx, uniform_buffer->vulkan_buffer);
 }
 
-void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, UniformWrite uniform_write) {
-  memcpy(uniform_buffer->mapped + uniform_write.offset, data, uniform_write.size);
+void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, VkDescriptorBufferInfo uniform_write) {
+  memcpy(uniform_buffer->mapped + uniform_write.offset, data, uniform_write.range);
 }
 
 // Can make textures in a GPU native format KTX: https://developer.imaginationtech.com/solutions/pvrtextool/
@@ -2159,17 +2164,19 @@ void destroy_buffer_manager(BufferManager *buffer_manager) {
 UniformBufferManager create_uniform_buffer_manager() {
   UniformBufferManager uniform_buffer_manager = {
       .current_offset = 0,
+      .num_buffer_infos = 0,
   };
   return uniform_buffer_manager;
 }
 
-UniformWrite push_uniform(UniformBufferManager *uniform_buffer_manager, u32 size) {
-  UniformWrite uniform_write = {
-      .size = size,
-      .offset = uniform_buffer_manager->current_offset,
+VkDescriptorBufferInfo *push_uniform(UniformBufferManager *mgr, u64 size) {
+  VkDescriptorBufferInfo *info = &mgr->buffer_infos[mgr->num_buffer_infos++];
+  *info = {
+      .range = size,
+      .offset = mgr->current_offset,
   };
-  uniform_buffer_manager->current_offset += size;
-  return uniform_write;
+  mgr->current_offset += size;
+  return info;
 }
 
 ColorDepthFramebuffer create_color_depth_framebuffer(

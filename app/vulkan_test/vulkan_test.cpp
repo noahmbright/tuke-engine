@@ -1,5 +1,6 @@
 #include "assets.h"
 #include "generated_shader_utils.h"
+#include "shaders.h"
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include "camera.h"
@@ -32,44 +33,44 @@ int main() {
       create_color_depth_framebuffer(&t.ctx, t.ctx.swapchain_extent, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_D32_SFLOAT);
 
   BufferManager buffer_manager = create_buffer_manager();
-  VulkanMesh *p_tri  = upload_arrays_single(&buffer_manager, triangle_vertices, sizeof(triangle_vertices), 3, NULL, 0, 0);
-  VulkanMesh *p_sq   = upload_arrays_single(&buffer_manager, square_vertices, sizeof(square_vertices), 6, NULL, 0, 0);
+  VulkanMesh *p_tri =
+      upload_arrays_single(&buffer_manager, triangle_vertices, sizeof(triangle_vertices), 3, NULL, 0, 0);
+  VulkanMesh *p_sq = upload_arrays_single(&buffer_manager, square_vertices, sizeof(square_vertices), 6, NULL, 0, 0);
   const void *iq_varrays[] = {unit_square_positions, quad_positions};
-  const u64   iq_vsizes[]  = {sizeof(unit_square_positions), sizeof(quad_positions)};
-  VulkanMesh *p_iq   = upload_arrays(&buffer_manager, iq_varrays, iq_vsizes, 0, 2, unit_square_indices, sizeof(unit_square_indices), 6);
+  const u64 iq_vsizes[] = {sizeof(unit_square_positions), sizeof(quad_positions)};
+  VulkanMesh *p_iq =
+      upload_arrays(&buffer_manager, iq_varrays, iq_vsizes, 0, 2, unit_square_indices, sizeof(unit_square_indices), 6);
   VulkanMesh *p_cube = upload_arrays_single(&buffer_manager, cube_vertices, sizeof(cube_vertices), 36, NULL, 0, 0);
   flush_buffers(&t.ctx, &buffer_manager);
 
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
-  UniformWrite mvp_write = push_uniform(&ub_manager, sizeof(MVPUniform));
-  UniformWrite cube_model_write = push_uniform(&ub_manager, sizeof(CubeModel));
-  UniformWrite x_write = push_uniform(&ub_manager, sizeof(UniformBufferObject));
-  UniformWrite light_pos_write = push_uniform(&ub_manager, sizeof(LightPosition));
-  UniformWrite camera_vp_write = push_uniform(&ub_manager, sizeof(CameraVP));
-  UniformBuffer ub = create_uniform_buffer(&t.ctx, ub_manager.current_offset);
-
-  VkBuffer ubuf = ub.vulkan_buffer.buffer;
+  VkDescriptorBufferInfo *mvp_write = push_uniform(&ub_manager, sizeof(MVPUniform));
+  VkDescriptorBufferInfo *cube_model_write = push_uniform(&ub_manager, sizeof(CubeModel));
+  VkDescriptorBufferInfo *x_write = push_uniform(&ub_manager, sizeof(UniformBufferObject));
+  VkDescriptorBufferInfo *light_pos_write = push_uniform(&ub_manager, sizeof(LightPosition));
+  VkDescriptorBufferInfo *camera_vp_write = push_uniform(&ub_manager, sizeof(CameraVP));
+  UniformBuffer ub = finalize_ub(&t.ctx, &ub_manager);
 
   // triangle: SIMPLE set=0 (binding 0=x, 1=camera_vp, 2=light_position)
   VulkanMaterial triangle_mat;
   init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_simple_program_spec, &triangle_mat);
   {
     DescriptorWrite writes[] = {
-        {.set_id = LAYOUT_ID_SIMPLE, .binding = 0, .buffer_info = {ubuf, x_write.offset, x_write.size}},
-        {.set_id = LAYOUT_ID_SIMPLE, .binding = 1, .buffer_info = {ubuf, camera_vp_write.offset, camera_vp_write.size}},
-        {.set_id = LAYOUT_ID_SIMPLE, .binding = 2, .buffer_info = {ubuf, light_pos_write.offset, light_pos_write.size}},
+        {.set_id = LAYOUT_ID_SIMPLE, .binding = 0, .buffer_info = *x_write},
+        {.set_id = LAYOUT_ID_SIMPLE, .binding = 1, .buffer_info = *camera_vp_write},
+        {.set_id = LAYOUT_ID_SIMPLE, .binding = 2, .buffer_info = *light_pos_write},
     };
     update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &triangle_mat);
   }
 
-  // square: GLOBAL set=0 (binding 0=x, 1=camera_vp, 2=light_position)
+  // square: SIMPLE set=0 (binding 0=x, 1=camera_vp, 2=light_position)
   VulkanMaterial square_mat;
-  init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_square_program_spec, &square_mat);
+  init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_simple_program_spec, &square_mat);
   {
     DescriptorWrite writes[] = {
-        {.set_id = LAYOUT_ID_GLOBAL, .binding = 0, .buffer_info = {ubuf, x_write.offset, x_write.size}},
-        {.set_id = LAYOUT_ID_GLOBAL, .binding = 1, .buffer_info = {ubuf, camera_vp_write.offset, camera_vp_write.size}},
-        {.set_id = LAYOUT_ID_GLOBAL, .binding = 2, .buffer_info = {ubuf, light_pos_write.offset, light_pos_write.size}},
+        {.set_id = LAYOUT_ID_SIMPLE, .binding = 0, .buffer_info = *x_write},
+        {.set_id = LAYOUT_ID_SIMPLE, .binding = 1, .buffer_info = *camera_vp_write},
+        {.set_id = LAYOUT_ID_SIMPLE, .binding = 2, .buffer_info = *light_pos_write},
     };
     update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &square_mat);
   }
@@ -81,25 +82,27 @@ int main() {
   );
   {
     DescriptorWrite writes[] = {
-        {.set_id = LAYOUT_ID_INSTANCED_QUAD, .binding = 0, .buffer_info = {ubuf, mvp_write.offset, mvp_write.size}},
-        {.set_id = LAYOUT_ID_INSTANCED_QUAD, .binding = 1, .buffer_info = {ubuf, x_write.offset, x_write.size}},
-        {.set_id = LAYOUT_ID_INSTANCED_QUAD, .binding = 2, .image_info = {
-            .sampler = t.ctx.samplers[SAMPLER_LINEAR_CLAMP],
-            .imageView = textures[TEXTURE_GIRL_FACE_NORMAL_MAP].image_view,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        }},
+        {.set_id = LAYOUT_ID_INSTANCED_QUAD, .binding = 0, .buffer_info = *mvp_write},
+        {.set_id = LAYOUT_ID_INSTANCED_QUAD, .binding = 1, .buffer_info = *x_write},
+        {.set_id = LAYOUT_ID_INSTANCED_QUAD,
+         .binding = 2,
+         .image_info = {
+             .sampler = t.ctx.samplers[SAMPLER_LINEAR_CLAMP],
+             .imageView = textures[TEXTURE_GIRL_FACE_NORMAL_MAP].image_view,
+             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+         }},
     };
     update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &instanced_quad_mat);
   }
 
   // cube: CUBE set=0 (binding 0=cube_model, 1=light_position, 2=camera_vp)
   VulkanMaterial cube_mat;
-  init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_cube_program_spec, &cube_mat);
+  init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_phong_program_spec, &cube_mat);
   {
     DescriptorWrite writes[] = {
-        {.set_id = LAYOUT_ID_CUBE, .binding = 0, .buffer_info = {ubuf, cube_model_write.offset, cube_model_write.size}},
-        {.set_id = LAYOUT_ID_CUBE, .binding = 1, .buffer_info = {ubuf, light_pos_write.offset, light_pos_write.size}},
-        {.set_id = LAYOUT_ID_CUBE, .binding = 2, .buffer_info = {ubuf, camera_vp_write.offset, camera_vp_write.size}},
+        {.set_id = LAYOUT_ID_PHONG, .binding = 0, .buffer_info = *cube_model_write},
+        {.set_id = LAYOUT_ID_PHONG, .binding = 1, .buffer_info = *light_pos_write},
+        {.set_id = LAYOUT_ID_PHONG, .binding = 2, .buffer_info = *camera_vp_write},
     };
     update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &cube_mat);
   }
@@ -120,10 +123,14 @@ int main() {
     update_vulkan_material(&t.ctx, &write, 1, &fullscreen_quad_mat);
   }
 
-  VulkanMesh triangle_mesh = *p_tri; triangle_mesh.instance_count = 1;
-  VulkanMesh square_mesh = *p_sq; square_mesh.instance_count = 1;
-  VulkanMesh instanced_quad_mesh = *p_iq; instanced_quad_mesh.instance_count = 5;
-  VulkanMesh cube_mesh = *p_cube; cube_mesh.instance_count = 1;
+  VulkanMesh triangle_mesh = *p_tri;
+  triangle_mesh.instance_count = 1;
+  VulkanMesh square_mesh = *p_sq;
+  square_mesh.instance_count = 1;
+  VulkanMesh instanced_quad_mesh = *p_iq;
+  instanced_quad_mesh.instance_count = 5;
+  VulkanMesh cube_mesh = *p_cube;
+  cube_mesh.instance_count = 1;
   VulkanMesh fullscreen_quad_mesh = {.vertex_count = 3, .instance_count = 1};
 
   MVPUniform mvp = {.projection = glm::mat4(1.0f), .view = glm::mat4(1.0f)};
@@ -154,16 +161,19 @@ int main() {
     glm::mat4 cube_model = glm::translate(glm::mat4(1.0f), cube_translation_vector);
     cube_model = glm::scale(cube_model, {0.2f, 0.2f, 0.2f});
 
-    glm::vec4 light_position(2 * sint, sint, 0.5f, 0.0f);
+    LightPosition light_position = {
+        .position = glm::vec4(2 * sint, sint, 0.5f, 0.0f),
+        .color = glm::vec4(1.0, 1.0, 1.0, 1.0),
+    };
 
     CameraMatrices camera_matrices = create_camera_matrices(&camera, width, height);
     camera_vp = camera_matrices.projection * camera_matrices.view;
 
-    write_to_uniform_buffer(&ub, &mvp, mvp_write);
-    write_to_uniform_buffer(&ub, &cube_model, cube_model_write);
-    write_to_uniform_buffer(&ub, &ubo, x_write);
-    write_to_uniform_buffer(&ub, &light_position, light_pos_write);
-    write_to_uniform_buffer(&ub, &camera_vp, camera_vp_write);
+    write_to_uniform_buffer(&ub, &mvp, *mvp_write);
+    write_to_uniform_buffer(&ub, &cube_model, *cube_model_write);
+    write_to_uniform_buffer(&ub, &ubo, *x_write);
+    write_to_uniform_buffer(&ub, &light_position, *light_pos_write);
+    write_to_uniform_buffer(&ub, &camera_vp, *camera_vp_write);
 
     begin_frame(&t.ctx);
     VkCommandBuffer cmd = begin_command_buffer(&t.ctx);

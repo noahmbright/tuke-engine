@@ -347,7 +347,7 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
     camera->position.y = player_pos->y;
 
     f32 next_camera_z = camera->position.z + ZOOM_SPEED * player_intent.scroll;
-    camera->position.z = clamp_f32(next_camera_z, 1.0f, CAMERA_PERSPECTIVE_PROJECTION_FAR_Z - EPSILON);
+    camera->position.z = clamp_f32(next_camera_z, 1.0f, CAMERA_FAR_Z - EPSILON);
 
     // TODO feels a little impure to have a key driven transition request taking place here.
     // TODO Define magic numbers in the tilemap

@@ -97,9 +97,9 @@ enum PongMode {
 };
 
 struct UniformWrites {
-  UniformWrite camera_vp;
-  UniformWrite arena_model;
-  UniformWrite instance_data;
+  VkDescriptorBufferInfo camera_vp;
+  VkDescriptorBufferInfo arena_model;
+  VkDescriptorBufferInfo instance_data;
 };
 
 struct Paddle {

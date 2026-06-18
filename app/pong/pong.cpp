@@ -23,7 +23,8 @@ void init_buffers(State *state) {
   // This should not be managed by the state raw - need a renderer or something
   // This is also not very clear - I forget why one mesh handles unit square indices and paddle vertices
   state->buffer_manager = create_buffer_manager();
-  VulkanMesh *mesh_ptr = UPLOAD_ARRAYS(state->buffer_manager, paddle_vertices, unit_square_indices, ARRAY_SIZE(unit_square_indices));
+  VulkanMesh *mesh_ptr =
+      UPLOAD_ARRAYS(state->buffer_manager, paddle_vertices, unit_square_indices, ARRAY_SIZE(unit_square_indices));
   flush_buffers(ctx, &state->buffer_manager);
   state->mesh = *mesh_ptr;
   state->mesh.instance_count = 1;
@@ -32,64 +33,41 @@ void init_buffers(State *state) {
   // TODO can I come up with a scheme for coordinating UBOs and the location of
   // what data in what portion of the renderer maps to what data in the shaders?
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
-  state->uniform_writes.camera_vp = push_uniform(&ub_manager, sizeof(VPUniform));
-  state->uniform_writes.arena_model = push_uniform(&ub_manager, sizeof(glm::mat4));
-  state->uniform_writes.instance_data = push_uniform(&ub_manager, sizeof(InstanceDataUBO));
-  state->uniform_buffer = create_uniform_buffer(ctx, ub_manager.current_offset);
+  state->uniform_writes.camera_vp = *push_uniform(&ub_manager, sizeof(VPUniform));
+  state->uniform_writes.arena_model = *push_uniform(&ub_manager, sizeof(glm::mat4));
+  state->uniform_writes.instance_data = *push_uniform(&ub_manager, sizeof(InstanceDataUBO));
+  state->uniform_buffer = finalize_ub(ctx, &ub_manager);
 }
 
 void init_background_material(State *state) {
   init_program_spec(&state->ctx, state->ctx.render_pass, &pong_background_program_spec, &state->background_material);
 
   VulkanMaterial *mat = &state->background_material;
-  VkBuffer ub = state->uniform_buffer.vulkan_buffer.buffer;
+  const UniformWrites *ws = &state->uniform_writes;
 
   VkDescriptorImageInfo image_info = {
       .sampler = state->sampler,
       .imageView = state->textures[TEXTURE_FIELD_BACKGROUND].image_view,
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };
-  VkDescriptorBufferInfo vp_info = {
-      .buffer = ub,
-      .offset = state->uniform_writes.camera_vp.offset,
-      .range = state->uniform_writes.camera_vp.size,
-  };
-  VkDescriptorBufferInfo model_info = {
-      .buffer = ub,
-      .offset = state->uniform_writes.arena_model.offset,
-      .range = state->uniform_writes.arena_model.size,
-  };
 
   // set 0 = PLACEHOLDER, set 1 = PONG_GLOBAL
   DescriptorWrite writes[] = {
       {.set_id = LAYOUT_ID_PLACEHOLDER, .binding = 1, .image_info = image_info},
-      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 0, .buffer_info = vp_info},
-      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 1, .buffer_info = model_info},
+      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 0, .buffer_info = ws->camera_vp},
+      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 1, .buffer_info = ws->arena_model},
   };
   update_vulkan_material(&state->ctx, writes, ARRAY_SIZE(writes), mat);
 }
 
 void init_paddles_material(State *state) {
   init_program_spec(&state->ctx, state->ctx.render_pass, &pong_paddle_program_spec, &state->paddle_material);
-
   VulkanMaterial *mat = &state->paddle_material;
-  VkBuffer ub = state->uniform_buffer.vulkan_buffer.buffer;
-
-  VkDescriptorBufferInfo vp_info = {
-      .buffer = ub,
-      .offset = state->uniform_writes.camera_vp.offset,
-      .range = state->uniform_writes.camera_vp.size,
-  };
-  VkDescriptorBufferInfo instance_info = {
-      .buffer = ub,
-      .offset = state->uniform_writes.instance_data.offset,
-      .range = state->uniform_writes.instance_data.size,
-  };
-
+  const UniformWrites *ws = &state->uniform_writes;
   // set 0 = PONG_GLOBAL
   DescriptorWrite writes[] = {
-      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 0, .buffer_info = vp_info},
-      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 2, .buffer_info = instance_info},
+      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 0, .buffer_info = ws->camera_vp},
+      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 2, .buffer_info = ws->instance_data},
   };
   update_vulkan_material(&state->ctx, writes, ARRAY_SIZE(writes), mat);
 }

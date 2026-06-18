@@ -44,6 +44,7 @@ inline bool matrix_has_nan(const glm::mat4 &mat) {
 }
 
 inline f32 sign_f32(f32 x) { return x >= 0.0f ? 1.0f : -1.0f; }
+
 static inline void log_vec3(const glm::vec3 *v) {
   const char *fmt = "%+9.3f";
   printf(fmt, v->x);

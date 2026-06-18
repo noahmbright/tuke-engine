@@ -11,6 +11,7 @@
 
 {{ SET_BINDING 2 SET_LABEL SIMPLE }} uniform LightPosition {
     vec4 position;
+    vec4 color;
 } light_position;
 
 void main(){
