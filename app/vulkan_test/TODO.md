@@ -1,8 +1,6 @@
 # Vulkan Test TODO
 
-- 05: Phong lighting (ambient + diffuse + specular, light direction uniform)
 - 06: Normal mapping (TBN matrix, tangent as vertex attribute)
-- 07: Push constants (per-draw data without descriptor overhead)
 - 08: Offscreen rendering + fullscreen blit (render to texture, then display)
 - 09: Shadow mapping — offscreen depth-only pass, sample in main pass as a
   texture; requires understanding of depth bias and shadow acne

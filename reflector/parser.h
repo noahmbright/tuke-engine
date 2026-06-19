@@ -186,7 +186,10 @@ typedef struct {
   DescriptorType descriptor_type;
 
   const char *set_label_name;
-  u32 set_label_name_length;
+  u32 set_label_name_len;
+
+  const char *instance_name;
+  u32 instance_name_len;
 
   bool was_successful;
 } SetBindingDirectiveParse;

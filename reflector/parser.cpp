@@ -39,94 +39,39 @@ static bool is_nondigit(char c) {
 }
 
 static TokenType string_slice_to_keyword_or_identifier(const char *string, u32 length) {
-  if (length == 2 && strncmp(string, "in", length) == 0) {
-    return TOKEN_TYPE_IN;
-  }
-  if (length == 3 && strncmp(string, "out", length) == 0) {
-    return TOKEN_TYPE_OUT;
-  }
-  if (length == 7 && strncmp(string, "version", length) == 0) {
-    return TOKEN_TYPE_VERSION;
-  }
-  if (length == 4 && strncmp(string, "void", length) == 0) {
-    return TOKEN_TYPE_VOID;
-  }
-  if (length == 7 && strncmp(string, "uniform", length) == 0) {
-    return TOKEN_TYPE_UNIFORM;
-  }
-  if (length == 7 && strncmp(string, "sampler", length) == 0) {
-    return TOKEN_TYPE_SAMPLER;
-  }
-  if (length == 9 && strncmp(string, "sampler2D", length) == 0) {
-    return TOKEN_TYPE_SAMPLER2D;
-  }
-  if (length == 9 && strncmp(string, "texture2D", length) == 0) {
-    return TOKEN_TYPE_TEXTURE2D;
-  }
-  if (length == 7 && strncmp(string, "image2D", length) == 0) {
-    return TOKEN_TYPE_IMAGE2D;
-  }
-  if (length == 4 && strncmp(string, "uint", length) == 0) {
-    return TOKEN_TYPE_UINT;
-  }
-  if (length == 5 && strncmp(string, "float", length) == 0) {
-    return TOKEN_TYPE_FLOAT;
-  }
-  if (length == 4 && strncmp(string, "vec2", length) == 0) {
-    return TOKEN_TYPE_VEC2;
-  }
-  if (length == 4 && strncmp(string, "vec3", length) == 0) {
-    return TOKEN_TYPE_VEC3;
-  }
-  if (length == 4 && strncmp(string, "vec4", length) == 0) {
-    return TOKEN_TYPE_VEC4;
-  }
-  if (length == 4 && strncmp(string, "mat2", length) == 0) {
-    return TOKEN_TYPE_MAT2;
-  }
-  if (length == 4 && strncmp(string, "mat3", length) == 0) {
-    return TOKEN_TYPE_MAT3;
-  }
-  if (length == 4 && strncmp(string, "mat4", length) == 0) {
-    return TOKEN_TYPE_MAT4;
-  }
-  if (length == 7 && strncmp(string, "VERSION", length) == 0) {
-    return TOKEN_TYPE_DIRECTIVE_VERSION;
-  }
-  if (length == 8 && strncmp(string, "LOCATION", length) == 0) {
-    return TOKEN_TYPE_DIRECTIVE_LOCATION;
-  }
-  if (length == 11 && strncmp(string, "SET_BINDING", length) == 0) {
-    return TOKEN_TYPE_DIRECTIVE_SET_BINDING;
-  }
-  if (length == 13 && strncmp(string, "PUSH_CONSTANT", length) == 0) {
-    return TOKEN_TYPE_DIRECTIVE_PUSH_CONSTANT;
-  }
-  if (length == 11 && strncmp(string, "RATE_VERTEX", length) == 0) {
-    return TOKEN_TYPE_RATE_VERTEX;
-  }
-  if (length == 13 && strncmp(string, "RATE_INSTANCE", length) == 0) {
-    return TOKEN_TYPE_RATE_INSTANCE;
-  }
-  if (length == 7 && strncmp(string, "BINDING", length) == 0) {
-    return TOKEN_TYPE_BINDING;
-  }
-  if (length == 6 && strncmp(string, "OFFSET", length) == 0) {
-    return TOKEN_TYPE_OFFSET;
-  }
-  if (length == 14 && strncmp(string, "TIGHTLY_PACKED", length) == 0) {
-    return TOKEN_TYPE_TIGHTLY_PACKED;
-  }
-  if (length == 9 && strncmp(string, "SET_LABEL", length) == 0) {
-    return TOKEN_TYPE_SET_LABEL;
-  }
-  if (length == 12 && strncmp(string, "VERTEX_INDEX", length) == 0) {
-    return TOKEN_TYPE_DIRECTIVE_VERTEX_INDEX;
-  }
-  if (length == 14 && strncmp(string, "INSTANCE_INDEX", length) == 0) {
-    return TOKEN_TYPE_DIRECTIVE_INSTANCE_INDEX;
-  }
-
+  // clang-format off
+#define KW(kw, token) if (length == (sizeof(kw) - 1) && (strncmp(string, kw, length) == 0)) { return token; }
+  KW("in",              TOKEN_TYPE_IN)
+  KW("out",             TOKEN_TYPE_OUT)
+  KW("version",         TOKEN_TYPE_VERSION)
+  KW("void",            TOKEN_TYPE_VOID)
+  KW("uniform",         TOKEN_TYPE_UNIFORM)
+  KW("sampler",         TOKEN_TYPE_SAMPLER)
+  KW("sampler2D",       TOKEN_TYPE_SAMPLER2D)
+  KW("texture2D",       TOKEN_TYPE_TEXTURE2D)
+  KW("image2D",         TOKEN_TYPE_IMAGE2D)
+  KW("uint",            TOKEN_TYPE_UINT)
+  KW("float",           TOKEN_TYPE_FLOAT)
+  KW("vec2",            TOKEN_TYPE_VEC2)
+  KW("vec3",            TOKEN_TYPE_VEC3)
+  KW("vec4",            TOKEN_TYPE_VEC4)
+  KW("mat2",            TOKEN_TYPE_MAT2)
+  KW("mat3",            TOKEN_TYPE_MAT3)
+  KW("mat4",            TOKEN_TYPE_MAT4)
+  KW("VERSION",         TOKEN_TYPE_DIRECTIVE_VERSION)
+  KW("LOCATION",        TOKEN_TYPE_DIRECTIVE_LOCATION)
+  KW("SET_BINDING",     TOKEN_TYPE_DIRECTIVE_SET_BINDING)
+  KW("PUSH_CONSTANT",   TOKEN_TYPE_DIRECTIVE_PUSH_CONSTANT)
+  KW("RATE_VERTEX",     TOKEN_TYPE_RATE_VERTEX)
+  KW("RATE_INSTANCE",   TOKEN_TYPE_RATE_INSTANCE)
+  KW("BINDING",         TOKEN_TYPE_BINDING)
+  KW("OFFSET",          TOKEN_TYPE_OFFSET)
+  KW("TIGHTLY_PACKED",  TOKEN_TYPE_TIGHTLY_PACKED)
+  KW("SET_LABEL",       TOKEN_TYPE_SET_LABEL)
+  KW("VERTEX_INDEX",    TOKEN_TYPE_DIRECTIVE_VERTEX_INDEX)
+  KW("INSTANCE_INDEX",  TOKEN_TYPE_DIRECTIVE_INSTANCE_INDEX)
+  // clang-format on
+#undef KW
   return TOKEN_TYPE_TEXT;
 }
 
@@ -848,7 +793,7 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
       .was_successful = false,
       .next_glsl_source_start = NULL,
       .set_label_name = NULL,
-      .set_label_name_length = 0,
+      .set_label_name_len = 0,
   };
 
   Token cur_tok = get_current_token(parser);
@@ -898,7 +843,7 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
   }
   Token set_label_tok = cur_tok;
   directive_parse.set_label_name = set_label_tok.start;
-  directive_parse.set_label_name_length = set_label_tok.text_length;
+  directive_parse.set_label_name_len = set_label_tok.text_length;
 
   // TOKEN_TYPE_DOUBLE_R_BRACE
   cur_tok = get_next_token(parser);
@@ -937,6 +882,8 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
 
   // Sampler
   if (cur_tok.type == TOKEN_TYPE_SAMPLER2D) {
+
+    // Identifier
     cur_tok = get_next_token(parser);
     if (cur_tok.type != TOKEN_TYPE_TEXT) {
       report_parser_error(
@@ -945,7 +892,9 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
       );
       return directive_parse;
     }
+    Token instance_tok = cur_tok;
 
+    // Array size
     cur_tok = get_next_token(parser);
     u32 descriptor_count = 0;
     if (cur_tok.type == TOKEN_TYPE_L_BRACKET) {
@@ -974,6 +923,8 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
     directive_parse.binding = binding;
     directive_parse.descriptor_type = DESCRIPTOR_TYPE_SAMPLER2D;
     directive_parse.descriptor_count = descriptor_count;
+    directive_parse.instance_name = instance_tok.start;
+    directive_parse.instance_name_len = instance_tok.text_length;
 
     // TODO Don't like the repetition between the directive parse and slice here.
     template_string_slice->binding = binding;
@@ -987,7 +938,7 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
       .type_name_len = cur_tok.text_length,
   };
 
-  // opening brace
+  // Opening brace
   cur_tok = get_next_token(parser);
   if (cur_tok.type != TOKEN_TYPE_L_BRACE) {
     report_parser_error(
@@ -997,10 +948,12 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
     );
     return directive_parse;
   }
+
   // parsing members processes the closing brace
   parse_glsl_struct_member_list(parser, &glsl_struct);
   template_string_slice->binding = binding;
 
+  // Struct instance identifier
   cur_tok = get_current_token(parser);
   if (cur_tok.type != TOKEN_TYPE_TEXT) {
     report_parser_error(
@@ -1010,7 +963,7 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
     );
     return directive_parse;
   }
-  // Token struct_instance_tok = cur_tok;
+  Token instance_tok = cur_tok;
 
   cur_tok = get_next_token(parser);
   u32 descriptor_count = 0;
@@ -1040,6 +993,8 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
   directive_parse.was_successful = true;
   directive_parse.glsl_struct = glsl_struct;
   directive_parse.binding = binding;
+  directive_parse.instance_name = instance_tok.start;
+  directive_parse.instance_name_len = instance_tok.text_length;
   return directive_parse;
 }
 
@@ -1318,7 +1273,7 @@ search_descriptor_set_layouts(ParsedShadersIR *ir, const SetBindingDirectivePars
   for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
     DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
     bool name_is_same =
-        labels_match(sb_parse->set_label_name, layout->name, sb_parse->set_label_name_length, layout->name_length);
+        labels_match(sb_parse->set_label_name, layout->name, sb_parse->set_label_name_len, layout->name_len);
     if (name_is_same) {
       return layout;
     }
@@ -1334,28 +1289,45 @@ static bool push_and_validate_descriptor(
 ) {
   DescriptorBinding *binding = &layout->bindings[sb_parse->binding];
   bool binding_in_use = (binding->type != DESCRIPTOR_TYPE_INVALID);
-  u32 name_len = sb_parse->set_label_name_length;
+  u32 label_name_len = sb_parse->set_label_name_len;
 
   // If we find two definitions for this set/binding, assert consistency.
   if (binding_in_use) {
     *binding_is_new = false;
     const char *discovered_name = binding->discovered_shader_name;
     u32 discovered_len = binding->discovered_shader_name_len;
-    u32 binding_no = sb_parse->binding;
+    u32 binding_num = sb_parse->binding;
+
+    bool instance_names_same =
+        labels_match(binding->name, sb_parse->instance_name, binding->name_length, sb_parse->instance_name_len);
+    if (!instance_names_same) {
+      fprintf(
+          stderr, "Set %.*s, binding %u: instance name %.*s mismatches previous definition.\n", label_name_len,
+          layout->name, binding_num, sb_parse->instance_name_len, sb_parse->instance_name
+      );
+      fprintf(
+          stderr, "    Originally found %.*s in %.*s.\n", binding->name_length, binding->name, discovered_len,
+          discovered_name
+      );
+    }
 
     bool types_match = (binding->type == sb_parse->descriptor_type);
     if (!types_match) {
-      fprintf(stderr, "Set %.*s, binding %u: overrwritten descriptor type.\n", name_len, layout->name, binding_no);
+      fprintf(
+          stderr, "Set %.*s, binding %u: overrwritten descriptor type.\n", label_name_len, layout->name, binding_num
+      );
       fprintf(stderr, "    Originally found in %.*s.\n", discovered_len, discovered_name);
     }
 
     bool counts_match = (binding->descriptor_count == sb_parse->descriptor_count);
     if (!counts_match) {
-      fprintf(stderr, "Set %.*s, binding %u: overrwritten descriptor count.\n", name_len, layout->name, binding_no);
+      fprintf(
+          stderr, "Set %.*s, binding %u: overrwritten descriptor count.\n", label_name_len, layout->name, binding_num
+      );
       fprintf(stderr, "    Originally found in %.*s.\n", discovered_len, discovered_name);
     }
 
-    if (!types_match || !counts_match) {
+    if (!instance_names_same || !types_match || !counts_match) {
       return false;
     }
 
@@ -1364,12 +1336,28 @@ static bool push_and_validate_descriptor(
     return true;
   } // Finish validation
 
-  // New binding for this set.
+  // New binding: check no existing slot already owns this instance name.
+  for (u32 i = 0; i < MAX_NUM_DESCRIPTOR_BINDINGS; i++) {
+    const DescriptorBinding *existing = &layout->bindings[i];
+    if (existing->type == DESCRIPTOR_TYPE_INVALID || existing->name == NULL) {
+      continue;
+    }
+    if (labels_match(existing->name, sb_parse->instance_name, existing->name_length, sb_parse->instance_name_len)) {
+      fprintf(
+          stderr, "Set %.*s: instance name %.*s at binding %u already used at binding %u.\n", label_name_len,
+          layout->name, sb_parse->instance_name_len, sb_parse->instance_name, sb_parse->binding, i
+      );
+      return false;
+    }
+  }
+
   *binding_is_new = true;
   *binding = {
       .descriptor_count = sb_parse->descriptor_count,
       .type = sb_parse->descriptor_type,
       .stage_flags = sb_parse->stage,
+      .name_length = sb_parse->instance_name_len,
+      .name = sb_parse->instance_name,
   };
 
   layout->num_bindings++;
@@ -1569,9 +1557,9 @@ static bool parse_shader(const ShaderToCompile *input, ParsedShadersIR *ir) {
         assert(ir->num_descriptor_set_layouts < MAX_NUM_DESCRIPTOR_SET_LISTS);
         layout = &ir->descriptor_set_layouts[ir->num_descriptor_set_layouts++];
 
-        u32 name_len = sb_parse.set_label_name_length;
+        u32 name_len = sb_parse.set_label_name_len;
         memcpy(layout->name, sb_parse.set_label_name, name_len);
-        layout->name_length = name_len;
+        layout->name_len = name_len;
       } else {
         layout = matching_layout;
       }
@@ -1591,7 +1579,7 @@ static bool parse_shader(const ShaderToCompile *input, ParsedShadersIR *ir) {
       } else {
         if (binding->glsl_struct != persistent_struct) {
           fprintf(
-              stderr, "Set %.*s, binding %u: conflicting struct types.\n", layout->name_length, layout->name,
+              stderr, "Set %.*s, binding %u: conflicting struct types.\n", layout->name_len, layout->name,
               sb_parse.binding
           );
           fprintf(stderr, "New found in %.*s:\n", input->name_len, input->name);

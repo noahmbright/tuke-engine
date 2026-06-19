@@ -82,6 +82,46 @@ Deferred pending render pass / dynamic rendering redesign. Issues to revisit:
 
 ---
 
+## Missing Features
+
+**Swapchain recreation on window resize.**
+Current code crashes or produces validation errors if the window is resized. Requires catching
+`VK_ERROR_OUT_OF_DATE_KHR` from `vkAcquireNextImageKHR` / `vkQueuePresentKHR` and rebuilding
+the swapchain, framebuffers, and any size-dependent images (offscreen buffers, depth).
+
+**Pipeline variants.**
+One pipeline per program spec works now, but transparent objects need depth write off and
+blending enabled. Need a way to parameterize pipelines (blend mode, depth write, cull mode)
+without duplicating shaders. A PipelineKey struct hashed into a pipeline cache is the standard
+approach.
+
+**Mipmaps.**
+Textures loaded without mip chains. Visible quality degradation at distance, worse GPU cache
+behavior. Generate mipmaps at load time via `vkCmdBlitImage` chain or load pre-built KTX.
+
+**SSBOs for compute.**
+Compute shaders need read/write buffers without the 64KB UBO size cap. SSBOs use a different
+binding type (`VK_DESCRIPTOR_TYPE_STORAGE_BUFFER`) and different GLSL qualifier (`buffer` vs
+`uniform`). Buffer creation and descriptor write paths need to support this.
+
+**Barriers between compute and graphics.**
+Compute output consumed by a graphics pass (or vice versa) requires explicit pipeline barriers
+(`vkCmdPipelineBarrier`) with correct src/dst stage and access masks. This is where sync gets
+real — worth reading the Vulkan sync spec section before implementing.
+
+**Memory suballocation.**
+One `vkAllocateMemory` per `VulkanBuffer`, but meshes and uniforms are already batched into
+single buffers per manager, so allocation count stays low in practice. Only relevant if the
+number of distinct `BufferManager` / `UniformBuffer` instances grows into the thousands.
+VMA is the standard solution if it ever matters.
+
+**Bindless resources.**
+Descriptor-per-material doesn't scale past a few hundred draw calls. Bindless: one large
+descriptor array of textures/buffers, index into it via push constant per draw. Pairs naturally
+with GPU-driven indirect drawing. Defer until scene complexity demands it.
+
+---
+
 ## Housekeeping
 
 **`vkQueueWaitIdle` in `end_single_use_command_buffer`.**

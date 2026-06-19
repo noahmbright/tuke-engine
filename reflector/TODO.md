@@ -63,6 +63,9 @@ This lets non-rendering code (simulation, asset system, UI logic) include only
 
 ## Minor / Deferred
 
+- Drop `SET_BINDING N` from the directive syntax. Binding index becomes an assigned offset:
+  sort instance names alphabetically within each label, assign indices 0..N-1 in that order.
+  Deterministic across parse order. The `background.frag.in` class of bug becomes impossible.
 - Push constant parsing is a stub (`parse_push_constant_directive` does nothing).
 - Add `const char *source_path` to `ShaderSpec` for hot reload.
 - Emit per-label binding constants. For each binding in a label, emit

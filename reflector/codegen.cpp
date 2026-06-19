@@ -779,7 +779,7 @@ static void generate_vulkan_descriptor_set_binding_lists(FILE *dst, const Parsed
   for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
     const DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
     fprintf(
-        dst, "static VkDescriptorSetLayoutBinding %.*s_descriptor_set_layout_bindings[] = {\n", layout->name_length,
+        dst, "static VkDescriptorSetLayoutBinding %.*s_descriptor_set_layout_bindings[] = {\n", layout->name_len,
         layout->name
     );
 
@@ -810,7 +810,7 @@ static void generate_vulkan_descriptor_set_binding_lists(FILE *dst, const Parsed
 
     // Size
     fprintf(
-        dst, "static uint32_t %.*s_num_descriptor_set_layout_bindings = %u;\n\n", layout->name_length, layout->name,
+        dst, "static uint32_t %.*s_num_descriptor_set_layout_bindings = %u;\n\n", layout->name_len, layout->name,
         layout->num_bindings
     );
   }
@@ -820,7 +820,7 @@ static void generate_vulkan_descriptor_write_templates(FILE *dst, const ParsedSh
   for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
     const DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
 
-    fprintf(dst, "static const VkWriteDescriptorSet %.*s_write_templates[] = {\n", layout->name_length, layout->name);
+    fprintf(dst, "static const VkWriteDescriptorSet %.*s_write_templates[] = {\n", layout->name_len, layout->name);
     for (u32 j = 0; j < MAX_NUM_DESCRIPTOR_BINDINGS; j++) {
       const DescriptorBinding *binding = &layout->bindings[j];
       if (binding->type == DESCRIPTOR_TYPE_INVALID) {
@@ -844,7 +844,7 @@ static void generate_vulkan_descriptor_write_templates(FILE *dst, const ParsedSh
     }
     fprintf(dst, "};\n\n");
 
-    fprintf(dst, "static VkDeviceSize %.*s_ranges[] = {\n", layout->name_length, layout->name);
+    fprintf(dst, "static VkDeviceSize %.*s_ranges[] = {\n", layout->name_len, layout->name);
     for (u32 j = 0; j < MAX_NUM_DESCRIPTOR_BINDINGS; j++) {
       const DescriptorBinding *binding = &layout->bindings[j];
       if (binding->type == DESCRIPTOR_TYPE_INVALID) {
@@ -856,6 +856,19 @@ static void generate_vulkan_descriptor_write_templates(FILE *dst, const ParsedSh
       fprintf(dst, "  %u,\n", size);
     }
     fprintf(dst, "};\n\n");
+
+    for (u32 j = 0; j < MAX_NUM_DESCRIPTOR_BINDINGS; j++) {
+      const DescriptorBinding *binding = &layout->bindings[j];
+      if (binding->type == DESCRIPTOR_TYPE_INVALID || binding->name == NULL) {
+        continue;
+      }
+      fprintf(dst, "#define BINDING_");
+      print_name_in_caps_n(dst, layout->name, layout->name_len);
+      fprintf(dst, "_");
+      print_name_in_caps_n(dst, binding->name, binding->name_length);
+      fprintf(dst, " %u\n", j);
+    }
+    fprintf(dst, "\n");
   }
 }
 
@@ -1003,7 +1016,7 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
   for(u32 i = 0; i < program->num_descriptor_set_layouts; i++) {
     const DescriptorSetLayout *layout = program->descriptor_set_layouts[i];
     fprintf(
-        dst, "    %.*s_descriptor_set_layout_bindings,\n", layout->name_length, layout->name
+        dst, "    %.*s_descriptor_set_layout_bindings,\n", layout->name_len, layout->name
     );
   }
   fprintf(dst, "  },\n");
@@ -1012,7 +1025,7 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
   fprintf(dst, "  .write_templates = {\n");
   for(u32 i = 0; i < program->num_descriptor_set_layouts; i++) {
     const DescriptorSetLayout *layout = program->descriptor_set_layouts[i];
-    fprintf(dst, "    %.*s_write_templates,\n", layout->name_length, layout->name);
+    fprintf(dst, "    %.*s_write_templates,\n", layout->name_len, layout->name);
   }
   fprintf(dst, "  },\n");
 
@@ -1086,7 +1099,7 @@ static void codegen_buffer_label_enum(FILE *dst, const ParsedShadersIR *ir) {
   for (u32 i = 0; i < ir->num_descriptor_set_layouts; i++) {
     const DescriptorSetLayout *layout = &ir->descriptor_set_layouts[i];
     fprintf(dst, "  UNIFORM_BUFFER_LABEL_");
-    print_name_in_caps_n(dst, layout->name, layout->name_length);
+    print_name_in_caps_n(dst, layout->name, layout->name_len);
     fprintf(dst, ",\n");
   }
   fprintf(dst, "\n  NUM_UNIFORM_BUFFER_LABELS\n");

@@ -1,6 +1,7 @@
 #include "camera.h"
 #include "generated_shader_utils.h"
 #include "glm/ext/matrix_transform.hpp"
+#include "glm/geometric.hpp"
 #include "shaders.h"
 
 #include "vulkan_base.h"
@@ -47,20 +48,29 @@ int main() {
   // Having to look at the shaders to see the bindings is annoying.
   // Maybe could be tolerable. In a game init would be okay to get right once.
   DescriptorWrite phong_writes[] = {
-      {.set_id = LAYOUT_ID_PHONG, .binding = 0, .buffer_info = *phong_model_write},
-      {.set_id = LAYOUT_ID_PHONG, .binding = 1, .buffer_info = *phong_light_write},
-      {.set_id = LAYOUT_ID_PHONG, .binding = 2, .buffer_info = *vp_write},
+      {.set_id = LAYOUT_ID_PHONG, .binding = BINDING_PHONG_CUBE_TRANSFORM, .buffer_info = *phong_model_write},
+      {.set_id = LAYOUT_ID_PHONG, .binding = BINDING_PHONG_LIGHT, .buffer_info = *phong_light_write},
+      {.set_id = LAYOUT_ID_PHONG, .binding = BINDING_PHONG_CAMERA_VP, .buffer_info = *vp_write},
   };
   update_vulkan_material(&t.ctx, phong_writes, ARRAY_SIZE(phong_writes), &lit_mat);
 
   DescriptorWrite light_writes[] = {
-      {.set_id = LAYOUT_ID_COLORED_POS_MODEL, .binding = 0, .buffer_info = *light_model_write},
-      {.set_id = LAYOUT_ID_COLORED_POS_COLOR, .binding = 0, .buffer_info = *light_color_write},
+      {
+          .set_id = LAYOUT_ID_COLORED_POS_MODEL,
+          .binding = BINDING_COLORED_POS_MODEL_MODEL,
+          .buffer_info = *light_model_write,
+      },
+      {
+          .set_id = LAYOUT_ID_COLORED_POS_COLOR,
+          .binding = BINDING_COLORED_POS_COLOR_COLOR,
+          .buffer_info = *light_color_write,
+      },
   };
   update_vulkan_material(&t.ctx, light_writes, ARRAY_SIZE(light_writes), &light_mat);
 
   Camera camera = create_camera(CAMERA_TYPE_3D);
-  camera.position = {0.0f, 0.0f, 20.0f};
+  camera.position = {4.0f, -6.0f, 10.0f};
+  camera.direction = -glm::normalize(camera.position);
 
   Inputs inputs;
   init_inputs(&inputs);
@@ -88,10 +98,11 @@ int main() {
     glm::vec2 dir = inputs_to_direction(&inputs);
     camera_move_3d(&camera, (f32)dt * 5.0f * dir);
 
-    f32 r = 5.0f;
-    f32 light_x = r * sinf(t_total);
-    f32 light_z = r * cosf(t_total);
-    glm::vec3 light_pos3 = glm::vec3(light_x, 0.0, light_z);
+    f32 r = 2.0f;
+    f32 light_x = r * sinf(3.0 * t_total + 0.2);
+    f32 light_y = r * sinf(2.0 * t_total + 0.2);
+    f32 light_z = r * cosf(4.0 * t_total + 0.7);
+    glm::vec3 light_pos3 = glm::vec3(light_x, light_y, light_z);
     phong_light.position = glm::vec4(light_pos3, 0.0);
     write_to_uniform_buffer(&ub, &phong_light, *phong_light_write);
 

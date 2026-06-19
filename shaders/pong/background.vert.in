@@ -7,7 +7,7 @@
 
 {{ SET_BINDING 0 SET_LABEL PONG_GLOBAL }} uniform VPUniform {
     mat4 vp;
-} pong_vp;
+} vp;
 
 {{ SET_BINDING 1 SET_LABEL PONG_GLOBAL }} uniform ModelUniform {
     mat4 model;
@@ -15,5 +15,5 @@
 
 void main(){
     uv = a_uv;
-    gl_Position = pong_vp.vp * background_model.model * vec4(a_pos, 1.0);
+    gl_Position = vp.vp * background_model.model * vec4(a_pos, 1.0);
 }

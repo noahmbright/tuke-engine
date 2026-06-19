@@ -294,8 +294,8 @@ struct DescriptorBinding {
   const GLSLStruct *glsl_struct; // For uniforms
 
   // Descriptors all give an identifier, the name of the texture or uniform instance
-  // const char *name;
-  // u32 name_length;
+  const char *name;
+  u32 name_length;
 
   const char *discovered_shader_name;
   u32 discovered_shader_name_len;
@@ -303,7 +303,7 @@ struct DescriptorBinding {
 
 struct DescriptorSetLayout {
   char name[MAX_DESCRIPTOR_SET_LAYOUT_NAME_LENGTH];
-  u32 name_length;
+  u32 name_len;
 
   DescriptorBinding bindings[MAX_NUM_DESCRIPTOR_BINDINGS];
   u32 num_bindings;
