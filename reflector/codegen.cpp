@@ -13,7 +13,7 @@
 #include <time.h>
 #include <unistd.h>
 
-int create_tempfile(char *filepath_template) {
+static int create_tempfile(char *filepath_template) {
   // the Xs are replaced by mkstemp and are required
   const char *base = "/tmp/shXXXXXX";
   if (strlen(base) + 1 > TEMPLATE_FILE_LENGTH) {
@@ -234,31 +234,15 @@ static bool finish_spirv_compilation(const CompileJob *jobs, SpirVBytesArray *by
   return true;
 }
 
-bool compile_to_spirv(const GLSLSource *sources, SpirVBytesArray *bytes_arrays, u32 num_sources) {
+static bool compile_to_spirv(const GLSLSource *sources, SpirVBytesArray *bytes_arrays, u32 num_sources) {
   CompileJob jobs[MAX_NUM_SHADERS];
   start_spirv_compilation(jobs, sources, num_sources);
   bool success = finish_spirv_compilation(jobs, bytes_arrays, num_sources);
   return success;
 }
 
-static u32 align_up(u32 offset, u32 alignment) { return (offset + alignment - 1) & ~(alignment - 1); }
-
-static u32 compute_glsl_struct_size(const GLSLStruct *glsl_struct) {
-  u32 max_alignment = 0;
-  u32 size = 0;
-  for (u32 i = 0; i < glsl_struct->num_members; i++) {
-    const GLSLStructMember *member = &glsl_struct->members[i];
-    u32 alignment = glsl_type_to_alignment[member->type];
-    if (alignment > max_alignment)
-      max_alignment = alignment;
-    size = align_up(size, alignment);
-    size += glsl_type_to_size[member->type];
-  }
-  return align_up(size, max_alignment);
-}
-
 // line with version is #version {{ VERSION }}
-TemplateStringReplacement directive_replacement_version(Backend backend) {
+static TemplateStringReplacement directive_replacement_version(Backend backend) {
   TemplateStringReplacement replacement;
 
   switch (backend) {
@@ -294,7 +278,7 @@ TemplateStringReplacement directive_replacement_vertex_index(Backend backend) {
   return replacement;
 }
 
-TemplateStringReplacement directive_replacement_instance_index(Backend backend) {
+static TemplateStringReplacement directive_replacement_instance_index(Backend backend) {
   TemplateStringReplacement replacement;
 
   switch (backend) {
@@ -315,7 +299,7 @@ TemplateStringReplacement directive_replacement_instance_index(Backend backend) 
 // {{ LOCATION 0 BINDING 0 RATE_VERTEX OFFSET TIGHTLY_PACKED }}
 // turns into
 // layout(location = 0) for both opengl and vulkan
-TemplateStringReplacement directive_replacement_location(Backend backend) {
+static TemplateStringReplacement directive_replacement_location(Backend backend) {
   TemplateStringReplacement replacement;
   switch (backend) {
   case BACKEND_OPENGL:
@@ -337,7 +321,7 @@ TemplateStringReplacement directive_replacement_location(Backend backend) {
 // turns into
 // layout(set = 0, binding = 0) for vulkan
 // layout(binding = 0) for opengl
-TemplateStringReplacement directive_replacement_set_binding(Backend backend, DescriptorType descriptor_type) {
+static TemplateStringReplacement directive_replacement_set_binding(Backend backend, DescriptorType descriptor_type) {
   TemplateStringReplacement replacement;
 
   switch (backend) {
@@ -364,7 +348,28 @@ TemplateStringReplacement directive_replacement_set_binding(Backend backend, Des
   return replacement;
 }
 
-TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_slice, Backend backend) {
+static TemplateStringReplacement directive_replacement_push_constant(Backend backend) {
+  TemplateStringReplacement replacement;
+
+  switch (backend) {
+  case BACKEND_OPENGL:
+    replacement.string = "layout(std140) ";
+    replacement.length = strlen(replacement.string);
+    return replacement;
+  case BACKEND_VULKAN: {
+    replacement.string = "layout(push_constant) ";
+    replacement.length = strlen(replacement.string);
+    return replacement;
+  }
+
+  default:
+    assert(false);
+  }
+
+  return replacement;
+}
+
+static TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_slice, Backend backend) {
   switch (string_slice->type) {
   case DIRECTIVE_TYPE_VERSION:
     return directive_replacement_version(backend);
@@ -377,7 +382,7 @@ TemplateStringReplacement perform_replacement(const TemplateStringSlice *string_
   case DIRECTIVE_TYPE_SET_BINDING:
     return directive_replacement_set_binding(backend, string_slice->descriptor_type);
   case DIRECTIVE_TYPE_PUSH_CONSTANT:
-    // return replacement;
+    return directive_replacement_push_constant(backend);
   case DIRECTIVE_TYPE_GLSL_SOURCE: {
     TemplateStringReplacement replacement = {
         .string = string_slice->start,
@@ -489,6 +494,9 @@ static void codegen_program_spec_struct_definition(FILE *dst) {
   fprintf(dst, "  uint32_t binding_list_lens[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
   fprintf(dst, "  DescriptorSetLayoutID binding_list_ids[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
   fprintf(dst, "  uint32_t num_descriptor_set_layouts;\n");
+
+  fprintf(dst, "  VkShaderStageFlags push_constant_stage_flags;\n");
+  fprintf(dst, "  uint32_t push_constant_size;\n");
 
   fprintf(dst, "} ProgramSpec;\n");
   fprintf(dst, "\n");
@@ -748,31 +756,30 @@ void generate_opengl_vertex_layout_array(FILE *dst, const ParsedShadersIR *ir) {
 }
 
 static inline const char *get_stage_flags_string(u32 stage_flags) {
-  bool vertex_visible = stage_flags & SHADER_STAGE_VERTEX;
-  bool fragment_visible = stage_flags & SHADER_STAGE_FRAGMENT;
-  bool compute_visible = stage_flags & SHADER_STAGE_COMPUTE;
+  bool vert = stage_flags & SHADER_STAGE_VERTEX;
+  bool frag = stage_flags & SHADER_STAGE_FRAGMENT;
+  bool comp = stage_flags & SHADER_STAGE_COMPUTE;
 
-  const char *flags_string;
-  if (compute_visible && fragment_visible && vertex_visible) {
-    flags_string = "VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT";
-  } else if (fragment_visible && vertex_visible) {
-    flags_string = "VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT";
-  } else if (fragment_visible && compute_visible) {
-    flags_string = "VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT";
-  } else if (vertex_visible && compute_visible) {
-    flags_string = "VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT";
-  } else if (vertex_visible) {
-    flags_string = "VK_SHADER_STAGE_VERTEX_BIT";
-  } else if (fragment_visible) {
-    flags_string = "VK_SHADER_STAGE_FRAGMENT_BIT";
-  } else if (compute_visible) {
-    flags_string = "VK_SHADER_STAGE_COMPUTE_BIT";
+  const char *res;
+  if (comp && frag && vert) {
+    res = "VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT";
+  } else if (frag && vert) {
+    res = "VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT";
+  } else if (frag && comp) {
+    res = "VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT";
+  } else if (vert && comp) {
+    res = "VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT";
+  } else if (vert) {
+    res = "VK_SHADER_STAGE_VERTEX_BIT";
+  } else if (frag) {
+    res = "VK_SHADER_STAGE_FRAGMENT_BIT";
+  } else if (comp) {
+    res = "VK_SHADER_STAGE_COMPUTE_BIT";
   } else {
-    assert(false && "stage_flags = 0");
-    flags_string = NULL;
+    res = "0";
   }
 
-  return flags_string;
+  return res;
 }
 
 static void generate_vulkan_descriptor_set_binding_lists(FILE *dst, const ParsedShadersIR *ir) {
@@ -852,7 +859,7 @@ static void generate_vulkan_descriptor_write_templates(FILE *dst, const ParsedSh
       }
 
       bool has_struct = (binding->type == DESCRIPTOR_TYPE_UNIFORM && binding->glsl_struct != NULL);
-      u32 size = has_struct ? compute_glsl_struct_size(binding->glsl_struct) : 0;
+      u32 size = has_struct ? binding->glsl_struct->size_in_bytes : 0;
       fprintf(dst, "  %u,\n", size);
     }
     fprintf(dst, "};\n\n");
@@ -902,9 +909,6 @@ static void codegen_struct_defintions(FILE *dst, const GLSLStruct *glsl_structs,
   for (u32 i = 0; i < num_glsl_structs; i++) {
     const GLSLStruct *glsl_struct = &glsl_structs[i];
 
-    // precompute stuff
-    u32 max_alignment = 0;
-    u32 struct_size = 0;
     for (u32 j = 0; j < glsl_struct->num_members; j++) {
       const GLSLStructMember *member = &glsl_struct->members[j];
       if (member->array_length > 1) {
@@ -913,12 +917,6 @@ static void codegen_struct_defintions(FILE *dst, const GLSLStruct *glsl_structs,
             member->identifier_length, member->identifier, member->array_length
         );
       }
-
-      u32 alignment = glsl_type_to_alignment[member->type];
-      max_alignment = (max_alignment > alignment) ? max_alignment : alignment;
-      u32 next_aligned_size = align_up(struct_size, alignment);
-      struct_size = next_aligned_size;
-      struct_size += glsl_type_to_size[member->type];
     }
 
     // codegen
@@ -937,10 +935,8 @@ static void codegen_struct_defintions(FILE *dst, const GLSLStruct *glsl_structs,
       }
     }
 
-    u32 final_aligned_size = align_up(struct_size, max_alignment);
-    u32 struct_alignment_size_difference = final_aligned_size - struct_size;
-    if (struct_alignment_size_difference > 0) {
-      fprintf(dst, "  unsigned char _padding[%u];\n", struct_alignment_size_difference);
+    if (glsl_struct->padding > 0) {
+      fprintf(dst, "  unsigned char _padding[%u];\n", glsl_struct->padding);
     }
 
     fprintf(dst, "} %.*s;\n\n", glsl_struct->type_name_len, glsl_struct->type_name);
@@ -1045,6 +1041,10 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
 
   fprintf(dst, "  .num_descriptor_set_layouts = %u,\n", program->num_descriptor_set_layouts);
 
+  const char* flags_string = get_stage_flags_string(program->push_constant_stage_flags);
+  u32 push_constants_size = program->push_constant_struct ? program->push_constant_struct->size_in_bytes : 0;
+  fprintf(dst, "  .push_constant_stage_flags = %s,\n", flags_string );
+  fprintf(dst, "  .push_constant_size = %u,\n", push_constants_size);
 
   fprintf(dst, "};\n\n");
   // clang-format on

@@ -302,6 +302,8 @@ typedef struct {
   const VkWriteDescriptorSet *descriptor_set_writes[MAX_DESCRIPTOR_SETS];
   u32 indirection_table[MAX_DESCRIPTOR_SETS];
   u32 descriptor_set_write_lens[MAX_DESCRIPTOR_SETS];
+  VkShaderStageFlags push_constant_stage_flags;
+  u32 push_constant_size;
 } VulkanMaterial;
 
 typedef struct {
@@ -432,8 +434,15 @@ VkPipeline create_default_graphics_pipeline(
     VkPipelineLayout pipeline_layout
 );
 
-VkPipelineLayout
-create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *descriptor_set_layouts, u32 set_layout_count);
+VkPipelineLayout create_pipeline_layout(
+    VkDevice device,
+    const VkDescriptorSetLayout *set_layouts,
+    u32 set_layout_count,
+    VkPushConstantRange *push_constant_ranges,
+    u32 num_push_constant_ranges
+);
+
+void push_constants_material(VkCommandBuffer cmd, const VulkanMaterial *mat, const void *data);
 
 /////////////////////////////// Per Frame Commands //////////////////////////////
 void begin_frame(VulkanContext *ctx);

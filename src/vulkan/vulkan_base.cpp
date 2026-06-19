@@ -1779,16 +1779,21 @@ void submit_and_present(const VulkanContext *ctx, VkCommandBuffer cmd) {
   VK_CHECK(result, "Failed to present queue");
 }
 
-VkPipelineLayout
-create_pipeline_layout(VkDevice device, const VkDescriptorSetLayout *set_layouts, u32 set_layout_count) {
+VkPipelineLayout create_pipeline_layout(
+    VkDevice device,
+    const VkDescriptorSetLayout *set_layouts,
+    u32 set_layout_count,
+    VkPushConstantRange *push_constant_ranges,
+    u32 num_push_constant_ranges
+) {
   VkPipelineLayoutCreateInfo pipeline_layout_ci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
       .setLayoutCount = set_layout_count,
       .pSetLayouts = set_layouts,
-      .pushConstantRangeCount = 0, // TODO push constants
-      .pPushConstantRanges = NULL,
+      .pushConstantRangeCount = num_push_constant_ranges,
+      .pPushConstantRanges = push_constant_ranges,
   };
 
   VkPipelineLayout pipeline_layout;
@@ -2212,4 +2217,8 @@ void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *fb)
   vkDestroyImage(device, fb->depth_image, NULL);
   vkFreeMemory(device, fb->depth_image_device_memory, NULL);
   vkDestroyRenderPass(device, fb->render_pass, NULL);
+}
+
+void push_constants_material(VkCommandBuffer cmd, const VulkanMaterial *mat, const void *data) {
+  vkCmdPushConstants(cmd, mat->pipeline_layout, mat->push_constant_stage_flags, 0, mat->push_constant_size, data);
 }

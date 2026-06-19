@@ -14,18 +14,6 @@
 
 ---
 
-## Pipeline Creation
-
-**render_pass parameter is redundant for the common case.**
-shader_handles_to_graphics_pipeline takes render_pass explicitly despite the context having one.
-Default to context->render_pass; override requires going through PipelineConfig directly.
-
-**Inconsistent abstraction level.**
-create_graphics_pipeline takes VkDevice + VkPipelineCache separately.
-create_default_graphics_pipeline takes VulkanContext*. Pick one.
-
----
-
 ## Uniform Buffer Management
 
 **No alignment in UniformBufferManager.**
@@ -41,33 +29,6 @@ struct MyUniforms { alignas(16) glm::mat4 mvp; alignas(4) float time; };
 MyUniforms *u = (MyUniforms *)buf.mapped;
 u->mvp = ...; u->time = t;
 ```
-
-**write_to_uniform_buffer should take explicit data_size.**
-Currently uses uniform_write.size as the memcpy length. When caller passes a smaller type
-into a larger slot it reads past the variable. Add data_size parameter, assert data_size <= write.size.
-
----
-
-## Material Setup (Deferred — needs more drawn worlds first)
-
-Adding a new drawable currently requires 7 touch points: a new `DescriptorHandleID` enum entry,
-a new `UniformWrite` field, a `push_uniform` call, a descriptor set builder block, a new
-`init_X_material` function (~30 lines of pipeline layout + pipeline + RenderCall population),
-a `render_mesh` call in the render loop, and a destroy call. Seen clearly in pong.
-
-The right abstraction here is not obvious yet. A `create_material` helper that collapses
-pipeline layout + pipeline + RenderCall into one call is plausible, but the shape of a material
-system — how descriptors are owned, how programs map to pipelines, what varies per-instance vs.
-per-material — needs to be developed from experience drawing many simple meshes and worlds.
-Do not draft a material system. Draw things first. Let the abstraction emerge.
-
-Specific rough edges to revisit once the pattern is clear:
-- `Material` does not own all its descriptors — `init_background_material` takes external
-  handles and manually assembles the layout array.
-- `UniformWrites` struct in pong manually mirrors the `push_uniform` call sequence; adding
-  a uniform requires touching both in sync.
-- `DescriptorHandleID` enum grows by one per drawable regardless of whether descriptors are
-  actually distinct.
 
 ---
 

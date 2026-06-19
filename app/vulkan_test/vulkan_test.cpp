@@ -45,10 +45,10 @@ int main() {
 
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   VkDescriptorBufferInfo *mvp_write = push_uniform(&ub_manager, sizeof(MVPUniform));
-  VkDescriptorBufferInfo *cube_model_write = push_uniform(&ub_manager, sizeof(CubeModel));
   VkDescriptorBufferInfo *x_write = push_uniform(&ub_manager, sizeof(UniformBufferObject));
   VkDescriptorBufferInfo *light_pos_write = push_uniform(&ub_manager, sizeof(LightPosition));
   VkDescriptorBufferInfo *camera_vp_write = push_uniform(&ub_manager, sizeof(CameraVP));
+  VkDescriptorBufferInfo *phong_light_write = push_uniform(&ub_manager, sizeof(PhongLight));
   UniformBuffer ub = finalize_ub(&t.ctx, &ub_manager);
 
   // triangle: SIMPLE set=0 (binding 0=x, 1=camera_vp, 2=light_position)
@@ -95,14 +95,12 @@ int main() {
     update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &instanced_quad_mat);
   }
 
-  // cube: CUBE set=0 (binding 0=cube_model, 1=light_position, 2=camera_vp)
+  // cube: PHONG set=0 (binding 1=light); model+vp via push constants
   VulkanMaterial cube_mat;
   init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_phong_program_spec, &cube_mat);
   {
     DescriptorWrite writes[] = {
-        {.set_id = LAYOUT_ID_PHONG, .binding = 0, .buffer_info = *cube_model_write},
-        {.set_id = LAYOUT_ID_PHONG, .binding = 1, .buffer_info = *light_pos_write},
-        {.set_id = LAYOUT_ID_PHONG, .binding = 2, .buffer_info = *camera_vp_write},
+        {.set_id = LAYOUT_ID_PHONG, .binding = BINDING_PHONG_LIGHT, .buffer_info = *phong_light_write},
     };
     update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &cube_mat);
   }
@@ -169,11 +167,13 @@ int main() {
     CameraMatrices camera_matrices = create_camera_matrices(&camera, width, height);
     camera_vp = camera_matrices.projection * camera_matrices.view;
 
+    PhongLight phong_light = {.position = light_position.position, .color = light_position.color};
+
     write_to_uniform_buffer(&ub, &mvp, *mvp_write);
-    write_to_uniform_buffer(&ub, &cube_model, *cube_model_write);
     write_to_uniform_buffer(&ub, &ubo, *x_write);
     write_to_uniform_buffer(&ub, &light_position, *light_pos_write);
     write_to_uniform_buffer(&ub, &camera_vp, *camera_vp_write);
+    write_to_uniform_buffer(&ub, &phong_light, *phong_light_write);
 
     begin_frame(&t.ctx);
     VkCommandBuffer cmd = begin_command_buffer(&t.ctx);
@@ -189,6 +189,8 @@ int main() {
     render_mesh_material(cmd, &triangle_mesh, &triangle_mat);
     render_mesh_material(cmd, &square_mesh, &square_mat);
     render_mesh_material(cmd, &instanced_quad_mesh, &instanced_quad_mat);
+    ModelVP cube_mvp = {.model = cube_model, .vp = camera_vp};
+    push_constants_material(cmd, &cube_mat, &cube_mvp);
     render_mesh_material(cmd, &cube_mesh, &cube_mat);
     vkCmdEndRenderPass(cmd);
 

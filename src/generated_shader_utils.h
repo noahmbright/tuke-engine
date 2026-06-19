@@ -11,34 +11,6 @@
 #include "vulkan/vulkan_base.h"
 #include <vulkan/vulkan_core.h>
 
-inline VkPipeline shader_handles_to_graphics_pipeline(
-    const VulkanContext *ctx,
-    VkRenderPass render_pass,
-    ShaderHandle vert_handle,
-    ShaderHandle frag_handle,
-    VkPipelineLayout pipeline_layout
-) {
-  const ShaderSpec *vert_spec = generated_shader_specs[vert_handle];
-  VkShaderModule vertex_shader = create_shader_module(ctx->device, vert_spec->spv, vert_spec->spv_size);
-  assert(vertex_shader != VK_NULL_HANDLE);
-
-  const ShaderSpec *frag_spec = generated_shader_specs[frag_handle];
-  VkShaderModule frag_shader = create_shader_module(ctx->device, frag_spec->spv, frag_spec->spv_size);
-  assert(frag_shader != VK_NULL_HANDLE);
-
-  const VkPipelineVertexInputStateCreateInfo *vertex_input_state =
-      &generated_vulkan_vertex_layouts[vert_spec->vertex_layout_id];
-
-  VkPipeline pipeline = create_default_graphics_pipeline(
-      ctx, render_pass, vertex_shader, frag_shader, vertex_input_state, pipeline_layout
-  );
-
-  vkDestroyShaderModule(ctx->device, vertex_shader, NULL);
-  vkDestroyShaderModule(ctx->device, frag_shader, NULL);
-
-  return pipeline;
-}
-
 inline void
 update_vulkan_material(const VulkanContext *ctx, const DescriptorWrite *writes, u32 num_writes, VulkanMaterial *mat) {
   assert(num_writes < 16);
@@ -110,7 +82,16 @@ init_program_spec(VulkanContext *ctx, VkRenderPass render_pass, const ProgramSpe
   mat->num_descriptor_sets = spec->num_descriptor_set_layouts;
 
   const VkPipelineVertexInputStateCreateInfo *vertex_layout = &generated_vulkan_vertex_layouts[spec->vertex_layout_id];
-  mat->pipeline_layout = create_pipeline_layout(dev, temp_layouts, spec->num_descriptor_set_layouts);
+
+  u32 pc_size = spec->push_constant_size;
+  VkPushConstantRange range = {.offset = 0, .size = pc_size, .stageFlags = spec->push_constant_stage_flags};
+  VkPushConstantRange *range_ptr = pc_size > 0 ? &range : NULL;
+  u32 num_push_constants = pc_size > 0 ? 1 : 0;
+  mat->push_constant_stage_flags = spec->push_constant_stage_flags;
+  mat->push_constant_size = pc_size;
+
+  mat->pipeline_layout =
+      create_pipeline_layout(dev, temp_layouts, spec->num_descriptor_set_layouts, range_ptr, num_push_constants);
   mat->pipeline =
       create_default_graphics_pipeline(ctx, render_pass, vert_mod, frag_mod, vertex_layout, mat->pipeline_layout);
 

@@ -248,7 +248,8 @@ struct GLSLStruct {
 
   GLSLStructMember members[MAX_NUM_STRUCT_MEMBERS];
   u32 num_members;
-  u32 size_in_bytes;
+  u32 size_in_bytes; // Size including padding. Aligned to alignement of struct.
+  u32 padding;
 };
 
 inline void log_glsl_struct(FILE *dst, const GLSLStruct *glsl_struct) {

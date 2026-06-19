@@ -34,17 +34,6 @@ Compute stays standalone, no combined format.
 
 ---
 
-## Further Learning Resources
-
-- *Computer Architecture: A Quantitative Approach* (Hennessy/Patterson) — GPU architecture chapters
-- NVIDIA Turing/Ampere/Ada architecture whitepapers (free PDFs) — actual silicon internals
-- *GPU Gems* series (free online) — GPU algorithm patterns
-- *Programming Massively Parallel Processors* (Kirk/Hwu) — standard CUDA text, first half is GPU architecture and API-agnostic
-- Vulkan compute shaders + subgroup operations (`subgroupAdd`, `subgroupBallot`) — warp-level hardware concepts without CUDA
-- Xcode Metal debugger/profiler — primary GPU profiling tool on M1
-
----
-
 ## Generated Header Split
 
 **Split generated output into a types header and a Vulkan data header.**
@@ -66,9 +55,4 @@ This lets non-rendering code (simulation, asset system, UI logic) include only
 - Drop `SET_BINDING N` from the directive syntax. Binding index becomes an assigned offset:
   sort instance names alphabetically within each label, assign indices 0..N-1 in that order.
   Deterministic across parse order. The `background.frag.in` class of bug becomes impossible.
-- Push constant parsing is a stub (`parse_push_constant_directive` does nothing).
 - Add `const char *source_path` to `ShaderSpec` for hot reload.
-- Emit per-label binding constants. For each binding in a label, emit
-  `#define BINDING_<LABEL>_<UPPERCASE_INSTANCE_NAME> <number>`. Data already
-  exists in the codegen loop that emits `<LABEL>_descriptor_set_layout_bindings[]`.
-  Eliminates raw binding numbers from `DescriptorWrite` call sites.

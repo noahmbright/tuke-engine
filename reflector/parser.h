@@ -196,6 +196,15 @@ typedef struct {
 
 typedef struct {
   const char *next_glsl_source_start;
+  GLSLStruct glsl_struct;
+  ShaderStage stage;
+  const char *instance_name;
+  u32 instance_name_len;
+  bool was_successful;
+} PushConstantParse;
+
+typedef struct {
+  const char *next_glsl_source_start;
   VertexAttribute vertex_attribute;
   bool found_repeat_attribute;
   u32 repeated_attribute_location;
@@ -288,6 +297,8 @@ typedef struct {
 
   DescriptorSetLayout *descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];
   u32 num_descriptor_set_layouts;
+
+  const GLSLStruct *push_constant_struct;
 } ParsedShader;
 
 // Accumulate data needed for an entire compute or graphics pipeline.
@@ -301,6 +312,9 @@ typedef struct {
 
   const DescriptorSetLayout *descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LISTS];
   u32 num_descriptor_set_layouts;
+
+  const GLSLStruct *push_constant_struct;
+  u32 push_constant_stage_flags;
 } ShaderProgram;
 
 // The IR contains the shaders after parsing, which have their slices and pointers to their descriptor sets and vertex
