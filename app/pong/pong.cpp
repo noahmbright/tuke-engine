@@ -5,7 +5,6 @@
 #include "physics.h"
 #include "pong.h"
 #include "statistics.h"
-#include "transform.h"
 #include "tuke_engine.h"
 #include "vulkan/vulkan_base.h"
 #include "vulkan/vulkan_core.h"
@@ -88,21 +87,10 @@ void init_paddles_material(State *state) {
 }
 
 static void init_transforms(State *state) {
-  Transform *transforms = state->transforms;
-
-  transforms[ENTITY_LEFT_PADDLE] = create_transform(&state->positions[ENTITY_LEFT_PADDLE]);
-  transforms[ENTITY_LEFT_PADDLE].scale = &paddle_scale0;
-
-  transforms[ENTITY_RIGHT_PADDLE] = create_transform(&state->positions[ENTITY_RIGHT_PADDLE]);
-  transforms[ENTITY_RIGHT_PADDLE].scale = &paddle_scale0;
-
-  transforms[ENTITY_BALL] = create_transform(&state->positions[ENTITY_BALL]);
-  transforms[ENTITY_BALL].scale = &ball_scale0;
-
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
-    generate_transform(&state->transforms[i], &state->instance_data.model[i]);
+    glm::mat4 m = glm::translate(glm::mat4(1.0f), state->positions[i]);
+    state->instance_data.model[i] = glm::scale(m, state->scales[i]);
   }
-
   write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data, state->uniform_writes.instance_data);
 }
 
@@ -331,7 +319,6 @@ void process_inputs_playing(State *state, f32 dt) {
   if (input_direction.length() > EPSILON) {
     glm::vec3 movement = glm::vec3(input_direction.x, input_direction.y, 0.0f);
     state->positions[ENTITY_LEFT_PADDLE] += dt * state->left_paddle_speed * movement;
-    state->transforms[ENTITY_LEFT_PADDLE].dirty = true;
   }
 }
 
@@ -522,8 +509,8 @@ void update_game_state(State *state, const f32 dt) {
   handle_collisions(state, dt);
 
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
-    Transform *transform = &state->transforms[i];
-    generate_transform(transform, &state->instance_data.model[i]);
+    glm::mat4 m = glm::translate(glm::mat4(1.0f), state->positions[i]);
+    state->instance_data.model[i] = glm::scale(m, state->scales[i]);
   }
 
   write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data, state->uniform_writes.instance_data);

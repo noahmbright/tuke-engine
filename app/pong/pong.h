@@ -5,7 +5,6 @@
 #include "physics.h"
 #include "shaders.h"
 #include "statistics.h"
-#include "transform.h"
 #include "tuke_engine.h"
 #include "vulkan/vulkan_base.h"
 #include "window.h"
@@ -159,13 +158,6 @@ struct State {
   Inputs inputs;
   RNGs rngs;
 
-  // TODO engine: figure out a system for batching rewrites that occur often
-  // vs ones that occur infrequently
-  // allow for a system that avoids recomputing matrix multiplications for
-  // things that don't change
-  //
-  // this stuff all should be updated every frame, only the paddles and ball
-  Transform transforms[NUM_ENTITIES];
   glm::vec3 positions[NUM_ENTITIES];
   glm::vec3 velocities[NUM_ENTITIES];
   glm::vec3 scales[NUM_ENTITIES];

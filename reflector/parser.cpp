@@ -1652,13 +1652,7 @@ static bool parse_shader(const ShaderToCompile *input, ParsedShadersIR *ir) {
       program->push_constant_stage_flags |= input->stage;
 
       if (persistent_struct->size_in_bytes > 128) {
-        fprintf(
-            
-            
-        
-            stderr, "Shader %.*s has push constant of size %u, exceeding max of 128.\n", input->name_len, input->name,
-            persistent_struct->size_in_bytes
-        );
+        fprintf(stderr, "Shader %.*s has push constant of size %u, exceeding max of 128.\n", input->name_len, input->name, persistent_struct->size_in_bytes );
         return false;
       }
 
