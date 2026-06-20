@@ -287,7 +287,7 @@ enum DescriptorType {
 // To describe a uniform binding, need offset/range
 // VkDescriptorSetLayoutBinding is:
 //  binding, type(sampler, uniform, etc.), count, stage, immutable sampler*
-struct DescriptorBinding {
+typedef struct {
   DescriptorType type;
   u32 descriptor_count; // For uniform/texture arrays
   u32 stage_flags;
@@ -300,12 +300,12 @@ struct DescriptorBinding {
 
   const char *discovered_shader_name;
   u32 discovered_shader_name_len;
-};
+} DescriptorBinding;
 
-struct DescriptorSetLayout {
+typedef struct {
   char name[MAX_DESCRIPTOR_SET_LAYOUT_NAME_LENGTH];
   u32 name_len;
 
   DescriptorBinding bindings[MAX_NUM_DESCRIPTOR_BINDINGS];
   u32 num_bindings;
-};
+} DescriptorSetLayout;

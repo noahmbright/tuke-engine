@@ -56,3 +56,9 @@ This lets non-rendering code (simulation, asset system, UI logic) include only
   sort instance names alphabetically within each label, assign indices 0..N-1 in that order.
   Deterministic across parse order. The `background.frag.in` class of bug becomes impossible.
 - Add `const char *source_path` to `ShaderSpec` for hot reload.
+- Allow a fragment shader to declare a shared vertex shader via directive, e.g.
+  `{{ VERT_SHADER fullscreen_quad }}`. Enables N fullscreen-effect frag shaders to share
+  one compiled vertex shader instead of duplicating it per program.
+- Allow `vec3` in struct members. C side already emits `alignas(16)` so layout is correct.
+  Fix `populate_glsl_struct_size` to count vec3 as 16 bytes (not 12) so push constant size
+  assertions and pipeline layout ranges are correct.

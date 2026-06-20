@@ -63,6 +63,8 @@ typedef enum {
   TOKEN_TYPE_DIRECTIVE_LOCATION,
   TOKEN_TYPE_DIRECTIVE_SET_BINDING,
   TOKEN_TYPE_DIRECTIVE_PUSH_CONSTANT,
+  TOKEN_TYPE_DIRECTIVE_VERTEX_SHADER,
+
   TOKEN_TYPE_RATE_VERTEX,
   TOKEN_TYPE_RATE_INSTANCE,
   TOKEN_TYPE_BINDING,
@@ -185,8 +187,8 @@ typedef struct {
   ShaderStage stage;
   DescriptorType descriptor_type;
 
-  const char *set_label_name;
-  u32 set_label_name_len;
+  const char *set_name;
+  u32 set_name_len;
 
   const char *instance_name;
   u32 instance_name_len;
@@ -201,7 +203,14 @@ typedef struct {
   const char *instance_name;
   u32 instance_name_len;
   bool was_successful;
-} PushConstantParse;
+} PushConstantDirectiveParse;
+
+typedef struct {
+  const char *next_glsl_source_start;
+  const char *program_name;
+  u32 program_name_len;
+  bool was_successful;
+} VertexShaderDirectiveParse;
 
 typedef struct {
   const char *next_glsl_source_start;
@@ -283,6 +292,27 @@ typedef struct {
   const ShaderToCompile *input;
 } Parser;
 
+// This is a carbon copy of SetBindingDirectiveParse
+typedef struct {
+  const char *set_name;
+  u32 set_name_len;
+  u32 slice_idx;
+
+  const char *binding_name;
+  u32 binding_name_len;
+  u32 binding;
+  DescriptorType descriptor_type;
+  u32 descriptor_count;
+
+  const GLSLStruct *glsl_struct;
+  ShaderStage stage;
+} SetBindingRecord;
+
+// For graphics pipelines, fragment shaders define programs.
+// Fragment shaders seek out vertex shaders, either through a VERTEX_SHADER directive,
+// or they are matched by input names.
+// Vertex shaders only need to be sought out by a fragment shader.
+// Warn that vertex shaders are unused, but do not error and die.
 typedef struct {
   ShaderStage stage;
   const char *name; // name is a malloc'd string owned by ShaderToCompile
@@ -295,10 +325,17 @@ typedef struct {
   u16 binding_strides[MAX_NUM_VERTEX_BINDINGS];
   u8 binding_count;
 
+  SetBindingRecord set_binding_records[MAX_NUM_DESCRIPTOR_SET_LAYOUTS * MAX_NUM_DESCRIPTOR_BINDINGS];
+  u32 num_set_binding_records;
+
   DescriptorSetLayout *descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];
   u32 num_descriptor_set_layouts;
 
   const GLSLStruct *push_constant_struct;
+
+  const char *requested_vertex_shader_name;
+  u32 requested_vertex_shader_name_len;
+  bool existence_justified; // For warning about unused vertex shaders
 } ParsedShader;
 
 // Accumulate data needed for an entire compute or graphics pipeline.
@@ -306,9 +343,9 @@ typedef struct {
 typedef struct {
   const char *name; // malloc'd and owned by shader to compile
 
-  const ParsedShader *parsed_vert;
-  const ParsedShader *parsed_frag;
-  const ParsedShader *parsed_comp;
+  ParsedShader *parsed_vert;
+  ParsedShader *parsed_frag;
+  ParsedShader *parsed_comp;
 
   const DescriptorSetLayout *descriptor_set_layouts[MAX_NUM_DESCRIPTOR_SET_LISTS];
   u32 num_descriptor_set_layouts;
