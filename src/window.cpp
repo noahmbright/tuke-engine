@@ -81,10 +81,10 @@ void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
   scroll_deltas.dy = 0.0f;
 }
 
-glm::vec2 get_cursor_position(GLFWwindow *window) {
+Vec2 get_cursor_position(GLFWwindow *window) {
   double xpos, ypos;
   glfwGetCursorPos(window, &xpos, &ypos);
-  return glm::vec2(xpos, ypos);
+  return Vec2(xpos, ypos);
 }
 
 void error_callback(int error, const char *description) {

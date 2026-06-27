@@ -9,6 +9,9 @@
 #include "tuke_engine.h"
 #include "utils.h"
 
+#include "glm/glm.hpp"
+#include "linalg.h"
+
 // TODO
 // Transition in and out of scene changes
 // Get GLFW and OpenGL explicit API calls out of here and into a platform/renderer layer
@@ -89,10 +92,10 @@ inline void buffer_vp_matrix_to_gl_ubo(const CameraMatrices *camera_matrices, u3
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(vp), &vp);
 }
 
-inline glm::vec3 inputs_to_movement_vector(const Inputs *inputs) {
-  glm::vec2 movement_vector = inputs_to_direction(inputs);
+inline Vec3 inputs_to_movement_vector(const Inputs *inputs) {
+  Vec2 movement_vector = inputs_to_direction(inputs);
   f32 zoom_speed = 2.0f;
-  return glm::vec3(movement_vector.x, movement_vector.y, zoom_speed * inputs->scroll_dy);
+  return Vec3(movement_vector.x, movement_vector.y, zoom_speed * inputs->scroll_dy);
 }
 
 enum ShaderID {
@@ -137,7 +140,7 @@ struct EntityIndex {
 struct Entities {
   EntityType types[NUM_ENTITIES];
   bool active[NUM_ENTITIES];
-  glm::vec3 positions[NUM_ENTITIES];
+  Vec3 positions[NUM_ENTITIES];
   f32 rotations[NUM_ENTITIES];
 
   // ShaderID shader_id[NUM_ENTITIES];
@@ -259,7 +262,7 @@ enum OverworldPlayerIntentFlags {
 
 // Can I C-style namespace this? This should be an internal implementation detail here.
 struct OverworldPlayerIntent {
-  glm::vec2 key_movement_vector;
+  Vec2 key_movement_vector;
   f32 scroll;
   u32 flags;
 };
@@ -276,23 +279,22 @@ inline OverworldPlayerIntent overworld_process_inputs(const Inputs *inputs) {
   return player_intent;
 }
 
-static inline void move_player_in_tilemap(
-    glm::vec2 movement_vector, const Tilemap *tilemap, glm::vec3 *player_pos, u8 *x_tile, u8 *y_tile
-) {
+static inline void
+move_player_in_tilemap(Vec2 movement_vector, const Tilemap *tilemap, Vec3 *player_pos, u8 *x_tile, u8 *y_tile) {
 
-  const glm::vec3 tile_size(PLAYER_SIDE_LENGTH_METERS);
-  glm::vec3 final_movement_vector(0.0f);
+  const Vec3 tile_size(PLAYER_SIDE_LENGTH_METERS);
+  Vec3 final_movement_vector(0.0f);
 
   // Right now, tile == 0 means move. Otherwise, reset motion
-  glm::vec3 x_moved_position = *player_pos + glm::vec3(movement_vector.x, 0.0f, 0.0f);
+  Vec3 x_moved_position = add_v3(*player_pos, Vec3(movement_vector.x, 0.0f, 0.0f));
   *x_tile = tilemap_check_collision(tilemap, x_moved_position, tile_size);
   final_movement_vector.x = (*x_tile == 0) * movement_vector.x;
 
-  glm::vec3 y_moved_position = *player_pos + glm::vec3(0.0f, movement_vector.y, 0.0f);
+  Vec3 y_moved_position = add_v3(*player_pos, Vec3(0.0f, movement_vector.y, 0.0f));
   *y_tile = tilemap_check_collision(tilemap, y_moved_position, tile_size);
   final_movement_vector.y = (*y_tile == 0) * movement_vector.y;
 
-  *player_pos += final_movement_vector;
+  inc_v3(player_pos, final_movement_vector);
 }
 
 inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_ptr, f32 dt) {
@@ -338,8 +340,8 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
   case CAMERA_MODE_OVERWORLD: {
     // Move player.
     const f32 SPEED = 5.0f;
-    glm::vec3 *player_pos = &scene_data->entities.positions[scene_data->player_index.idx];
-    glm::vec2 movement_vector = SPEED * dt * player_intent.key_movement_vector;
+    Vec3 *player_pos = &scene_data->entities.positions[scene_data->player_index.idx];
+    Vec2 movement_vector = scale_v2(player_intent.key_movement_vector, SPEED * dt);
     u8 x_tile, y_tile;
     move_player_in_tilemap(movement_vector, scene_data->tilemap, player_pos, &x_tile, &y_tile);
 
@@ -361,7 +363,7 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
     }
     scene_data->just_transitioned = should_transition;
 
-    glm::vec3 player_xy(player_pos->x, player_pos->y, 0.0f);
+    Vec3 player_xy(player_pos->x, player_pos->y, 0.0f);
 
     f32 input_x = player_intent.key_movement_vector.x;
     f32 input_y = player_intent.key_movement_vector.y;
@@ -379,12 +381,12 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
     // TODO not doing any triangle stuff yet
     f32 theta_b = scene_data->player_rotation_simulation + PLAYER_INTERACTION_HALF_FOV;
     f32 theta_c = scene_data->player_rotation_simulation - PLAYER_INTERACTION_HALF_FOV;
-    glm::vec3 cone_b = PLAYER_INTERACTION_DISTANCE * glm::vec3(cosf(theta_b), sinf(theta_b), 0.0f);
-    glm::vec3 cone_c = PLAYER_INTERACTION_DISTANCE * glm::vec3(cosf(theta_c), sinf(theta_c), 0.0f);
+    Vec3 cone_b = scale_v3(vec3(cosf(theta_b), sinf(theta_b), 0.0f), PLAYER_INTERACTION_DISTANCE);
+    Vec3 cone_c = scale_v3(vec3(cosf(theta_c), sinf(theta_c), 0.0f), PLAYER_INTERACTION_DISTANCE);
     VisionCone vision_cone{
-        .a = player_xy,
-        .b = player_xy + cone_b,
-        .c = player_xy + cone_c,
+        .a = to_glm(player_xy),
+        .b = to_glm(add_v3(player_xy, cone_b)),
+        .c = to_glm(add_v3(player_xy, cone_c)),
     };
 
     f32 cone_x_min = fmin(vision_cone.a.x, fmin(vision_cone.b.x, vision_cone.c.x));
@@ -393,8 +395,8 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
     f32 cone_y_max = fmax(vision_cone.a.y, fmax(vision_cone.b.y, vision_cone.c.y));
     f32 cone_bb_center_x = 0.5f * (cone_x_max + cone_x_min);
     f32 cone_bb_center_y = 0.5f * (cone_y_max + cone_y_min);
-    glm::vec3 cone_bb_center = glm::vec3(cone_bb_center_x, cone_bb_center_y, 0.0f);
-    glm::vec3 cone_bb_size = glm::vec3(cone_x_max - cone_x_min, cone_y_max - cone_y_min, 0.0f);
+    Vec3 cone_bb_center = Vec3(cone_bb_center_x, cone_bb_center_y, 0.0f);
+    Vec3 cone_bb_size = Vec3(cone_x_max - cone_x_min, cone_y_max - cone_y_min, 0.0f);
 
     int cone_collision = tilemap_check_collision(scene_data->tilemap, cone_bb_center, cone_bb_size);
     bool is_interacting = (cone_collision == 3);
@@ -444,10 +446,12 @@ inline void overworld_draw(const GLRenderer *renderer, const void *scene_data_vo
   glBindFramebuffer(GL_FRAMEBUFFER, scene_data->render_target.fbo);
   glClear(GL_COLOR_BUFFER_BIT);
 
-  glm::mat4 player_model = glm::mat4(1.0f);
-  player_model = glm::translate(player_model, scene_data->entities.positions[scene_data->player_index.idx]);
-  player_model = glm::scale(player_model, glm::vec3(PLAYER_SIDE_LENGTH_METERS));
-  player_model = glm::rotate(player_model, scene_data->player_rotation_render, glm::vec3(0.0f, 0.0f, 1.0f));
+  Vec3 player_scale = vec3(PLAYER_SIDE_LENGTH_METERS, PLAYER_SIDE_LENGTH_METERS, PLAYER_SIDE_LENGTH_METERS);
+  Mat4 player_model = mat4();
+  translate_m4(scene_data->entities.positions[scene_data->player_index.idx], &player_model);
+  scale_m4(player_scale, &player_model);
+  // FIXME no rotations yet.
+  // player_model = glm::rotate(player_model, scene_data->player_rotation_render, Vec3(0.0f, 0.0f, 1.0f));
 
   glBindBuffer(GL_UNIFORM_BUFFER, scene_data->player_model_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);

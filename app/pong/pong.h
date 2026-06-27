@@ -35,7 +35,7 @@ const f32 arena_dimensions_x0 = 30.0f;
 const f32 arena_dimensions_y0 = arena_dimensions_x0 / aspect_ratio;
 const f32 x_inset_from_wall0 = 0.05f * arena_dimensions_x0;
 const f32 x_offset0 = arena_dimensions_x0 / 2.0f - x_inset_from_wall0;
-const glm::vec3 arena_dimensions0{arena_dimensions_x0, arena_dimensions_y0, 1.0f};
+const Vec3 arena_dimensions0{arena_dimensions_x0, arena_dimensions_y0, 1.0f};
 
 enum EntityIndex { ENTITY_LEFT_PADDLE = 0, ENTITY_RIGHT_PADDLE, ENTITY_BALL, NUM_ENTITIES };
 
@@ -51,22 +51,13 @@ const f32 prob_powerup_spawns = 0.2f;
 const f32 speed0 = 12.5f;
 const f32 cpu_speed0 = .8 * speed0;
 
-const glm::vec3 paddle_scale0{1.0f, 4.0f, 1.0f};
-const glm::vec3 ball_scale0{0.5f, 0.5f, 0.5f};
+const Vec3 paddle_scale0{1.0f, 4.0f, 1.0f};
+const Vec3 ball_scale0{0.5f, 0.5f, 0.5f};
 const f32 z0 = 0.25f;
 
-const glm::vec3 left_paddle_pos0{-x_offset0, 0.0f, z0};
-const glm::vec3 right_paddle_pos0{x_offset0, 0.0f, z0};
-const glm::vec3 ball_pos0{0.0f, 0.0f, z0};
-
-const glm::mat4 left_paddle_translated0 = glm::translate(glm::mat4(1.0f), left_paddle_pos0);
-const glm::mat4 left_paddle_model0 = glm::scale(left_paddle_translated0, paddle_scale0);
-
-const glm::mat4 right_paddle_translated0 = glm::translate(glm::mat4(1.0f), right_paddle_pos0);
-const glm::mat4 right_paddle_model0 = glm::scale(right_paddle_translated0, paddle_scale0);
-
-const glm::mat4 ball_translated0 = glm::translate(glm::mat4(1.0f), ball_pos0);
-const glm::mat4 ball_model0 = glm::scale(ball_translated0, ball_scale0);
+const Vec3 left_paddle_pos0{-x_offset0, 0.0f, z0};
+const Vec3 right_paddle_pos0{x_offset0, 0.0f, z0};
+const Vec3 ball_pos0{0.0f, 0.0f, z0};
 
 const u32 paddle_vertices_size = sizeof(paddle_vertices);
 const u32 indices_size = sizeof(unit_square_indices);
@@ -102,9 +93,9 @@ struct UniformWrites {
 };
 
 struct Paddle {
-  glm::vec3 position;
-  glm::vec3 velocity;
-  glm::vec3 size;
+  Vec3 position;
+  Vec3 velocity;
+  Vec3 size;
 };
 
 struct RNGs {
@@ -124,7 +115,7 @@ const f32 powerup_likelihoods[NUM_POWERUPS] = {
     [POWERUP_KILL_OPPONENT] = 0.5f,
 };
 
-const glm::vec3 powerup_scale{1.0f, 1.f, 1.0f};
+const Vec3 powerup_scale{1.0f, 1.f, 1.0f};
 
 struct PowerUp {
   PowerUpType type;
@@ -141,7 +132,7 @@ struct State {
   u32 current_frame;
   f64 time;
 
-  glm::vec2 arena_dimensions;
+  Vec3 arena_dimensions;
 
   // Renderer
   VulkanContext ctx;
@@ -163,9 +154,9 @@ struct State {
   Inputs inputs;
   RNGs rngs;
 
-  glm::vec3 positions[NUM_ENTITIES];
-  glm::vec3 velocities[NUM_ENTITIES];
-  glm::vec3 scales[NUM_ENTITIES];
+  Vec3 positions[NUM_ENTITIES];
+  Vec3 velocities[NUM_ENTITIES];
+  Vec3 scales[NUM_ENTITIES];
 
   f32 left_paddle_cooldown;
   f32 right_paddle_cooldown;

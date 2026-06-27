@@ -25,10 +25,10 @@ void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
   camera->direction.x = cos_pitch * cosf(camera->yaw);
   camera->direction.y = sinf(camera->pitch);
   camera->direction.z = cos_pitch * sinf(camera->yaw);
-  camera->right = glm::cross(camera->direction, camera->up);
+  camera->right = cross_v3(camera->direction, camera->up);
 }
 
-Camera create_camera(CameraType type, glm::vec3 pos, glm::vec3 direction, glm::vec3 up, glm::vec3 right) {
+Camera create_camera(CameraType type, Vec3 pos, Vec3 direction, Vec3 up, Vec3 right) {
   Camera camera;
   camera.type = type;
   camera.position = pos;
@@ -37,8 +37,8 @@ Camera create_camera(CameraType type, glm::vec3 pos, glm::vec3 direction, glm::v
   camera.right = right;
   camera.has_moused_yet = false;
 
-  f32 xy_magnitude = glm::length(glm::vec2{camera.direction.x, camera.direction.y});
-  f32 xz_magnitude = glm::length(glm::vec2{camera.direction.x, camera.direction.z});
+  f32 xy_magnitude = sqrtf(direction.x * direction.x + direction.y * direction.y);
+  f32 xz_magnitude = sqrtf(direction.x * direction.x + direction.z * direction.z);
 
   if (xy_magnitude < EPSILON) {
     camera.yaw = -1.57;

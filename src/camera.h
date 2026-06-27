@@ -1,7 +1,6 @@
 #pragma once
 
 #include "tuke_engine.h"
-#include "utils.h"
 
 #define CAMERA_NEAR_Z (0.1f)
 #define CAMERA_FAR_Z (100.f)
@@ -21,10 +20,10 @@ enum CameraType { CAMERA_TYPE_2D, CAMERA_TYPE_3D, CAMERA_TYPE_FPS };
 struct Camera {
   CameraType type;
 
-  glm::vec3 position;
-  glm::vec3 direction;
-  glm::vec3 up;
-  glm::vec3 right;
+  Vec3 position;
+  Vec3 direction;
+  Vec3 up;
+  Vec3 right;
 
   f32 pitch, yaw;
   f32 mouse_sensitivity = 1e-3;
@@ -41,17 +40,17 @@ struct CameraMatrices {
 };
 
 // TODO kill default args
-const glm::vec3 CAMERA_POSITION0 = glm::vec3(0.0, 0.0, 1.0);
-const glm::vec3 CAMERA_DIRECTION0 = glm::vec3(0.0, 0.0, -1.0);
-const glm::vec3 CAMERA_UP0 = glm::vec3(0.0, 1.0, 0.0);
-const glm::vec3 CAMERA_RIGHT0 = glm::vec3(1.0, 0.0, 0.0);
+const Vec3 CAMERA_POSITION0 = Vec3(0.0, 0.0, 1.0);
+const Vec3 CAMERA_DIRECTION0 = Vec3(0.0, 0.0, -1.0);
+const Vec3 CAMERA_UP0 = Vec3(0.0, 1.0, 0.0);
+const Vec3 CAMERA_RIGHT0 = Vec3(1.0, 0.0, 0.0);
 
 Camera create_camera(
     CameraType type,
-    glm::vec3 pos = CAMERA_POSITION0,
-    glm::vec3 direction = CAMERA_DIRECTION0,
-    glm::vec3 up = CAMERA_UP0,
-    glm::vec3 right = CAMERA_RIGHT0
+    Vec3 pos = CAMERA_POSITION0,
+    Vec3 direction = CAMERA_DIRECTION0,
+    Vec3 up = CAMERA_UP0,
+    Vec3 right = CAMERA_RIGHT0
 );
 
 // xpos and y pos are the positions of the mouse queried from GLFW
@@ -59,17 +58,17 @@ Camera create_camera(
 // If not, and the camera transitions to using this function, there will be a jump.
 void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos);
 
-inline void camera_move_2d(Camera *camera, const glm::vec2 movement_direction) {
+inline void camera_move_2d(Camera *camera, const Vec2 movement_direction) {
   camera->position.x += movement_direction.x;
   camera->position.y += movement_direction.y;
 }
 
-inline void camera_move_3d(Camera *camera, const glm::vec2 movement_direction) {
-  camera->position += movement_direction.y * camera->direction;
-  camera->position += movement_direction.x * camera->right;
+inline void camera_move_3d(Camera *camera, const Vec2 movement_direction) {
+  inc_v3(&camera->position, scale_v3(camera->direction, movement_direction.y));
+  inc_v3(&camera->position, scale_v3(camera->right, movement_direction.x));
 }
 
-inline void move_camera(Camera *camera, const glm::vec2 movement_direction) {
+inline void move_camera(Camera *camera, const Vec2 movement_direction) {
   switch (camera->type) {
   case CAMERA_TYPE_2D:
     camera_move_2d(camera, movement_direction);
@@ -92,8 +91,8 @@ inline Mat4 camera_perspective_projection(const Camera *camera, f32 aspect) {
 
 inline CameraMatrices create_camera_matrices(const Camera *camera, f32 aspect) {
   CameraMatrices camera_matrices;
-  assert(glm::all(glm::isfinite(camera->direction)));
-  assert(glm::length(camera->direction) > 0.0f);
+  assert(isfinite_v3(camera->direction));
+  assert(len2_v3(camera->direction) > EPSILON);
 
   Vec3 pos = {.x = camera->position.x, .y = camera->position.y, .z = camera->position.z};
   Vec3 dir = {.x = camera->direction.x, .y = camera->direction.y, .z = camera->direction.z};
@@ -105,8 +104,8 @@ inline CameraMatrices create_camera_matrices(const Camera *camera, f32 aspect) {
 }
 
 inline Mat4 make_camera_vp(const Camera *camera, f32 aspect) {
-  assert(glm::all(glm::isfinite(camera->direction)));
-  assert(glm::length(camera->direction) > 0.0f);
+  assert(isfinite_v3(camera->direction));
+  assert(len2_v3(camera->direction) > EPSILON);
 
   Vec3 pos = {.x = camera->position.x, .y = camera->position.y, .z = camera->position.z};
   Vec3 dir = {.x = camera->direction.x, .y = camera->direction.y, .z = camera->direction.z};
@@ -134,11 +133,11 @@ inline CameraMatrices camera_matrices_with_offset(const Camera *camera, Vec3 off
 
 inline void log_camera(const Camera *camera) {
   printf("Camera position:  ");
-  log_vec3(&camera->position);
+  log_v3(camera->position);
 
   printf("Camera direction: ");
-  log_vec3(&camera->direction);
+  log_v3(camera->direction);
 
   printf("Camera up:        ");
-  log_vec3(&camera->up);
+  log_v3(camera->up);
 }

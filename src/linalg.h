@@ -46,6 +46,7 @@ typedef struct {
   f32 k;
 } Quaternion;
 
+Vec2 vec2(f32 x, f32 y);
 Vec3 vec3(f32 x, f32 y, f32 z);
 Vec4 vec4(f32 x, f32 y, f32 z, f32 w);
 Mat4 mat4();
@@ -53,10 +54,28 @@ Mat4 mat4();
 f32 dot_v2(Vec2 v, Vec2 u);
 f32 dot_v3(Vec3 v, Vec3 u);
 f32 dot_v4(Vec4 v, Vec4 u);
+
 Vec2 add_v2(Vec2 v, Vec2 u);
 Vec3 add_v3(Vec3 v, Vec3 u);
-Vec4 add_v3(Vec4 v, Vec4 u);
+Vec4 add_v4(Vec4 v, Vec4 u);
+
+void inc_v2(Vec2 *v, Vec2 u);
+void inc_v3(Vec3 *v, Vec3 u);
+void inc_v4(Vec4 *v, Vec4 u);
+
+Vec2 sub_v2(Vec2 v, Vec2 u);
+Vec3 sub_v3(Vec3 v, Vec3 u);
+Vec4 sub_v4(Vec4 v, Vec4 u);
+
+Vec2 scale_v2(Vec2 x, f32 s);
+Vec3 scale_v3(Vec3 x, f32 s);
+
 Vec3 cross_v3(Vec3 v, Vec3 u);
+
+Vec2 abs_v2(Vec2 v);
+f32 len2_v2(Vec2 v);
+f32 len_v2(Vec2 v);
+
 f32 len2_v3(Vec3 v);
 f32 len_v3(Vec3 v);
 Vec3 normalize_v3(Vec3 v);
@@ -70,8 +89,12 @@ Vec4 mvm4(const Mat4 *mat, Vec4 v);
 Mat4 make_camera_from_world(Vec3 pos, Vec3 forward, Vec3 up);
 Mat4 perspective_proj(f32 aspect, f32 hfov, f32 z_near, f32 z_far);
 
+void log_v3(Vec3 v);
 void log_v4(Vec4 v);
+bool isfinite_v3(Vec3 v);
+
 void log_m4(const Mat4 *m);
+bool mat4_has_nan(const Mat4 *m);
 
 #ifdef GLM_VERSION
 inline glm::vec2 to_glm(Vec2 v) { return {v.x, v.y}; }

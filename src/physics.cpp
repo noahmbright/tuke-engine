@@ -1,7 +1,8 @@
 #include "physics.h"
 #include "tuke_engine.h"
+#include <assert.h>
 
-glm::vec3 random_unit_vec3(RNG *rng) {
+Vec3 random_unit_vec3(RNG *rng) {
   f32 u = random_f32_xoroshiro128_plus(rng);
   f32 v = random_f32_xoroshiro128_plus(rng); // [0,1)
 
@@ -15,10 +16,10 @@ glm::vec3 random_unit_vec3(RNG *rng) {
   f32 x = r * cosf(theta);
   f32 y = r * sinf(theta);
   f32 z = z_val;
-  return glm::vec3(x, y, z);
+  return vec3(x, y, z);
 }
 
-bool aabb_collision(glm::vec3 pos1, glm::vec3 size1, glm::vec3 pos2, glm::vec3 size2) {
+bool aabb_collision(Vec3 pos1, Vec3 size1, Vec3 pos2, Vec3 size2) {
 
   f32 x1_min = pos1.x - size1.x * 0.5f;
   f32 x1_max = pos1.x + size1.x * 0.5f;
@@ -41,7 +42,7 @@ bool aabb_collision(glm::vec3 pos1, glm::vec3 size1, glm::vec3 pos2, glm::vec3 s
   return x_overlaps && y_overlaps && z_overlaps;
 }
 
-bool aabb_collision_vec2(glm::vec2 pos1, glm::vec2 size1, glm::vec2 pos2, glm::vec2 size2) {
+bool aabb_collision_v2(Vec2 pos1, Vec2 size1, Vec2 pos2, Vec2 size2) {
 
   f32 x1_min = pos1.x - size1.x * 0.5f;
   f32 x1_max = pos1.x + size1.x * 0.5f;
@@ -89,27 +90,25 @@ swept_aabb_get_entry_exit_times(f32 v_rel, f32 min1, f32 max1, f32 min2, f32 max
 }
 
 // https://www.gamedev.net/tutorials/programming/general-and-gameplay-programming/swept-aabb-collision-detection-and-response-r3084/
-SweptAABBCollisionCheck swept_aabb_collision(
-    f32 dt, glm::vec3 pos1, glm::vec3 size1, glm::vec3 v1, glm::vec3 pos2, glm::vec3 size2, glm::vec3 v2
-) {
+SweptAABBCollisionCheck swept_aabb_collision(f32 dt, Vec3 pos1, Vec3 size1, Vec3 v1, Vec3 pos2, Vec3 size2, Vec3 v2) {
 
   SweptAABBCollisionCheck swept_aabb_collision_check;
   swept_aabb_collision_check.t = 0.0f;
   swept_aabb_collision_check.did_collide = false;
   swept_aabb_collision_check.was_overlapping = false;
   swept_aabb_collision_check.penetration_depth = 0.0f;
-  swept_aabb_collision_check.normal = glm::vec3(0.0f);
+  swept_aabb_collision_check.normal = vec3(0.0f, 0.0f, 0.0f);
 
   // we are in the reference frame of box 1
   // we are checking if box 2 is going to slam into us
-  glm::vec3 half_size1 = 0.5f * size1;
-  glm::vec3 half_size2 = 0.5f * size2;
+  Vec3 half_size1 = scale_v3(size1, 0.5f);
+  Vec3 half_size2 = scale_v3(size2, 0.5f);
 
-  glm::vec3 maxes1 = pos1 + half_size1;
-  glm::vec3 mins1 = pos1 - half_size1;
+  Vec3 maxes1 = add_v3(pos1, half_size1);
+  Vec3 mins1 = sub_v3(pos1, half_size1);
 
-  glm::vec3 maxes2 = pos2 + half_size2;
-  glm::vec3 mins2 = pos2 - half_size2;
+  Vec3 maxes2 = add_v3(pos2, half_size2);
+  Vec3 mins2 = sub_v3(pos2, half_size2);
 
   if (aabb_collision(pos1, size1, pos2, size2)) {
     swept_aabb_collision_check.did_collide = true;
@@ -137,7 +136,7 @@ SweptAABBCollisionCheck swept_aabb_collision(
   }
 
   // v_rel is the apparent velocity of box 2 in box 1's reference frame
-  glm::vec3 v_rel = v2 - v1;
+  Vec3 v_rel = sub_v3(v2, v1);
 
   // compute times
   f32 t_x_entry, t_x_exit;

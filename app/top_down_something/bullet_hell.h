@@ -12,7 +12,6 @@
 
 #include "billboard_manager.h"
 #include "generated_shader_utils.h"
-#include "glm/common.hpp"
 #include "opengl_base.h"
 #include "physics.h"
 #include "topdown.h"
@@ -59,15 +58,15 @@ enum BulletPattern {
 // Will I end up having specializations for each bullet based on update rules?
 // And then have arrays per bullet with update rule in the bullet manager?
 struct Bullet {
-  glm::vec2 position;
-  glm::vec2 velocity;
-  glm::vec2 size;
+  Vec2 position;
+  Vec2 velocity;
+  Vec2 size;
   f64 t0; // Spawn time
   BulletPattern pattern;
 };
 
 struct BulletRenderData {
-  glm::vec2 pos;
+  Vec2 pos;
   f32 size;
 };
 
@@ -94,11 +93,11 @@ inline void spawn_bullet(BulletManager *bullet_manager, Bullet bullet) {
 // https://gameprogrammingpatterns.com/state.html
 
 struct Enemy {
-  glm::vec2 position;
+  Vec2 position;
 };
 
 struct EnemyRenderData {
-  glm::vec2 pos;
+  Vec2 pos;
   f32 size;
 };
 
@@ -139,8 +138,8 @@ struct PlayerSlowMotion {
 // player_pos is the position within the bullet hell arena
 // The arena's center is (0.0, 0.0)
 struct Player {
-  glm::vec3 pos;
-  glm::vec3 size;
+  Vec3 pos;
+  Vec3 size;
   u32 current_health;
   u32 max_health;
   f32 invincibility_time;
@@ -238,13 +237,13 @@ inline void player_release_ability(Player *player) {
   }
 }
 
-inline void bullet_hell_move_player_normal(Player *player, glm::vec3 input_movement_vector, f32 dt) {
+inline void bullet_hell_move_player_normal(Player *player, Vec3 input_movement_vector, f32 dt) {
 
   const f32 X_BOUNDARY = 0.5 * (BULLET_HELL_ARENA_WIDTH - PLAYER_SIDE_LENGTH_METERS);
   const f32 Y_BOUNDARY = 0.5 * (BULLET_HELL_ARENA_HEIGHT - PLAYER_SIDE_LENGTH_METERS);
 
   const f32 speed = 5.0f;
-  glm::vec3 movement_vector = speed * dt * input_movement_vector;
+  Vec3 movement_vector = scale_v3(input_movement_vector, speed * dt);
 
   f32 next_x = player->pos.x + movement_vector.x;
   f32 clamped_next_x = clamp_f32(next_x, -X_BOUNDARY, X_BOUNDARY);
@@ -264,7 +263,7 @@ enum PlayerIntentFlags {
 };
 
 struct PlayerIntent {
-  glm::vec3 movement_vector;
+  Vec3 movement_vector;
   u32 flags;
 };
 
@@ -272,7 +271,7 @@ inline PlayerIntent handle_inputs_player(const Inputs *inputs) {
   // Inputs define intent
   // Shift held to activate ability
   // q to cancel ability
-  glm::vec3 input_movement_vector = inputs_to_movement_vector(inputs);
+  Vec3 input_movement_vector = inputs_to_movement_vector(inputs);
   bool shift_held = key_held(inputs, INPUT_KEY_LEFT_SHIFT) || key_held(inputs, INPUT_KEY_RIGHT_SHIFT);
   bool shift_released = key_released(inputs, INPUT_KEY_LEFT_SHIFT) || key_released(inputs, INPUT_KEY_RIGHT_SHIFT);
   bool q_held = key_held(inputs, INPUT_KEY_Q);
@@ -311,7 +310,7 @@ inline void bullet_hell_update_player(Player *player, PlayerIntent player_intent
     bullet_hell_move_player_normal(player, player_intent.movement_vector, dt);
     return;
   case PLAYER_STATE_SPEED_BOOST: {
-    glm::vec3 scaled_movement_vector = player->speed_boost.boost_factor * player_intent.movement_vector;
+    Vec3 scaled_movement_vector = scale_v3(player_intent.movement_vector, player->speed_boost.boost_factor);
     bullet_hell_move_player_normal(player, scaled_movement_vector, dt);
     return;
   }
@@ -326,14 +325,13 @@ inline void bullet_hell_update_player(Player *player, PlayerIntent player_intent
 }
 
 // Supposing a rectangle of half side lengths is positioned at the origin
-inline f32 rectangle_sdf(f32 half_width, f32 half_height, glm::vec2 pos) {
+inline f32 rectangle_sdf(f32 half_width, f32 half_height, Vec2 pos) {
+  Vec2 abs_pos = abs_v2(pos);
+  Vec2 rect_vec = Vec2(half_width, half_height);
+  Vec2 diff = sub_v2(abs_pos, rect_vec);
 
-  glm::vec2 abs_pos = glm::abs(pos);
-  glm::vec2 rect_vec = glm::vec2(half_width, half_height);
-  glm::vec2 diff = abs_pos - rect_vec;
-
-  glm::vec2 clamped_diff = glm::max(glm::vec2(0.0f), diff);
-  f32 dist_outside = glm::length(clamped_diff);
+  Vec2 clamped_diff = vec2(fmax(0.0f, abs_pos.x - rect_vec.x), fmax(0.0f, abs_pos.y - rect_vec.y));
+  f32 dist_outside = len_v2(clamped_diff);
   f32 dist_inside = fmin(fmax(diff.x, diff.y), 0.0f);
 
   return dist_outside + dist_inside;
@@ -351,7 +349,7 @@ inline void update_bullets(BulletManager *bullet_manager, f32 dt) {
 
     // Current bullet. Update, and check if it survives this frame.
     Bullet bullet = bullet_manager->bullets[i];
-    bullet.position += dt * bullet.velocity;
+    inc_v2(&bullet.position, scale_v2(bullet.velocity, dt));
 
     // Signed distance to the arena. If negative, the bullet is still alive
     // TODO this would break down if I decide to add bullets that go outside the arena and come back in
@@ -418,8 +416,8 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   clear_billboard_manager(&data->billboard_manager);
 
   Billboard billboard{
-      .center_pos = glm::vec3(sinf(gs->t), cosf(gs->t), EPSILON),
-      .size = glm::vec2(PLAYER_SIDE_LENGTH_METERS),
+      .center_pos = Vec3(sinf(gs->t), cosf(gs->t), EPSILON),
+      .size = Vec2(PLAYER_SIDE_LENGTH_METERS),
       .rotation = 0.0f,
   };
   push_billboard(&data->billboard_manager, billboard);
@@ -435,8 +433,9 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   // Influences on the rate of time passing are player inputs - could add something like enemy effects
   gs->t += dt;
 
-  glm::mat4 player_model = glm::translate(glm::mat4(1.0f), data->player.pos);
-  player_model = glm::scale(player_model, data->player.size);
+  Mat4 player_model = mat4();
+  scale_m4(data->player.size, &player_model);
+  translate_m4(data->player.pos, &player_model);
   glBindBuffer(GL_UNIFORM_BUFFER, data->uniforms[UNIFORM_PLAYER_MODEL]);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(PlayerModel), &player_model);
 
@@ -457,8 +456,8 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
     Enemy *enemy0 = &enemy_manager->enemies[0];
     Bullet new_bullet{
         .position = enemy0->position,
-        .velocity = glm::vec3(0.0f, -8.0f, 0.0f),
-        .size = glm::vec3(0.3f),
+        .velocity = vec2(0.0f, -8.0f),
+        .size = vec2(0.3f, 0.3f),
         .t0 = gs->t,
         .pattern = BULLET_PATTERN_LINEAR,
     };
@@ -475,13 +474,13 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
 
   // Collision detection
   if (player->invincibility_time <= 0.0) {
-    glm::vec2 player_xy(player->pos.x, player->pos.y);
-    glm::vec2 player_size_xy(player->size.x, player->size.y);
+    Vec2 player_xy(player->pos.x, player->pos.y);
+    Vec2 player_size_xy(player->size.x, player->size.y);
 
     for (u32 i = 0; i < data->bullet_manager->num_live_bullets; i++) {
       Bullet *bullet = &bullet_manager->bullets[i];
 
-      if (aabb_collision_vec2(player_xy, player_size_xy, bullet->position, bullet->size)) {
+      if (aabb_collision_v2(player_xy, player_size_xy, bullet->position, bullet->size)) {
         player->current_health -= (player->current_health > 0);
         player->invincibility_time = 1.0;
       }
@@ -518,10 +517,9 @@ inline void bullet_hell_draw(const GLRenderer *renderer, const void *scene_data)
   Vec3 pos = {.x = camera->position.x, .y = camera->position.y, .z = camera->position.z};
   Vec3 dir = {.x = camera->direction.x, .y = camera->direction.y, .z = camera->direction.z};
   Vec3 up = {.x = camera->up.x, .y = camera->up.y, .z = camera->up.z};
-  Mat4 camera_mat = make_camera_from_world(pos, dir, up);
-  glm::mat4 view = to_glm(&camera_mat);
+  Mat4 view = make_camera_from_world(pos, dir, up);
 
-  render_billboards_opengl(&data->billboard_manager, view);
+  render_billboards_opengl(&data->billboard_manager, &view);
 }
 
 ////////////////////////////////// BIG INIT FUNCTION //////////////////////////////////
@@ -602,8 +600,8 @@ inline BulletHellSceneData create_bullet_hell_scene(u32 vp_ubo) {
 
   // Make Player
   Player player{
-      .pos = glm::vec3(0.0f, 0.0f, 0.0f),
-      .size = glm::vec3(PLAYER_SIDE_LENGTH_METERS),
+      .pos = Vec3(0.0f, 0.0f, 0.0f),
+      .size = Vec3(PLAYER_SIDE_LENGTH_METERS),
       .current_health = 100,
       .max_health = 100,
       .invincibility_time = 0.0f,

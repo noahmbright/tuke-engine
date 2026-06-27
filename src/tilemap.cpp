@@ -1,7 +1,8 @@
 #include "tilemap.h"
+#include "linalg.h"
 
-static inline void populate_tile_vertex(f32 x, f32 y, f32 z, f32 u, f32 v, u32 texture_id,
-                                        TileVertex *out_tile_vertex) {
+static inline void
+populate_tile_vertex(f32 x, f32 y, f32 z, f32 u, f32 v, u32 texture_id, TileVertex *out_tile_vertex) {
   out_tile_vertex->texture_coords[0] = u;
   out_tile_vertex->texture_coords[1] = v;
 
@@ -65,11 +66,11 @@ void tilemap_generate_vertices(const Tilemap *tilemap, TileVertex *out_tile_vert
 // pos is the position of the colliding object in that same coordinate system
 // Idea is to allow for multiple tilemaps to be drawn together in the same world
 // Currently, pos and size are passed as vec3, but z coords are not used.
-int tilemap_check_collision(const Tilemap *tilemap, glm::vec3 pos, glm::vec3 size) {
+int tilemap_check_collision(const Tilemap *tilemap, Vec3 pos, Vec3 size) {
 
-  glm::vec3 delta_r = pos - tilemap->top_left;
+  Vec3 delta_r = sub_v3(pos, tilemap->top_left);
   delta_r.y = -delta_r.y; // tile index grows as we go downward in view space
-  glm::vec3 half_size = 0.5f * size;
+  Vec3 half_size = scale_v3(size, 0.5f);
   f32 x0 = delta_r.x - half_size.x;
   f32 x1 = delta_r.x + half_size.x;
   f32 y0 = delta_r.y - half_size.y;

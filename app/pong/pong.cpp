@@ -88,8 +88,10 @@ void init_paddles_material(State *state) {
 
 static void init_transforms(State *state) {
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
-    glm::mat4 m = glm::translate(glm::mat4(1.0f), state->positions[i]);
-    state->instance_data.model[i] = glm::scale(m, state->scales[i]);
+    Mat4 m = mat4();
+    scale_m4(state->scales[i], &m);
+    translate_m4(state->positions[i], &m);
+    state->instance_data.model[i] = to_glm(&m);
   }
   write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data, state->uniform_writes.instance_data);
 }
@@ -156,9 +158,9 @@ State setup_state(const char *title) {
   state.positions[ENTITY_RIGHT_PADDLE] = right_paddle_pos0;
   state.positions[ENTITY_BALL] = ball_pos0;
 
-  state.velocities[ENTITY_LEFT_PADDLE] = glm::vec3(0.0f);
-  state.velocities[ENTITY_RIGHT_PADDLE] = glm::vec3(0.0f);
-  state.velocities[ENTITY_BALL] = glm::vec3(0.0f);
+  state.velocities[ENTITY_LEFT_PADDLE] = Vec3(0.0f);
+  state.velocities[ENTITY_RIGHT_PADDLE] = Vec3(0.0f);
+  state.velocities[ENTITY_BALL] = Vec3(0.0f);
 
   state.scales[ENTITY_LEFT_PADDLE] = paddle_scale0;
   state.scales[ENTITY_RIGHT_PADDLE] = paddle_scale0;
@@ -174,16 +176,13 @@ State setup_state(const char *title) {
   state.rngs.powerup_spawn = create_rng(0x420);
   init_transforms(&state);
 
-  glm::vec3 camera_pos{0.0f, 0.0f, 30.0f};
+  Vec3 camera_pos{0.0f, 0.0f, 30.0f};
   state.camera = create_camera(CAMERA_TYPE_3D, camera_pos);
   state.camera.y_needs_inverted = true;
 
   // TODO how to get model onto GPU? uniform? something else? push constant?
-  glm::mat4 arena_model = glm::scale(glm::mat4(1.0f), arena_dimensions0);
-
-  // TODO make camera matrices only on camera movement
-  // TODO buffer only on resize
-
+  Mat4 arena_model = mat4();
+  scale_m4(arena_dimensions0, &arena_model);
   f32 aspect = f32(state.ctx.swapchain_extent.width) / f32(state.ctx.swapchain_extent.height);
   Mat4 vp = make_camera_vp(&state.camera, aspect);
   glm::mat4 camera_vp = to_glm(&vp);
@@ -293,7 +292,7 @@ void process_inputs_playing(State *state, f32 dt) {
   }
 
   bool horizontal_enabled = (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED);
-  glm::vec2 input_direction = inputs_to_direction(inputs);
+  Vec2 input_direction = inputs_to_direction(inputs);
   input_direction.x *= horizontal_enabled;
 
   if (key_pressed(inputs, INPUT_KEY_SPACEBAR) && state->pong_mode == PONG_MODE_BETWEEN_POINTS) {
@@ -327,9 +326,9 @@ void process_inputs_playing(State *state, f32 dt) {
   }
 
   // TODO Pong: make the paddle scale over the course of the game
-  if (input_direction.length() > EPSILON) {
-    glm::vec3 movement = glm::vec3(input_direction.x, input_direction.y, 0.0f);
-    state->positions[ENTITY_LEFT_PADDLE] += dt * state->left_paddle_speed * movement;
+  if (len_v2(input_direction) > EPSILON) {
+    Vec3 movement = Vec3(input_direction.x, input_direction.y, 0.0f);
+    inc_v3(&state->positions[ENTITY_LEFT_PADDLE], scale_v3(movement, dt * state->left_paddle_speed));
   }
 }
 
@@ -362,21 +361,21 @@ void process_inputs(State *state, const f32 dt) {
 }
 
 void handle_collisions(State *state, const f32 dt) {
-  glm::vec3 *positions = state->positions;
-  glm::vec3 *scales = state->scales;
-  glm::vec3 *velocities = state->velocities;
+  Vec3 *positions = state->positions;
+  Vec3 *scales = state->scales;
+  Vec3 *velocities = state->velocities;
 
-  glm::vec3 ball_pos = positions[ENTITY_BALL];
-  glm::vec3 ball_scale = scales[ENTITY_BALL];
-  glm::vec3 ball_velocity = velocities[ENTITY_BALL];
+  Vec3 ball_pos = positions[ENTITY_BALL];
+  Vec3 ball_scale = scales[ENTITY_BALL];
+  Vec3 ball_velocity = velocities[ENTITY_BALL];
 
-  glm::vec3 left_paddle_pos = positions[ENTITY_LEFT_PADDLE];
-  glm::vec3 left_paddle_scale = scales[ENTITY_LEFT_PADDLE];
-  glm::vec3 left_paddle_velocity = velocities[ENTITY_LEFT_PADDLE];
+  Vec3 left_paddle_pos = positions[ENTITY_LEFT_PADDLE];
+  Vec3 left_paddle_scale = scales[ENTITY_LEFT_PADDLE];
+  Vec3 left_paddle_velocity = velocities[ENTITY_LEFT_PADDLE];
 
-  glm::vec3 right_paddle_pos = positions[ENTITY_RIGHT_PADDLE];
-  glm::vec3 right_paddle_scale = scales[ENTITY_RIGHT_PADDLE];
-  // glm::vec3 right_paddle_velocity = velocities[ENTITY_RIGHT_PADDLE];
+  Vec3 right_paddle_pos = positions[ENTITY_RIGHT_PADDLE];
+  Vec3 right_paddle_scale = scales[ENTITY_RIGHT_PADDLE];
+  // Vec3 right_paddle_velocity = velocities[ENTITY_RIGHT_PADDLE];
 
   // TODO Pong: Maybe have this resize dynamically
   f32 arena_horizontal_boundary = arena_dimensions_x0 / 2.0f;
@@ -387,13 +386,13 @@ void handle_collisions(State *state, const f32 dt) {
     state->left_score++;
     positions[ENTITY_BALL] = ball_pos0;
     state->pong_mode = PONG_MODE_BETWEEN_POINTS;
-    state->velocities[ENTITY_BALL] = glm::vec3(0.0f);
+    state->velocities[ENTITY_BALL] = Vec3(0.0f);
   }
   if (ball_pos.x - 0.5f * ball_scale.x < -arena_horizontal_boundary) {
     state->right_score++;
     positions[ENTITY_BALL] = ball_pos0;
     state->pong_mode = PONG_MODE_BETWEEN_POINTS;
-    state->velocities[ENTITY_BALL] = glm::vec3(0.0f);
+    state->velocities[ENTITY_BALL] = Vec3(0.0f);
   }
 
   if (ball_pos.y + 0.5f * ball_scale.y > arena_vertical_boundary) {
@@ -442,20 +441,21 @@ void handle_collisions(State *state, const f32 dt) {
 
     if (left_collision_check.did_collide) {
       state->left_paddle_cooldown = 1.0f;
-      glm::vec3 normal = left_collision_check.normal;
-      log_vec3(&normal);
+      Vec3 normal = left_collision_check.normal;
+      log_v3(normal);
       state->last_paddle_to_hit = LAST_PADDLE_LEFT;
       // state->screen_shake.active = true;
 
       // normal is from paddles's perspective
       if (left_collision_check.was_overlapping) {
-        const glm::vec3 displacement = normal * left_collision_check.penetration_depth;
-        state->positions[ENTITY_BALL] += displacement;
+        const Vec3 displacement = scale_v3(normal, left_collision_check.penetration_depth);
+        inc_v3(&state->positions[ENTITY_BALL], displacement);
       } else {
-        state->positions[ENTITY_BALL] += ball_velocity * left_collision_check.t;
+        inc_v3(&state->positions[ENTITY_BALL], scale_v3(ball_velocity, left_collision_check.t));
       }
 
-      state->velocities[ENTITY_BALL] = ball_velocity - 2.0f * glm::dot(ball_velocity, normal) * normal;
+      f32 asdf = 2.0f * dot_v3(ball_velocity, normal);
+      state->velocities[ENTITY_BALL] = sub_v3(ball_velocity, scale_v3(normal, asdf));
     }
   } else {
     state->left_paddle_cooldown -= dt;
@@ -516,14 +516,16 @@ void update_game_state(State *state, const f32 dt) {
   }
 
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
-    state->positions[i] += dt * state->velocities[i];
+    inc_v3(&state->positions[i], scale_v3(state->velocities[i], dt));
   }
 
   handle_collisions(state, dt);
 
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
-    glm::mat4 m = glm::translate(glm::mat4(1.0f), state->positions[i]);
-    state->instance_data.model[i] = glm::scale(m, state->scales[i]);
+    Mat4 m = mat4();
+    scale_m4(state->scales[i], &m);
+    translate_m4(state->positions[i], &m);
+    state->instance_data.model[i] = to_glm(&m);
   }
 
   write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data, state->uniform_writes.instance_data);

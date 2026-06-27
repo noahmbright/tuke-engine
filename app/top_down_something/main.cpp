@@ -113,7 +113,7 @@ int main() {
   gl_renderer_push_material(&global_state.renderer, MATERIAL_TILEMAP, tilemap_material);
   gl_renderer_push_material(&global_state.renderer, MATERIAL_FULLSCREEN_QUAD, fullscreen_quad_material);
 
-  const glm::vec3 PLAYER_POSITION0(camera.position.x, camera.position.y, 0.0f);
+  const Vec3 PLAYER_POSITION0(camera.position.x, camera.position.y, 0.0f);
   Entities entities = create_entities();
   EntityIndex player_index = entities_add(&entities);
   entities.positions[player_index.idx] = PLAYER_POSITION0;

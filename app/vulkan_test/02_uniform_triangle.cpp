@@ -1,13 +1,15 @@
 #include "generated_shader_utils.h"
 
-#include "glm/ext/matrix_transform.hpp"
 #include "shaders.h"
 #include "vulkan_test_common.h"
 #include "window.h"
 
 TriangleTransformation simulate(f64 t) {
   TriangleTransformation tt;
-  tt.mat = glm::rotate(glm::mat4(1.0f), (f32)t, glm::vec3(0.0f, 0.0f, 1.0f));
+  tt.mat[0][0] = sinf(t);
+  tt.mat[0][1] = cosf(t);
+  tt.mat[1][0] = cosf(t);
+  tt.mat[1][1] = -sinf(t);
   return tt;
 }
 

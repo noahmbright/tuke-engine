@@ -1,7 +1,5 @@
 #include "camera.h"
 #include "generated_shader_utils.h"
-#include "glm/ext/matrix_transform.hpp"
-#include "glm/geometric.hpp"
 #include "shaders.h"
 
 #include "vulkan_base.h"
@@ -66,7 +64,7 @@ int main() {
 
   Camera camera = create_camera(CAMERA_TYPE_3D);
   camera.position = {4.0f, -6.0f, 10.0f};
-  camera.direction = -glm::normalize(camera.position);
+  camera.direction = normalize_v3(sub_v3(vec3(0.0f, 0.0f, 0.0f), camera.position));
 
   Inputs inputs;
   init_inputs(&inputs);
@@ -95,8 +93,8 @@ int main() {
     mult_m4(&cam_mats.projection, &cam_mats.view, &camera_vp);
     mvp.vp = to_glm(&camera_vp);
 
-    glm::vec2 dir = inputs_to_direction(&inputs);
-    camera_move_3d(&camera, (f32)dt * 5.0f * dir);
+    Vec2 dir = inputs_to_direction(&inputs);
+    camera_move_3d(&camera, scale_v2(dir, (f32)dt * 5.0f));
 
     f32 r = 2.0f;
     f32 light_x = r * sinf(3.0 * t_total + 0.2);

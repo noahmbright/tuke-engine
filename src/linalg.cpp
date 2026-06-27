@@ -3,6 +3,13 @@
 #include <stdio.h>
 #include <string.h>
 
+Vec2 vec2(f32 x, f32 y) {
+  Vec2 v;
+  v.x = x;
+  v.y = y;
+  return v;
+}
+
 Vec3 vec3(f32 x, f32 y, f32 z) {
   Vec3 v;
   v.x = x;
@@ -20,11 +27,26 @@ Vec4 vec4(f32 x, f32 y, f32 z, f32 w) {
   return v;
 }
 
+Vec2 scale_v2(Vec2 v, f32 s) {
+  Vec2 u;
+  u.x = v.x * s;
+  u.y = v.y * s;
+  return u;
+}
+
+Vec3 scale_v3(Vec3 v, f32 s) {
+  Vec3 u;
+  u.x = v.x * s;
+  u.y = v.y * s;
+  u.z = v.z * s;
+  return u;
+}
+
 f32 dot_v3(Vec3 v, Vec3 u) { return v.x * u.x + v.y * u.y + v.z * u.z; }
 
 f32 dot_v4(Vec4 v, Vec4 u) { return v.x * u.x + v.y * u.y + v.z * u.z + v.w * u.w; }
 
-Vec2 add_vec2(Vec2 v, Vec2 u) {
+Vec2 add_v2(Vec2 v, Vec2 u) {
   Vec2 res;
   res.x = v.x + u.x;
   res.y = v.y + u.y;
@@ -39,12 +61,54 @@ Vec3 add_v3(Vec3 v, Vec3 u) {
   return res;
 }
 
-Vec4 add_v3(Vec4 v, Vec4 u) {
+Vec4 add_v4(Vec4 v, Vec4 u) {
   Vec4 res;
   res.x = v.x + u.x;
   res.y = v.y + u.y;
   res.z = v.z + u.z;
   res.w = v.w + u.w;
+  return res;
+}
+
+void inc_v2(Vec2 *v, Vec2 u) {
+  v->x += u.x;
+  v->y += u.y;
+}
+
+void inc_v3(Vec3 *v, Vec3 u) {
+  v->x += u.x;
+  v->y += u.y;
+  v->z += u.z;
+}
+
+void inc_v4(Vec4 *v, Vec4 u) {
+  v->x += u.x;
+  v->y += u.y;
+  v->z += u.z;
+  v->w += u.w;
+}
+
+Vec2 sub_v2(Vec2 v, Vec2 u) {
+  Vec2 res;
+  res.x = v.x - u.x;
+  res.y = v.y - u.y;
+  return res;
+}
+
+Vec3 sub_v3(Vec3 v, Vec3 u) {
+  Vec3 res;
+  res.x = v.x - u.x;
+  res.y = v.y - u.y;
+  res.z = v.z - u.z;
+  return res;
+}
+
+Vec4 sub_v4(Vec4 v, Vec4 u) {
+  Vec4 res;
+  res.x = v.x - u.x;
+  res.y = v.y - u.y;
+  res.z = v.z - u.z;
+  res.w = v.w - u.w;
   return res;
 }
 
@@ -55,6 +119,20 @@ Vec3 cross_v3(Vec3 v, Vec3 u) {
       .z = v.x * u.y - v.y * u.x,
   };
   return w;
+}
+
+Vec2 abs_v2(Vec2 v) {
+  Vec2 u;
+  u.x = fabs(v.x);
+  u.y = fabs(v.y);
+  return u;
+}
+
+f32 len2_v2(Vec2 v) { return v.x * v.x + v.y * v.y; }
+
+f32 len_v2(Vec2 v) {
+  f32 len2 = v.x * v.x + v.y * v.y;
+  return sqrtf(len2);
 }
 
 f32 len2_v3(Vec3 v) { return v.x * v.x + v.y * v.y + v.z * v.z; }
@@ -211,6 +289,12 @@ Mat4 perspective_proj(f32 aspect, f32 hfov, f32 z_near, f32 z_far) {
   return m;
 }
 
+void log_v3(Vec3 v) {
+  printf("| %9.4f |\n", v.x);
+  printf("| %9.4f |\n", v.y);
+  printf("| %9.4f |\n", v.z);
+}
+
 void log_v4(Vec4 v) {
   printf("| %9.4f |\n", v.x);
   printf("| %9.4f |\n", v.y);
@@ -218,10 +302,23 @@ void log_v4(Vec4 v) {
   printf("| %9.4f |\n", v.w);
 }
 
+bool isfinite_v3(Vec3 v) { return isfinite(v.x) && isfinite(v.y) && isfinite(v.z); }
+
 void log_m4(const Mat4 *m) {
   for (int r = 0; r < 4; r++) {
     printf("| %9.4f %9.4f %9.4f %9.4f |\n", m->arr[0][r], m->arr[1][r], m->arr[2][r], m->arr[3][r]);
   }
+}
+
+bool mat4_has_nan(const Mat4 *m) {
+  for (int c = 0; c < 4; c++) {
+    for (int r = 0; r < 4; r++) {
+      if (isnan(m->arr[c][r])) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 // "Camera matrix": classic v in MVP stack.

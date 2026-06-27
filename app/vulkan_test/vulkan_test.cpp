@@ -4,7 +4,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include "camera.h"
-#include "glm/ext/matrix_transform.hpp"
 #include "glm/gtx/string_cast.hpp"
 #include "tuke_engine.h"
 #include "vulkan_test_common.h"
@@ -132,11 +131,10 @@ int main() {
   VulkanMesh fullscreen_quad_mesh = {.vertex_count = 3, .instance_count = 1};
 
   MVPUniform mvp = {.projection = glm::mat4(1.0f), .view = glm::mat4(1.0f)};
-  const glm::vec3 cube_translation_vector = {1.5f, -1.3f, 1.5f};
+  const Vec3 cube_translation_vector = {1.5f, -1.3f, 1.5f};
 
   Camera camera = create_camera(CAMERA_TYPE_3D);
   camera.position = {0.0f, 0.0f, 5.0f};
-  glm::mat4 camera_vp;
   Inputs inputs;
   init_inputs(&inputs);
 
@@ -153,11 +151,15 @@ int main() {
     f32 sint = sinf(t1);
 
     UniformBufferObject ubo = {.x = fabsf(sint)};
-    mvp.model = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
-    mvp.model = glm::rotate(mvp.model, sint, glm::vec3(0.0f, 0.0f, 1.0f));
+    Mat4 model = mat4();
+    scale_m4(vec3(0.5f, 0.5f, 0.5f), &model);
+    // TODO Rotation
+    // rotate(mvp.model, sint, Vec3(0.0f, 0.0f, 1.0f));
+    mvp.model = to_glm(&model);
 
-    glm::mat4 cube_model = glm::translate(glm::mat4(1.0f), cube_translation_vector);
-    cube_model = glm::scale(cube_model, {0.2f, 0.2f, 0.2f});
+    Mat4 cube_model = mat4();
+    scale_m4(vec3(0.2f, 0.2f, 0.2f), &cube_model);
+    translate_m4(cube_translation_vector, &cube_model);
 
     LightPosition light_position = {
         .position = glm::vec4(2 * sint, sint, 0.5f, 0.0f),
@@ -165,14 +167,13 @@ int main() {
     };
 
     Mat4 vp = make_camera_vp(&camera, f32(width) / (f32)height);
-    camera_vp = to_glm(&vp);
 
     PhongLight phong_light = {.position = light_position.position, .color = light_position.color};
 
     write_to_uniform_buffer(&ub, &mvp, *mvp_write);
     write_to_uniform_buffer(&ub, &ubo, *x_write);
     write_to_uniform_buffer(&ub, &light_position, *light_pos_write);
-    write_to_uniform_buffer(&ub, &camera_vp, *camera_vp_write);
+    write_to_uniform_buffer(&ub, &vp, *camera_vp_write);
     write_to_uniform_buffer(&ub, &phong_light, *phong_light_write);
 
     begin_frame(&t.ctx);
@@ -189,7 +190,7 @@ int main() {
     render_mesh_material(cmd, &triangle_mesh, &triangle_mat);
     render_mesh_material(cmd, &square_mesh, &square_mat);
     render_mesh_material(cmd, &instanced_quad_mesh, &instanced_quad_mat);
-    ModelVP cube_mvp = {.model = cube_model, .vp = camera_vp};
+    ModelVP cube_mvp = {.model = to_glm(&cube_model), .vp = to_glm(&vp)};
     push_constants_material(cmd, &cube_mat, &cube_mvp);
     render_mesh_material(cmd, &cube_mesh, &cube_mat);
     vkCmdEndRenderPass(cmd);
@@ -207,8 +208,8 @@ int main() {
 
     end_frame(&t.ctx, cmd);
 
-    glm::vec2 movement_direction = inputs_to_direction(&inputs);
-    camera_move_3d(&camera, dt * 10.0f * movement_direction);
+    Vec2 movement_direction = inputs_to_direction(&inputs);
+    camera_move_3d(&camera, scale_v2(movement_direction, dt * 10.0f));
   }
 
   vkDeviceWaitIdle(t.ctx.device);

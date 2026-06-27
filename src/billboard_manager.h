@@ -1,6 +1,7 @@
 #pragma once
 
 #include "generated_shader_utils.h"
+#include "linalg.h"
 #include "opengl_base.h"
 #include "tuke_engine.h"
 
@@ -47,10 +48,10 @@ struct BillboardShader {
 };
 
 struct Billboard {
-  glm::vec3 center_pos;
+  Vec3 center_pos;
 
   // x = width, y = height
-  glm::vec2 size;
+  Vec2 size;
 
   // CCW Rotation in radians (degrees?)
   f32 rotation;
@@ -104,15 +105,15 @@ inline void destroy_billboard_manager(BillboardManager *billboard_manager) {
 }
 
 // This assumes that the caller has already configured the VP matrix.
-inline void render_billboards_opengl(const BillboardManager *billboard_manager, glm::mat4 view) {
+inline void render_billboards_opengl(const BillboardManager *billboard_manager, const Mat4 *view) {
   glUseProgram(billboard_manager->shader.program);
   glBindVertexArray(billboard_manager->shader.vao);
 
   // Camera up/right uniform.
   // There is always 1 single camera, so number of billboards is irrelevant in computing size to buffer.
   CameraUpRight camera_up_right;
-  camera_up_right.right = glm::vec3(view[0][0], view[1][0], view[2][0]);
-  camera_up_right.up = glm::vec3(view[0][1], view[1][1], view[2][1]);
+  camera_up_right.right = to_glm(vec3(view->arr[0][0], view->arr[1][0], view->arr[2][0]));
+  camera_up_right.up = to_glm(vec3(view->arr[0][1], view->arr[1][1], view->arr[2][1]));
   glBindBuffer(GL_UNIFORM_BUFFER, billboard_manager->shader.camera_up_right_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(CameraUpRight), &camera_up_right);
 

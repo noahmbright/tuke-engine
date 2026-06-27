@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GLFW/glfw3.h"
+#include "linalg.h"
 #include "tuke_engine.h"
 
 // TODO does input belong in the windowing file?
@@ -71,8 +72,8 @@ inline bool key_released(const Inputs *inputs, Input key) {
 
 inline bool key_held(const Inputs *inputs, Input key) { return inputs->key_inputs[key]; }
 
-inline glm::vec2 inputs_to_direction(const Inputs *inputs) {
-  glm::vec3 direction(0.0f);
+inline Vec2 inputs_to_direction(const Inputs *inputs) {
+  Vec2 direction = {};
 
   if (key_held(inputs, INPUT_KEY_W) || key_held(inputs, INPUT_KEY_UP_ARROW)) {
     direction.y += 1.0f;
@@ -90,8 +91,8 @@ inline glm::vec2 inputs_to_direction(const Inputs *inputs) {
   return direction;
 }
 
-inline glm::vec2 inputs_to_direction_wasd(const Inputs *inputs) {
-  glm::vec3 direction(0.0f);
+inline Vec2 inputs_to_direction_wasd(const Inputs *inputs) {
+  Vec2 direction = {};
 
   if (key_held(inputs, INPUT_KEY_W)) {
     direction.y += 1.0f;
@@ -109,8 +110,8 @@ inline glm::vec2 inputs_to_direction_wasd(const Inputs *inputs) {
   return direction;
 }
 
-inline glm::vec2 inputs_to_direction_arrow_keys(const Inputs *inputs) {
-  glm::vec3 direction(0.0f);
+inline Vec2 inputs_to_direction_arrow_keys(const Inputs *inputs) {
+  Vec2 direction = {};
 
   if (key_held(inputs, INPUT_KEY_UP_ARROW)) {
     direction.y += 1.0f;

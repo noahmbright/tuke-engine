@@ -1,5 +1,5 @@
 #include "generated_shader_utils.h"
-#include "glm/ext/matrix_transform.hpp"
+#include "linalg.h"
 #include "shaders.h"
 
 #include "vulkan_base.h"
@@ -59,7 +59,9 @@ int main() {
       f32 x = 0.5 * cosf(t_total + phase);
       f32 z = 0.1 * sinf(t_total + phase);
 
-      ColoredPosModel model = {.mat = glm::translate(glm::mat4(1.0), glm::vec3(x, -0.5f, 0.5f + z))};
+      Mat4 mat = mat4();
+      translate_m4(vec3(x, -0.5f, 0.5f + z), &mat);
+      ColoredPosModel model = {.mat = to_glm(&mat)};
       write_to_uniform_buffer(&ubs[i], &model, *model_write);
       render_mesh_material(cmd, mesh, &mats[i]);
     }
