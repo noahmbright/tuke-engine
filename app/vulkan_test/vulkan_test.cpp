@@ -164,8 +164,8 @@ int main() {
         .color = glm::vec4(1.0, 1.0, 1.0, 1.0),
     };
 
-    CameraMatrices camera_matrices = create_camera_matrices(&camera, width, height);
-    camera_vp = camera_matrices.projection * camera_matrices.view;
+    Mat4 vp = make_camera_vp(&camera, f32(width) / (f32)height);
+    camera_vp = to_glm(&vp);
 
     PhongLight phong_light = {.position = light_position.position, .color = light_position.color};
 

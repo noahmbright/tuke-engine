@@ -134,8 +134,12 @@ struct PowerUp {
 
 struct State {
   GLFWwindow *window;
+  int window_width;
+  int window_height;
+
   u32 right_score, left_score;
   u32 current_frame;
+  f64 time;
 
   glm::vec2 arena_dimensions;
 
@@ -154,6 +158,7 @@ struct State {
   VulkanMesh mesh;
   VulkanMaterial background_material;
   VulkanMaterial paddle_material;
+  VulkanMaterial main_menu_material;
 
   Inputs inputs;
   RNGs rngs;

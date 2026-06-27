@@ -143,6 +143,7 @@ typedef enum {
   DIRECTIVE_TYPE_PUSH_CONSTANT,
   DIRECTIVE_TYPE_VERTEX_INDEX,
   DIRECTIVE_TYPE_INSTANCE_INDEX,
+  DIRECTIVE_TYPE_VERTEX_SHADER,
   DIRECTIVE_TYPE_GLSL_SOURCE // not really a directive, but the stuff that comes between the directives
 } DirectiveType;
 

@@ -8,6 +8,7 @@ file(GLOB_RECURSE ENGINE_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/window.cpp
     ${CMAKE_SOURCE_DIR}/src/utils.cpp
     ${CMAKE_SOURCE_DIR}/src/physics.cpp
+    ${CMAKE_SOURCE_DIR}/src/linalg.cpp
     ${CMAKE_SOURCE_DIR}/src/statistics.cpp
     ${CMAKE_SOURCE_DIR}/src/stb_image.cpp
     ${CMAKE_SOURCE_DIR}/src/stb_truetype.cpp

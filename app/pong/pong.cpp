@@ -4,6 +4,7 @@
 #include "glfw_vulkan.h"
 #include "physics.h"
 #include "pong.h"
+#include "shaders.h"
 #include "statistics.h"
 #include "tuke_engine.h"
 #include "vulkan/vulkan_base.h"
@@ -53,7 +54,6 @@ void init_background_material(State *state) {
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };
 
-  // set 0 = PLACEHOLDER, set 1 = PONG_GLOBAL
   DescriptorWrite writes[] = {
       {
           .set_id = LAYOUT_ID_PLACEHOLDER,
@@ -150,6 +150,7 @@ State setup_state(const char *title) {
 
   init_background_material(&state);
   init_paddles_material(&state);
+  init_program_spec(ctx, ctx->render_pass, &pong_main_menu_program_spec, &state.main_menu_material);
 
   state.positions[ENTITY_LEFT_PADDLE] = left_paddle_pos0;
   state.positions[ENTITY_RIGHT_PADDLE] = right_paddle_pos0;
@@ -182,9 +183,10 @@ State setup_state(const char *title) {
 
   // TODO make camera matrices only on camera movement
   // TODO buffer only on resize
-  const CameraMatrices camera_matrices =
-      create_camera_matrices(&state.camera, state.ctx.swapchain_extent.width, state.ctx.swapchain_extent.height);
-  glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
+
+  f32 aspect = f32(state.ctx.swapchain_extent.width) / f32(state.ctx.swapchain_extent.height);
+  Mat4 vp = make_camera_vp(&state.camera, aspect);
+  glm::mat4 camera_vp = to_glm(&vp);
 
   // uniform buffer structure: camera vp, background model, paddle model
   write_to_uniform_buffer(&state.uniform_buffer, &camera_vp, state.uniform_writes.camera_vp);
@@ -232,6 +234,7 @@ void destroy_state(State *state) {
 
   destroy_vulkan_material(ctx->device, &state->background_material);
   destroy_vulkan_material(ctx->device, &state->paddle_material);
+  destroy_vulkan_material(ctx->device, &state->main_menu_material);
 
   destroy_buffer_manager(&state->buffer_manager);
   destroy_uniform_buffer(ctx, &state->uniform_buffer);
@@ -240,25 +243,33 @@ void destroy_state(State *state) {
 
 void render(State *state) {
   VulkanContext *ctx = &state->ctx;
-
   begin_frame(ctx);
-
-  VkCommandBuffer command_buffer = begin_command_buffer(ctx);
+  VkCommandBuffer cmd = begin_command_buffer(ctx);
   begin_render_pass(
-      ctx, command_buffer, ctx->render_pass, ctx->framebuffers[ctx->image_index], state->clear_values, 2,
-      state->viewport_state
+      ctx, cmd, ctx->render_pass, ctx->framebuffers[ctx->image_index], state->clear_values, 2, state->viewport_state
   );
-  vkCmdSetViewport(command_buffer, 0, 1, &state->viewport_state.viewport);
-  vkCmdSetScissor(command_buffer, 0, 1, &state->viewport_state.scissor);
 
-  render_mesh_material(command_buffer, &state->mesh, &state->background_material);
+  switch (state->game_mode) {
+  case GAMEMODE_PLAYING:
+  case GAMEMODE_PAUSED:
+    render_mesh_material(cmd, &state->mesh, &state->background_material);
+    state->mesh.instance_count = InstanceDataUBO_model_array_size;
+    render_mesh_material(cmd, &state->mesh, &state->paddle_material);
+    break;
+  case GAMEMODE_MAIN_MENU: {
+    VulkanMesh mesh = {.vertex_count = 6, .instance_count = 1};
+    ShaderToy st = {.res = {state->window_width, state->window_height}, .t = (f32)state->time};
+    push_constants_material(cmd, &state->main_menu_material, &st);
+    render_mesh_material(cmd, &mesh, &state->main_menu_material);
+    break;
+  }
+  default:
+    assert(false);
+  }
 
-  state->mesh.instance_count = InstanceDataUBO_model_array_size;
-  render_mesh_material(command_buffer, &state->mesh, &state->paddle_material);
-
-  vkCmdEndRenderPass(command_buffer);
-  VK_CHECK(vkEndCommandBuffer(command_buffer), "Failed to end command buffer");
-  submit_and_present(ctx, command_buffer);
+  vkCmdEndRenderPass(cmd);
+  VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end command buffer");
+  submit_and_present(ctx, cmd);
 
   state->current_frame++;
   update_frame_index(ctx);
@@ -466,17 +477,19 @@ void update_screen_shake(State *state, f32 dt) {
   state->screen_shake.time_elapsed += dt;
 
   if (state->screen_shake.time_elapsed > state->screen_shake.cutoff_duration) {
-    camera_matrices = create_camera_matrices(&state->camera, width, height);
+    camera_matrices = create_camera_matrices(&state->camera, f32(width) / f32(height));
     state->screen_shake.time_elapsed = 0.0f;
     state->screen_shake.active = false;
   } else {
     f32 dx = evaluate_damped_harmonic_oscillator(state->screen_shake.x_oscillator, state->screen_shake.time_elapsed);
     f32 dy = evaluate_damped_harmonic_oscillator(state->screen_shake.y_oscillator, state->screen_shake.time_elapsed);
 
-    camera_matrices = camera_matrices_with_offset(&state->camera, glm::vec3(dx, dy, 0.0f), width, height);
+    Vec3 offset = vec3(dx, dy, 0.0f);
+    camera_matrices = camera_matrices_with_offset(&state->camera, offset, f32(width) / f32(height));
   }
 
-  glm::mat4 camera_vp = camera_matrices.projection * camera_matrices.view;
+  Mat4 camera_vp;
+  mult_m4(&camera_matrices.projection, &camera_matrices.view, &camera_vp);
   write_to_uniform_buffer(&state->uniform_buffer, &camera_vp, state->uniform_writes.camera_vp);
 }
 

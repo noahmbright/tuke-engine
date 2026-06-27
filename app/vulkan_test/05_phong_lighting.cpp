@@ -89,9 +89,11 @@ int main() {
     update_key_inputs_glfw(&inputs, window);
 
     // Simulate
-    CameraMatrices cam_mats = create_camera_matrices(&camera, width, height);
-    glm::mat4 camera_vp = cam_mats.projection * cam_mats.view;
-    mvp.vp = camera_vp;
+    f32 aspect = f32(width) / f32(height);
+    CameraMatrices cam_mats = create_camera_matrices(&camera, aspect);
+    Mat4 camera_vp;
+    mult_m4(&cam_mats.projection, &cam_mats.view, &camera_vp);
+    mvp.vp = to_glm(&camera_vp);
 
     glm::vec2 dir = inputs_to_direction(&inputs);
     camera_move_3d(&camera, (f32)dt * 5.0f * dir);
@@ -100,15 +102,18 @@ int main() {
     f32 light_x = r * sinf(3.0 * t_total + 0.2);
     f32 light_y = r * sinf(2.0 * t_total + 0.2);
     f32 light_z = r * cosf(4.0 * t_total + 0.7);
-    glm::vec3 light_pos3 = glm::vec3(light_x, light_y, light_z);
-    phong_light.position = glm::vec4(light_pos3, 0.0);
+    Vec3 light_pos3 = vec3(light_x, light_y, light_z);
+    phong_light.position = glm::vec4(light_x, light_y, light_z, 0.0);
     write_to_uniform_buffer(&ub, &phong_light, *phong_light_write);
 
     mvp.model = glm::mat4(1.0f);
 
-    ColoredPosModel light_model = {
-        .mat = camera_vp * glm::scale(glm::translate(glm::mat4(1.0f), light_pos3), glm::vec3(0.2f))
-    };
+    ColoredPosModel light_model;
+    Mat4 light_mvp = mat4();
+    scale_m4(vec3(0.2f, 0.2f, 0.2f), &light_mvp);
+    translate_m4(light_pos3, &light_mvp);
+    mult_m4(&camera_vp, &light_mvp, (Mat4 *)(&light_model));
+
     write_to_uniform_buffer(&ub, &light_model, *light_model_write);
 
     // Rendering

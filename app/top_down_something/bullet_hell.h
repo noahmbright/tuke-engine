@@ -410,7 +410,8 @@ inline void bullet_hell_update(void *scene_data, void *global_state, f32 dt) {
   bullet_hell_update_player(&data->player, player_intent, dt);
 
   // TODO: Need window resize callback. Want to only update and rebuffer when there's new data.
-  CameraMatrices camera_matrices = create_camera_matrices(&data->camera, gs->window_width, gs->window_height);
+  CameraMatrices camera_matrices =
+      create_camera_matrices(&data->camera, f32(gs->window_width) / f32(gs->window_height));
   buffer_vp_matrix_to_gl_ubo(&camera_matrices, data->vp_ubo);
 
   // Update billboards with this frame's view matrix
@@ -513,7 +514,13 @@ inline void bullet_hell_draw(const GLRenderer *renderer, const void *scene_data)
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(BulletHellData), &bullet_hell_render_data);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 
-  glm::mat4 view = camera_look_at(&data->camera);
+  const Camera *camera = &data->camera;
+  Vec3 pos = {.x = camera->position.x, .y = camera->position.y, .z = camera->position.z};
+  Vec3 dir = {.x = camera->direction.x, .y = camera->direction.y, .z = camera->direction.z};
+  Vec3 up = {.x = camera->up.x, .y = camera->up.y, .z = camera->up.z};
+  Mat4 camera_mat = make_camera_from_world(pos, dir, up);
+  glm::mat4 view = to_glm(&camera_mat);
+
   render_billboards_opengl(&data->billboard_manager, view);
 }
 

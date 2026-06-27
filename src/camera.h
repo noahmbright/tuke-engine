@@ -11,7 +11,10 @@
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/compatibility.hpp"
+#include "glm/gtx/string_cast.hpp"
 #include "glm/trigonometric.hpp"
+
+#include "linalg.h"
 
 enum CameraType { CAMERA_TYPE_2D, CAMERA_TYPE_3D, CAMERA_TYPE_FPS };
 
@@ -33,8 +36,8 @@ struct Camera {
 };
 
 struct CameraMatrices {
-  glm::mat4 view;
-  glm::mat4 projection;
+  Mat4 view;
+  Mat4 projection;
 };
 
 // TODO kill default args
@@ -80,37 +83,52 @@ inline void move_camera(Camera *camera, const glm::vec2 movement_direction) {
   }
 }
 
-inline glm::mat4 camera_look_at(const Camera *camera) {
-  assert(glm::all(glm::isfinite(camera->direction)));
-  assert(glm::length(camera->direction) > 0.0f);
-  return glm::lookAt(camera->position, camera->position + camera->direction, camera->up);
-}
-
-inline glm::mat4 camera_perspective_projection(const Camera *camera, u32 window_width, u32 window_height) {
-  f32 aspect_ratio = f32(window_width) / f32(window_height);
+inline Mat4 camera_perspective_projection(const Camera *camera, f32 aspect) {
   f32 fov = glm::radians(camera->fovy);
-
-  glm::mat4 proj = glm::perspective(fov, aspect_ratio, CAMERA_NEAR_Z, CAMERA_FAR_Z);
-
-  proj[1][1] = camera->y_needs_inverted ? -proj[1][1] : proj[1][1];
+  Mat4 proj = perspective_proj(aspect, fov, CAMERA_NEAR_Z, CAMERA_FAR_Z);
+  proj.arr[1][1] = camera->y_needs_inverted ? -proj.arr[1][1] : proj.arr[1][1];
   return proj;
 }
 
-inline CameraMatrices create_camera_matrices(const Camera *camera, u32 window_width, u32 window_height) {
+inline CameraMatrices create_camera_matrices(const Camera *camera, f32 aspect) {
   CameraMatrices camera_matrices;
-  camera_matrices.view = camera_look_at(camera);
-  camera_matrices.projection = camera_perspective_projection(camera, window_width, window_height);
+  assert(glm::all(glm::isfinite(camera->direction)));
+  assert(glm::length(camera->direction) > 0.0f);
+
+  Vec3 pos = {.x = camera->position.x, .y = camera->position.y, .z = camera->position.z};
+  Vec3 dir = {.x = camera->direction.x, .y = camera->direction.y, .z = camera->direction.z};
+  Vec3 up = {.x = camera->up.x, .y = camera->up.y, .z = camera->up.z};
+
+  camera_matrices.view = make_camera_from_world(pos, dir, up);
+  camera_matrices.projection = camera_perspective_projection(camera, aspect);
   return camera_matrices;
 }
 
-inline CameraMatrices
-camera_matrices_with_offset(const Camera *camera, glm::vec3 offset, u32 window_width, u32 window_height) {
+inline Mat4 make_camera_vp(const Camera *camera, f32 aspect) {
+  assert(glm::all(glm::isfinite(camera->direction)));
+  assert(glm::length(camera->direction) > 0.0f);
+
+  Vec3 pos = {.x = camera->position.x, .y = camera->position.y, .z = camera->position.z};
+  Vec3 dir = {.x = camera->direction.x, .y = camera->direction.y, .z = camera->direction.z};
+  Vec3 up = {.x = camera->up.x, .y = camera->up.y, .z = camera->up.z};
+
+  Mat4 view = make_camera_from_world(pos, dir, up);
+  Mat4 proj = camera_perspective_projection(camera, aspect);
+  Mat4 out;
+  mult_m4(&proj, &view, &out);
+  return out;
+}
+
+inline CameraMatrices camera_matrices_with_offset(const Camera *camera, Vec3 offset, f32 aspect) {
   CameraMatrices camera_matrices;
 
-  glm::vec3 pos = camera->position + offset;
-  camera_matrices.view = glm::lookAt(pos, pos + camera->direction, camera->up);
-
-  camera_matrices.projection = camera_perspective_projection(camera, window_width, window_height);
+  Vec3 pos = {
+      .x = camera->position.x + offset.x, .y = camera->position.y + offset.y, .z = camera->position.z + offset.z
+  };
+  Vec3 dir = {.x = camera->direction.x, .y = camera->direction.y, .z = camera->direction.z};
+  Vec3 up = {.x = camera->up.x, .y = camera->up.y, .z = camera->up.z};
+  camera_matrices.view = make_camera_from_world(pos, dir, up);
+  camera_matrices.projection = camera_perspective_projection(camera, aspect);
   return camera_matrices;
 }
 

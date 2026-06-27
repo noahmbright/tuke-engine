@@ -82,7 +82,8 @@ const f32 player_vertices[] = {
 // clang-format on
 
 inline void buffer_vp_matrix_to_gl_ubo(const CameraMatrices *camera_matrices, u32 ubo) {
-  glm::mat4 vp = camera_matrices->projection * camera_matrices->view;
+  Mat4 vp;
+  mult_m4(&camera_matrices->projection, &camera_matrices->view, &vp);
 
   glBindBuffer(GL_UNIFORM_BUFFER, ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(vp), &vp);
@@ -433,7 +434,7 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
   scene_data->player_rotation_render = next_angle;
 
   CameraMatrices camera_matrices =
-      create_camera_matrices(&scene_data->camera, global_state->window_width, global_state->window_height);
+      create_camera_matrices(&scene_data->camera, (f32)global_state->window_width / (f32)global_state->window_height);
   buffer_vp_matrix_to_gl_ubo(&camera_matrices, scene_data->vp_ubo);
 }
 

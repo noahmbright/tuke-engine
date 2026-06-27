@@ -1,6 +1,7 @@
 # Vulkan Test TODO
 
 - 06: Normal mapping (TBN matrix, tangent as vertex attribute)
+- 07: Aim matrix test — render a field of F-shaped objects all aimed at a source F (webgpufundamentals style); validates lookat/aim matrix and linalg migration
 - 08: Offscreen rendering + fullscreen blit (render to texture, then display)
 - 09: Shadow mapping — offscreen depth-only pass, sample in main pass as a
   texture; requires understanding of depth bias and shadow acne

@@ -1486,11 +1486,12 @@ static ShaderProgram *allocate_graphics_program(ParsedShadersIR *ir, ParsedShade
   // If there is no request, search for a matching name.
   const char *requested_vert_name = frag_shader->requested_vertex_shader_name;
   const char *search_key = (requested_vert_name != NULL) ? requested_vert_name : frag_shader->name;
+  u32 key_len = (requested_vert_name != NULL) ? frag_shader->requested_vertex_shader_name_len : strlen(search_key);
 
   ParsedShader *vert_shader = NULL;
   for (u32 i = 0; i < ir->num_parsed_shaders; i++) {
     ParsedShader *old = &ir->parsed_shaders[i];
-    if (old->stage == SHADER_STAGE_VERTEX && (strcmp(search_key, old->name) == 0)) {
+    if (old->stage == SHADER_STAGE_VERTEX && labels_match(search_key, old->name, key_len, strlen(old->name))) {
       vert_shader = old;
       break;
     }
@@ -1500,7 +1501,7 @@ static ShaderProgram *allocate_graphics_program(ParsedShadersIR *ir, ParsedShade
   if (vert_shader == NULL) {
     fprintf(stderr, "Could not find vertex shader for %s.\n", frag_shader->name);
     if (requested_vert_name != NULL) {
-      fprintf(stderr, "  Requested %s, but not found.\n", search_key);
+      fprintf(stderr, "  Requested %.*s, but not found.\n", key_len, search_key);
     } else {
       fprintf(stderr, "  No request. Tried to match name %s, but not found.\n", search_key);
     }
@@ -1525,7 +1526,7 @@ static ShaderProgram *allocate_graphics_program(ParsedShadersIR *ir, ParsedShade
       .name = frag_shader->name,
       .parsed_vert = vert_shader,
       .parsed_frag = frag_shader,
-      .push_constant_struct = vs_pc,
+      .push_constant_struct = vs_pc ? vs_pc : fs_pc,
       .push_constant_stage_flags = vs_pc_stage_flag | fs_pc_stage_flag,
   };
 
@@ -1582,7 +1583,6 @@ static const GLSLStruct *push_struct(ParsedShadersIR *ir, const ShaderToCompile 
     ir->structs[ir->num_structs] = *new_struct;
     persistent_struct = &ir->structs[ir->num_structs++];
   } else { // Found existing match.
-
     // Name is same. If mismatch, report error. If matches, update matching struct.
     bool mismatch = !member_list_equals(new_struct, matching_struct);
     if (mismatch) {
@@ -1759,6 +1759,7 @@ static bool parse_shader(const ShaderToCompile *input, ParsedShadersIR *ir) {
     } // End set binding.
 
     case TOKEN_TYPE_DIRECTIVE_VERTEX_SHADER: {
+      slice.type = DIRECTIVE_TYPE_VERTEX_SHADER;
       if (input->stage != SHADER_STAGE_FRAGMENT) {
         fprintf(
             stderr, "Found VERTEX_SHADER directive in %.*s, which is not a fragment shader.\n", input->name_len,

@@ -30,7 +30,7 @@ int main() {
   DescriptorWrite writes[] = {
       {
           .set_id = LAYOUT_ID_TEXTURED_QUAD_BRINGUP,
-          .binding = 0,
+          .binding = BINDING_TEXTURED_QUAD_BRINGUP_TEX,
           .image_info = {
               .sampler = t.ctx.samplers[SAMPLER_LINEAR_CLAMP],
               .imageView = texture.image_view,

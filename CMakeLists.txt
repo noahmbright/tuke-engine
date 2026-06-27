@@ -51,6 +51,13 @@ foreach(test_file ${VULKAN_TEST_FILES})
     add_game_executable(${test_name})
 endforeach()
 
+add_executable(linalg_test ${CMAKE_SOURCE_DIR}/app/linalg_test/linalg_test.cpp
+                            ${CMAKE_SOURCE_DIR}/src/linalg.cpp)
+target_include_directories(linalg_test PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/third_party/include)
+target_compile_options(linalg_test PRIVATE
+    -g -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -Wno-c99-designator)
+target_link_options(linalg_test PRIVATE -fsanitize=address,undefined)
+
 file(GLOB_RECURSE REFLECTOR_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/reflector/main.cpp
     ${CMAKE_SOURCE_DIR}/reflector/filesystem_utils.cpp
