@@ -25,7 +25,7 @@ The ergonomic alternative: define a struct for the uniform layout, use offsetof 
 bindings, write directly through the mapped pointer. No handles, no memcpy ceremony, alignment
 handled by alignas on struct fields.
 ```cpp
-struct MyUniforms { alignas(16) glm::mat4 mvp; alignas(4) float time; };
+struct MyUniforms { alignas(16) Mat4 mvp; alignas(4) float time; };
 MyUniforms *u = (MyUniforms *)buf.mapped;
 u->mvp = ...; u->time = t;
 ```
@@ -36,7 +36,6 @@ u->mvp = ...; u->time = t;
 
 Deferred pending render pass / dynamic rendering redesign. Issues to revisit:
 - NUM_ATTACHMENTS leaks into application code
-- VkClearValue union syntax is ugly; should accept glm::vec4 clear color
 - Depth clear value appears in tests that don't use depth
 - Consider VK_KHR_dynamic_rendering to drop render passes entirely
 - Color-only render pass: create_color_render_pass exists but no framebuffer creation helper

@@ -453,12 +453,12 @@ static void codegen_compiled_shader_header(FILE *dst) {
   fprintf(dst, "// Generated shader header, do not edit\n");
   fprintf(dst, "#pragma once\n");
   fprintf(dst, "#include \"glad/gl.h\"\n");
+  fprintf(dst, "#include \"linalg.h\"\n");
   fprintf(dst, "#include <assert.h>\n");
   fprintf(dst, "#include <stddef.h>\n");
   fprintf(dst, "#include <stdint.h>\n");
   fprintf(dst, "#include <stdio.h>\n");
   fprintf(dst, "#include <vulkan/vulkan.h>\n");
-  fprintf(dst, "#include <glm/glm.hpp>\n");
   fprintf(dst, "\n");
 
   fprintf(dst, "#define MAX_NUM_VERTEX_BINDINGS %u\n", MAX_NUM_VERTEX_BINDINGS);

@@ -112,8 +112,8 @@ inline void render_billboards_opengl(const BillboardManager *billboard_manager, 
   // Camera up/right uniform.
   // There is always 1 single camera, so number of billboards is irrelevant in computing size to buffer.
   CameraUpRight camera_up_right;
-  camera_up_right.right = to_glm(vec3(view->arr[0][0], view->arr[1][0], view->arr[2][0]));
-  camera_up_right.up = to_glm(vec3(view->arr[0][1], view->arr[1][1], view->arr[2][1]));
+  camera_up_right.right = vec3(view->arr[0][0], view->arr[1][0], view->arr[2][0]);
+  camera_up_right.up = vec3(view->arr[0][1], view->arr[1][1], view->arr[2][1]);
   glBindBuffer(GL_UNIFORM_BUFFER, billboard_manager->shader.camera_up_right_ubo);
   glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(CameraUpRight), &camera_up_right);
 

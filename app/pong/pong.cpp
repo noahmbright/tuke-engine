@@ -34,7 +34,7 @@ void init_buffers(State *state) {
   // what data in what portion of the renderer maps to what data in the shaders?
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   VkDescriptorBufferInfo *camera_vp = push_uniform(&ub_manager, sizeof(VPUniform));
-  VkDescriptorBufferInfo *arena_model = push_uniform(&ub_manager, sizeof(glm::mat4));
+  VkDescriptorBufferInfo *arena_model = push_uniform(&ub_manager, sizeof(ModelUniform));
   VkDescriptorBufferInfo *instance_data = push_uniform(&ub_manager, sizeof(InstanceDataUBO));
   state->uniform_buffer = finalize_ub(ctx, &ub_manager);
   state->uniform_writes.camera_vp = *camera_vp;
@@ -88,10 +88,10 @@ void init_paddles_material(State *state) {
 
 static void init_transforms(State *state) {
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
-    Mat4 m = mat4();
-    scale_m4(state->scales[i], &m);
-    translate_m4(state->positions[i], &m);
-    state->instance_data.model[i] = to_glm(&m);
+    Mat4 *m = &state->instance_data.model[i];
+    *m = mat4();
+    scale_m4(state->scales[i], m);
+    translate_m4(state->positions[i], m);
   }
   write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data, state->uniform_writes.instance_data);
 }
@@ -185,10 +185,9 @@ State setup_state(const char *title) {
   scale_m4(arena_dimensions0, &arena_model);
   f32 aspect = f32(state.ctx.swapchain_extent.width) / f32(state.ctx.swapchain_extent.height);
   Mat4 vp = make_camera_vp(&state.camera, aspect);
-  glm::mat4 camera_vp = to_glm(&vp);
 
   // uniform buffer structure: camera vp, background model, paddle model
-  write_to_uniform_buffer(&state.uniform_buffer, &camera_vp, state.uniform_writes.camera_vp);
+  write_to_uniform_buffer(&state.uniform_buffer, &vp, state.uniform_writes.camera_vp);
   write_to_uniform_buffer(&state.uniform_buffer, &arena_model, state.uniform_writes.arena_model);
 
   state.screen_shake.x_oscillator.phase = 0.0f;
@@ -257,7 +256,8 @@ void render(State *state) {
     break;
   case GAMEMODE_MAIN_MENU: {
     VulkanMesh mesh = {.vertex_count = 6, .instance_count = 1};
-    ShaderToy st = {.res = {state->window_width, state->window_height}, .t = (f32)state->time};
+    Vec2 res = vec2(state->window_width, state->window_height);
+    ShaderToy st = {.res = res, .t = (f32)state->time};
     push_constants_material(cmd, &state->main_menu_material, &st);
     render_mesh_material(cmd, &mesh, &state->main_menu_material);
     break;
@@ -522,10 +522,10 @@ void update_game_state(State *state, const f32 dt) {
   handle_collisions(state, dt);
 
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
-    Mat4 m = mat4();
-    scale_m4(state->scales[i], &m);
-    translate_m4(state->positions[i], &m);
-    state->instance_data.model[i] = to_glm(&m);
+    Mat4 *m = &state->instance_data.model[i];
+    *m = mat4();
+    scale_m4(state->scales[i], m);
+    translate_m4(state->positions[i], m);
   }
 
   write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data, state->uniform_writes.instance_data);

@@ -1,5 +1,4 @@
 #include "generated_shader_utils.h"
-#include "glm/ext/matrix_transform.hpp"
 #include "opengl_base.h"
 #include "tuke_engine.h"
 #include "window.h"
@@ -65,8 +64,8 @@ int main() {
   textured_quad_material.texture = create_gl_texture_from_image("textures/girl_face.jpg");
 
   TriangleTransformation triangle_transformation;
-  Mat4 translation = mat4();
-  translate_m4(Vec3(0.5f, 0.5f, 0.0f), &translation);
+  triangle_transformation.mat = mat4();
+  translate_m4(Vec3(0.5f, 0.5f, 0.0f), &triangle_transformation.mat);
 
   // f64 t0 = glfwGetTime();
   //  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -76,7 +75,6 @@ int main() {
     // TODO rotation
     // f64 t = glfwGetTime();
     //  triangle_transformation.mat = glm::rotate(translation, (f32)(t - t0), Vec3(0.0f, 0.0f, 1.0f));
-    triangle_transformation.mat = to_glm(&translation);
 
     glClear(GL_COLOR_BUFFER_BIT);
 

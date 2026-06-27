@@ -6,6 +6,8 @@
 #include "vulkan_test_common.h"
 #include "window.h"
 
+#include <math.h>
+
 int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
   VulkanTest t = init_vulkan_test(window);
@@ -16,7 +18,7 @@ int main() {
   mesh->instance_count = 1;
 
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
-  VkDescriptorBufferInfo *model_write = push_uniform(&ub_manager, sizeof(ColoredPosModel));
+  VkDescriptorBufferInfo *model_write = push_uniform(&ub_manager, sizeof(ColoredPosMVP));
   VkDescriptorBufferInfo *color_write = push_uniform(&ub_manager, sizeof(ColoredPosColor));
 
   // Drawing 2 F's
@@ -30,12 +32,12 @@ int main() {
     init_program_spec(&t.ctx, t.rp, &common_colored_pos_program_spec, &mats[i]);
 
     DescriptorWrite writes[] = {
-        {.set_id = LAYOUT_ID_COLORED_POS_MODEL, .binding = 0, .buffer_info = *model_write},
+        {.set_id = LAYOUT_ID_COLORED_POS_MVP, .binding = 0, .buffer_info = *model_write},
         {.set_id = LAYOUT_ID_COLORED_POS_COLOR, .binding = 0, .buffer_info = *color_write},
     };
     update_vulkan_material(&t.ctx, writes, ARRAY_SIZE(writes), &mats[i]);
 
-    ColoredPosColor color = {.col = glm::vec4(f32(i))};
+    ColoredPosColor color = {.col = vec4(f32(i), f32(i), f32(i), f32(i))};
     write_to_uniform_buffer(&ubs[i], &color, *color_write);
   }
 
@@ -59,9 +61,8 @@ int main() {
       f32 x = 0.5 * cosf(t_total + phase);
       f32 z = 0.1 * sinf(t_total + phase);
 
-      Mat4 mat = mat4();
-      translate_m4(vec3(x, -0.5f, 0.5f + z), &mat);
-      ColoredPosModel model = {.mat = to_glm(&mat)};
+      ColoredPosMVP model = {.mat = mat4()};
+      translate_m4(vec3(x, -0.5f, 0.5f + z), &model.mat);
       write_to_uniform_buffer(&ubs[i], &model, *model_write);
       render_mesh_material(cmd, mesh, &mats[i]);
     }

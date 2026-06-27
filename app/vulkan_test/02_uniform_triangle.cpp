@@ -4,12 +4,14 @@
 #include "vulkan_test_common.h"
 #include "window.h"
 
+#include <math.h>
+
 TriangleTransformation simulate(f64 t) {
   TriangleTransformation tt;
-  tt.mat[0][0] = sinf(t);
-  tt.mat[0][1] = cosf(t);
-  tt.mat[1][0] = cosf(t);
-  tt.mat[1][1] = -sinf(t);
+  tt.mat.arr[0][0] = sinf(t);
+  tt.mat.arr[0][1] = cosf(t);
+  tt.mat.arr[1][0] = cosf(t);
+  tt.mat.arr[1][1] = -sinf(t);
   return tt;
 }
 

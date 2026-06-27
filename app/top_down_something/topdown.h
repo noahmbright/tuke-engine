@@ -9,7 +9,6 @@
 #include "tuke_engine.h"
 #include "utils.h"
 
-#include "glm/glm.hpp"
 #include "linalg.h"
 
 // TODO
@@ -384,9 +383,9 @@ inline void overworld_update(void *scene_data_void_ptr, void *global_state_void_
     Vec3 cone_b = scale_v3(vec3(cosf(theta_b), sinf(theta_b), 0.0f), PLAYER_INTERACTION_DISTANCE);
     Vec3 cone_c = scale_v3(vec3(cosf(theta_c), sinf(theta_c), 0.0f), PLAYER_INTERACTION_DISTANCE);
     VisionCone vision_cone{
-        .a = to_glm(player_xy),
-        .b = to_glm(add_v3(player_xy, cone_b)),
-        .c = to_glm(add_v3(player_xy, cone_c)),
+        .a = player_xy,
+        .b = add_v3(player_xy, cone_b),
+        .c = add_v3(player_xy, cone_c),
     };
 
     f32 cone_x_min = fmin(vision_cone.a.x, fmin(vision_cone.b.x, vision_cone.c.x));

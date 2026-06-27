@@ -1,7 +1,6 @@
 #pragma once
 
 #include "camera.h"
-#include "glm/ext/matrix_transform.hpp"
 #include "physics.h"
 #include "shaders.h"
 #include "statistics.h"
@@ -120,7 +119,7 @@ const Vec3 powerup_scale{1.0f, 1.f, 1.0f};
 struct PowerUp {
   PowerUpType type;
   f32 time_remaining;
-  glm::vec4 position;
+  Vec4 position;
 };
 
 struct State {

@@ -1,19 +1,13 @@
 #pragma once
 
+#include "linalg.h"
 #include "tuke_engine.h"
+
+#include <assert.h>
+#include <stdio.h>
 
 #define CAMERA_NEAR_Z (0.1f)
 #define CAMERA_FAR_Z (100.f)
-
-// TODO do I need this?
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-
-#define GLM_ENABLE_EXPERIMENTAL
-#include "glm/gtx/compatibility.hpp"
-#include "glm/gtx/string_cast.hpp"
-#include "glm/trigonometric.hpp"
-
-#include "linalg.h"
 
 enum CameraType { CAMERA_TYPE_2D, CAMERA_TYPE_3D, CAMERA_TYPE_FPS };
 
@@ -27,7 +21,7 @@ struct Camera {
 
   f32 pitch, yaw;
   f32 mouse_sensitivity = 1e-3;
-  f32 fovy = 45.0f;
+  f32 fovy = 45.0f; // Degrees. TODO Kill default.
 
   f32 last_mouse_x, last_mouse_y;
   bool has_moused_yet;
@@ -83,7 +77,7 @@ inline void move_camera(Camera *camera, const Vec2 movement_direction) {
 }
 
 inline Mat4 camera_perspective_projection(const Camera *camera, f32 aspect) {
-  f32 fov = glm::radians(camera->fovy);
+  f32 fov = camera->fovy * PI / 180.0f;
   Mat4 proj = perspective_proj(aspect, fov, CAMERA_NEAR_Z, CAMERA_FAR_Z);
   proj.arr[1][1] = camera->y_needs_inverted ? -proj.arr[1][1] : proj.arr[1][1];
   return proj;

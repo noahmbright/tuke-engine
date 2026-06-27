@@ -5,6 +5,7 @@
 #include "vulkan_base.h"
 #include "vulkan_test_common.h"
 #include "window.h"
+#include <math.h>
 
 int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
@@ -15,23 +16,20 @@ int main() {
   VulkanMesh *light_mesh = UPLOAD_VERTEX_ARRAY(buffer_manager, cube_position_vertices, num_cube_vertices);
   flush_buffers(&t.ctx, &buffer_manager);
 
+  // These should be at the draw call.
   mesh->instance_count = 1;
   light_mesh->instance_count = 1;
 
-  // clang-format off
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
-  VkDescriptorBufferInfo *phong_light_write  = push_uniform(&ub_manager, sizeof(PhongLight));
-  VkDescriptorBufferInfo *light_model_write  = push_uniform(&ub_manager, sizeof(ColoredPosModel));
-  VkDescriptorBufferInfo *light_color_write  = push_uniform(&ub_manager, sizeof(ColoredPosColor));
-  // clang-format on
+  VkDescriptorBufferInfo *phong_light_write = push_uniform(&ub_manager, sizeof(PhongLight));
+  VkDescriptorBufferInfo *light_model_write = push_uniform(&ub_manager, sizeof(ColoredPosMVP));
+  VkDescriptorBufferInfo *light_color_write = push_uniform(&ub_manager, sizeof(ColoredPosColor));
   UniformBuffer ub = finalize_ub(&t.ctx, &ub_manager);
 
   VulkanMaterial light_mat;
   init_program_spec(&t.ctx, t.rp, &common_colored_pos_program_spec, &light_mat);
 
-  // Have to coordinate this write with the writes in the arrays below.
-  // Getting confusing.
-  glm::vec4 light_color = glm::vec4(1.0);
+  Vec4 light_color = vec4(1.0f, 1.0f, 1.0f, 1.0f);
   ColoredPosColor color_pos_color = {.col = light_color};
   PhongLight phong_light = {.color = light_color};
   write_to_uniform_buffer(&ub, &phong_light, *phong_light_write);
@@ -40,9 +38,6 @@ int main() {
   VulkanMaterial lit_mat;
   init_program_spec(&t.ctx, t.rp, &common_phong_program_spec, &lit_mat);
 
-  // This is a bit too much work.
-  // Having to look at the shaders to see the bindings is annoying.
-  // Maybe could be tolerable. In a game init would be okay to get right once.
   DescriptorWrite phong_writes[] = {
       {.set_id = LAYOUT_ID_PHONG, .binding = BINDING_PHONG_LIGHT, .buffer_info = *phong_light_write},
   };
@@ -50,8 +45,8 @@ int main() {
 
   DescriptorWrite light_writes[] = {
       {
-          .set_id = LAYOUT_ID_COLORED_POS_MODEL,
-          .binding = BINDING_COLORED_POS_MODEL_MODEL,
+          .set_id = LAYOUT_ID_COLORED_POS_MVP,
+          .binding = BINDING_COLORED_POS_MVP_MVP,
           .buffer_info = *light_model_write,
       },
       {
@@ -71,7 +66,7 @@ int main() {
 
   f64 t_total = 0;
   f64 t0 = glfwGetTime();
-  ModelVP mvp;
+  ModelVP mvp = {.model = mat4()};
   while (!glfwWindowShouldClose(window)) {
     // This is a lot of boilerplate.
     // I am writing a lot of tests, so this skews my perception a bit.
@@ -89,9 +84,7 @@ int main() {
     // Simulate
     f32 aspect = f32(width) / f32(height);
     CameraMatrices cam_mats = create_camera_matrices(&camera, aspect);
-    Mat4 camera_vp;
-    mult_m4(&cam_mats.projection, &cam_mats.view, &camera_vp);
-    mvp.vp = to_glm(&camera_vp);
+    mult_m4(&cam_mats.projection, &cam_mats.view, &mvp.vp);
 
     Vec2 dir = inputs_to_direction(&inputs);
     camera_move_3d(&camera, scale_v2(dir, (f32)dt * 5.0f));
@@ -100,19 +93,16 @@ int main() {
     f32 light_x = r * sinf(3.0 * t_total + 0.2);
     f32 light_y = r * sinf(2.0 * t_total + 0.2);
     f32 light_z = r * cosf(4.0 * t_total + 0.7);
-    Vec3 light_pos3 = vec3(light_x, light_y, light_z);
-    phong_light.position = glm::vec4(light_x, light_y, light_z, 0.0);
+    Vec3 light_pos = vec3(light_x, light_y, light_z);
+    phong_light.position = vec4(light_x, light_y, light_z, 0.0);
     write_to_uniform_buffer(&ub, &phong_light, *phong_light_write);
 
-    mvp.model = glm::mat4(1.0f);
-
-    ColoredPosModel light_model;
-    Mat4 light_mvp = mat4();
-    scale_m4(vec3(0.2f, 0.2f, 0.2f), &light_mvp);
-    translate_m4(light_pos3, &light_mvp);
-    mult_m4(&camera_vp, &light_mvp, (Mat4 *)(&light_model));
-
-    write_to_uniform_buffer(&ub, &light_model, *light_model_write);
+    ColoredPosMVP light_mvp;
+    Mat4 light_model = mat4();
+    scale_m4(vec3(0.2f, 0.2f, 0.2f), &light_model);
+    translate_m4(light_pos, &light_model);
+    mult_m4(&mvp.vp, &light_model, &light_mvp.mat);
+    write_to_uniform_buffer(&ub, &light_mvp, *light_model_write);
 
     // Rendering
     begin_frame(&t.ctx);

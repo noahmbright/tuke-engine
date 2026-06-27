@@ -102,9 +102,8 @@ static const u32 glsl_type_to_alignment[NUM_GLSL_TYPES]{
 };
 
 static const char *glsl_type_to_c_type[] = {
-    [GLSL_TYPE_FLOAT] = "float",    [GLSL_TYPE_UINT] = "unsigned",  [GLSL_TYPE_VEC2] = "glm::vec2",
-    [GLSL_TYPE_VEC3] = "glm::vec3", [GLSL_TYPE_VEC4] = "glm::vec4", [GLSL_TYPE_MAT2] = "glm::mat2",
-    [GLSL_TYPE_MAT3] = "glm::mat3", [GLSL_TYPE_MAT4] = "glm::mat4",
+    [GLSL_TYPE_FLOAT] = "float", [GLSL_TYPE_UINT] = "unsigned", [GLSL_TYPE_VEC2] = "Vec2", [GLSL_TYPE_VEC3] = "Vec3",
+    [GLSL_TYPE_VEC4] = "Vec4",   [GLSL_TYPE_MAT2] = "Mat2",     [GLSL_TYPE_MAT3] = "Mat3", [GLSL_TYPE_MAT4] = "Mat4",
 };
 
 enum VertexAttributeRate {

@@ -95,17 +95,3 @@ bool isfinite_v3(Vec3 v);
 
 void log_m4(const Mat4 *m);
 bool mat4_has_nan(const Mat4 *m);
-
-#ifdef GLM_VERSION
-inline glm::vec2 to_glm(Vec2 v) { return {v.x, v.y}; }
-inline glm::vec3 to_glm(Vec3 v) { return {v.x, v.y, v.z}; }
-inline glm::vec4 to_glm(Vec4 v) { return {v.x, v.y, v.z, v.w}; }
-inline glm::mat4 to_glm(const Mat4 *m) {
-  return glm::mat4(
-      glm::vec4(m->arr[0][0], m->arr[0][1], m->arr[0][2], m->arr[0][3]),
-      glm::vec4(m->arr[1][0], m->arr[1][1], m->arr[1][2], m->arr[1][3]),
-      glm::vec4(m->arr[2][0], m->arr[2][1], m->arr[2][2], m->arr[2][3]),
-      glm::vec4(m->arr[3][0], m->arr[3][1], m->arr[3][2], m->arr[3][3])
-  );
-}
-#endif

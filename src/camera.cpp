@@ -1,4 +1,5 @@
 #include "camera.h"
+#include <math.h>
 
 void process_mouse_input3d(Camera *camera, f64 xpos, f64 ypos) {
   if (!camera->has_moused_yet) {
@@ -43,13 +44,13 @@ Camera create_camera(CameraType type, Vec3 pos, Vec3 direction, Vec3 up, Vec3 ri
   if (xy_magnitude < EPSILON) {
     camera.yaw = -1.57;
   } else {
-    camera.yaw = glm::atan(camera.direction.z / xy_magnitude);
+    camera.yaw = atan(camera.direction.z / xy_magnitude);
   }
 
   if (xz_magnitude <= EPSILON) {
     camera.pitch = -3.14;
   } else {
-    camera.pitch = glm::atan(camera.direction.y / xz_magnitude);
+    camera.pitch = atan(camera.direction.y / xz_magnitude);
   }
 
   camera.y_needs_inverted = false;

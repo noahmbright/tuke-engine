@@ -4,6 +4,7 @@
 #include "tuke_engine.h"
 #include "utils.h"
 #include <OpenGL/OpenGL.h>
+#include <string.h>
 
 #define MAX_NUM_VBOS (4)
 #define MAX_NUM_UNIFORMS (64)
@@ -168,8 +169,9 @@ inline GLTexture create_gl_texture2d(u32 height, u32 width, GLenum format, GLenu
 
 inline void gl_texture_buffer_data(const GLTexture *texture, const u8 *data) {
   glBindTexture(GL_TEXTURE_2D, texture->texture);
-  glTexImage2D(GL_TEXTURE_2D, 0, texture->format, texture->width, texture->height, 0, texture->format, GL_UNSIGNED_BYTE,
-               data);
+  glTexImage2D(
+      GL_TEXTURE_2D, 0, texture->format, texture->width, texture->height, 0, texture->format, GL_UNSIGNED_BYTE, data
+  );
 }
 
 inline void gl_texture_resize(GLTexture *texture, u32 height, u32 width) {

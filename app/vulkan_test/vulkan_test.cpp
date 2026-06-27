@@ -1,13 +1,13 @@
 #include "assets.h"
 #include "generated_shader_utils.h"
 #include "shaders.h"
-#define GLM_ENABLE_EXPERIMENTAL
 
 #include "camera.h"
-#include "glm/gtx/string_cast.hpp"
 #include "tuke_engine.h"
 #include "vulkan_test_common.h"
 #include "window.h"
+
+#include <math.h>
 
 enum TextureId {
   TEXTURE_GENERIC_GIRL,
@@ -130,7 +130,7 @@ int main() {
   cube_mesh.instance_count = 1;
   VulkanMesh fullscreen_quad_mesh = {.vertex_count = 3, .instance_count = 1};
 
-  MVPUniform mvp = {.projection = glm::mat4(1.0f), .view = glm::mat4(1.0f)};
+  MVPUniform mvp = {.projection = mat4(), .view = mat4()};
   const Vec3 cube_translation_vector = {1.5f, -1.3f, 1.5f};
 
   Camera camera = create_camera(CAMERA_TYPE_3D);
@@ -151,19 +151,18 @@ int main() {
     f32 sint = sinf(t1);
 
     UniformBufferObject ubo = {.x = fabsf(sint)};
-    Mat4 model = mat4();
-    scale_m4(vec3(0.5f, 0.5f, 0.5f), &model);
+    mvp.model = mat4();
+    scale_m4(vec3(0.5f, 0.5f, 0.5f), &mvp.model);
     // TODO Rotation
     // rotate(mvp.model, sint, Vec3(0.0f, 0.0f, 1.0f));
-    mvp.model = to_glm(&model);
 
     Mat4 cube_model = mat4();
     scale_m4(vec3(0.2f, 0.2f, 0.2f), &cube_model);
     translate_m4(cube_translation_vector, &cube_model);
 
     LightPosition light_position = {
-        .position = glm::vec4(2 * sint, sint, 0.5f, 0.0f),
-        .color = glm::vec4(1.0, 1.0, 1.0, 1.0),
+        .position = vec4(2 * sint, sint, 0.5f, 0.0f),
+        .color = vec4(1.0, 1.0, 1.0, 1.0),
     };
 
     Mat4 vp = make_camera_vp(&camera, f32(width) / (f32)height);
@@ -190,7 +189,7 @@ int main() {
     render_mesh_material(cmd, &triangle_mesh, &triangle_mat);
     render_mesh_material(cmd, &square_mesh, &square_mat);
     render_mesh_material(cmd, &instanced_quad_mesh, &instanced_quad_mat);
-    ModelVP cube_mvp = {.model = to_glm(&cube_model), .vp = to_glm(&vp)};
+    ModelVP cube_mvp = {.model = cube_model, .vp = vp};
     push_constants_material(cmd, &cube_mat, &cube_mvp);
     render_mesh_material(cmd, &cube_mesh, &cube_mat);
     vkCmdEndRenderPass(cmd);

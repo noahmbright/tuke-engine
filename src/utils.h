@@ -2,7 +2,6 @@
 
 #include "tuke_engine.h"
 
-#include <glm/glm.hpp>
 #include <stdio.h>
 
 struct STBHandle {
