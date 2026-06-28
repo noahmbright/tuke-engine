@@ -15,7 +15,6 @@ int main() {
   BufferManager buffer_manager = create_buffer_manager();
   VulkanMesh *mesh = UPLOAD_ARRAYS(buffer_manager, f_vertices, f_indices, num_f_indices);
   flush_buffers(&t.ctx, &buffer_manager);
-  mesh->instance_count = 1;
 
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   VkDescriptorBufferInfo *model_write = push_uniform(&ub_manager, sizeof(ColoredPosMVP));
@@ -64,7 +63,7 @@ int main() {
       ColoredPosMVP model = {.mat = mat4()};
       translate_m4(vec3(x, -0.5f, 0.5f + z), &model.mat);
       write_to_uniform_buffer(&ubs[i], &model, *model_write);
-      render_mesh_material(cmd, mesh, &mats[i]);
+      render_mesh(cmd, mesh, &mats[i]);
     }
     vkCmdEndRenderPass(cmd);
 

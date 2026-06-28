@@ -43,7 +43,6 @@ int main() {
 
   VulkanMesh mesh = {
       .vertex_count = 6,
-      .instance_count = 1,
   };
 
   // Main loop
@@ -55,7 +54,7 @@ int main() {
 
     VkFramebuffer fb = t.ctx.framebuffers[t.ctx.image_index];
     begin_render_pass(&t.ctx, cmd, t.rp, fb, t.clear_values, NUM_ATTACHMENTS, t.viewport_state);
-    render_mesh_material(cmd, &mesh, &mat);
+    render_mesh(cmd, &mesh, &mat);
     vkCmdEndRenderPass(cmd);
 
     end_frame(&t.ctx, cmd);

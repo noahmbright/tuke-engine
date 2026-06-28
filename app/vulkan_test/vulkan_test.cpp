@@ -121,14 +121,10 @@ int main() {
   }
 
   VulkanMesh triangle_mesh = *p_tri;
-  triangle_mesh.instance_count = 1;
   VulkanMesh square_mesh = *p_sq;
-  square_mesh.instance_count = 1;
   VulkanMesh instanced_quad_mesh = *p_iq;
-  instanced_quad_mesh.instance_count = 5;
   VulkanMesh cube_mesh = *p_cube;
-  cube_mesh.instance_count = 1;
-  VulkanMesh fullscreen_quad_mesh = {.vertex_count = 3, .instance_count = 1};
+  VulkanMesh fullscreen_quad_mesh = {.vertex_count = 3};
 
   MVPUniform mvp = {.projection = mat4(), .view = mat4()};
   const Vec3 cube_translation_vector = {1.5f, -1.3f, 1.5f};
@@ -186,12 +182,12 @@ int main() {
         &t.ctx, cmd, offscreen_framebuffer.render_pass, offscreen_framebuffer.framebuffer, t.clear_values,
         NUM_ATTACHMENTS, t.viewport_state
     );
-    render_mesh_material(cmd, &triangle_mesh, &triangle_mat);
-    render_mesh_material(cmd, &square_mesh, &square_mat);
-    render_mesh_material(cmd, &instanced_quad_mesh, &instanced_quad_mat);
+    render_mesh(cmd, &triangle_mesh, &triangle_mat);
+    render_mesh(cmd, &square_mesh, &square_mat);
+    render_mesh_instanced(cmd, &instanced_quad_mesh, &instanced_quad_mat, 5, NULL);
     ModelVP cube_mvp = {.model = cube_model, .vp = vp};
     push_constants_material(cmd, &cube_mat, &cube_mvp);
-    render_mesh_material(cmd, &cube_mesh, &cube_mat);
+    render_mesh(cmd, &cube_mesh, &cube_mat);
     vkCmdEndRenderPass(cmd);
 
     transition_image_layout(
@@ -202,7 +198,7 @@ int main() {
         &t.ctx, cmd, t.ctx.render_pass, t.ctx.framebuffers[t.ctx.image_index], t.clear_values, NUM_ATTACHMENTS,
         t.viewport_state
     );
-    render_mesh_material(cmd, &fullscreen_quad_mesh, &fullscreen_quad_mat);
+    render_mesh(cmd, &fullscreen_quad_mesh, &fullscreen_quad_mat);
     vkCmdEndRenderPass(cmd);
 
     end_frame(&t.ctx, cmd);

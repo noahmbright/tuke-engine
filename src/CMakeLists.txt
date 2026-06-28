@@ -4,7 +4,6 @@ file(GLOB_RECURSE ENGINE_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/gl.c
     ${CMAKE_SOURCE_DIR}/src/camera.cpp
     ${CMAKE_SOURCE_DIR}/src/tilemap.cpp
-    ${CMAKE_SOURCE_DIR}/src/renderer.cpp
     ${CMAKE_SOURCE_DIR}/src/window.cpp
     ${CMAKE_SOURCE_DIR}/src/utils.cpp
     ${CMAKE_SOURCE_DIR}/src/physics.cpp

@@ -40,7 +40,7 @@ int main() {
     update_vulkan_material(&t.ctx, &write, 1, &mats[i]);
   }
 
-  VulkanMesh mesh = {.vertex_count = 3, .instance_count = 1};
+  VulkanMesh mesh = {.vertex_count = 3};
 
   f64 t_total = 0;
   f64 t0 = glfwGetTime();
@@ -63,7 +63,7 @@ int main() {
     // This is a single draw action. Probably want some scheme for queuing this in the context
     u32 fi = t.ctx.current_frame_index;
     write_to_uniform_buffer(&ubs[fi], &tt, uniform_writes[fi]);
-    render_mesh_material(cmd, &mesh, &mats[fi]);
+    render_mesh(cmd, &mesh, &mats[fi]);
     vkCmdEndRenderPass(cmd);
 
     // end_frame() should empty that queue.

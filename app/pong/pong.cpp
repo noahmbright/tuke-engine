@@ -27,7 +27,6 @@ void init_buffers(State *state) {
       UPLOAD_ARRAYS(state->buffer_manager, paddle_vertices, unit_square_indices, ARRAY_SIZE(unit_square_indices));
   flush_buffers(ctx, &state->buffer_manager);
   state->mesh = *mesh;
-  state->mesh.instance_count = 1;
 
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   VkDescriptorBufferInfo *camera_vp = push_uniform(&ub_manager, sizeof(VPUniform));
@@ -130,6 +129,10 @@ State setup_state(const char *title) {
   init_program_spec(ctx, ctx->render_pass, &ui_conf, &pong_main_menu_program_spec, &state.main_menu_mat);
   init_program_spec(ctx, ctx->render_pass, &ui_conf, &common_ui_quad_program_spec, &state.ui_mat);
 
+  state.ui_buffer = create_streaming_buffer(ctx, sizeof(state.ui_elements));
+
+  // End renderer
+
   state.positions[ENTITY_LEFT_PADDLE] = left_paddle_pos0;
   state.positions[ENTITY_RIGHT_PADDLE] = right_paddle_pos0;
   state.positions[ENTITY_BALL] = ball_pos0;
@@ -213,6 +216,7 @@ void destroy_state(State *state) {
 
   destroy_buffer_manager(&state->buffer_manager);
   destroy_uniform_buffer(ctx, &state->uniform_buffer);
+  destroy_streaming_buffer(ctx, &state->ui_buffer);
   destroy_vulkan_context(ctx);
 }
 
@@ -227,17 +231,18 @@ void render(State *state) {
   switch (state->game_mode) {
   case GAMEMODE_PLAYING:
   case GAMEMODE_PAUSED:
-    render_mesh_material(cmd, &state->mesh, &state->background_mat);
-    state->mesh.instance_count = InstanceDataUBO_model_array_size;
-    render_mesh_material(cmd, &state->mesh, &state->paddle_mat);
+    render_mesh(cmd, &state->mesh, &state->background_mat);
+    render_mesh_instanced(cmd, &state->mesh, &state->paddle_mat, InstanceDataUBO_model_array_size, NULL);
     break;
   case GAMEMODE_MAIN_MENU: {
-    VulkanMesh mesh = {.vertex_count = 6, .instance_count = 1};
+    VulkanMesh mesh = {.vertex_count = 6};
     Vec2 res = vec2(state->window_width, state->window_height);
     ShaderToy st = {.res = res, .t = (f32)state->time};
     push_constants_material(cmd, &state->main_menu_mat, &st);
-    render_mesh_material(cmd, &mesh, &state->main_menu_mat);
-    render_mesh_material(cmd, &mesh, &state->ui_mat);
+    render_mesh(cmd, &mesh, &state->main_menu_mat);
+    state->ui_elements[0] = {.center = vec2(0.0f, 0.0f), .rotation = 0.0f, .size = vec2(1.0, 1.0)};
+    write_streaming_buffer(&state->ui_buffer, state->ui_elements, 0, sizeof(state->ui_elements));
+    render_mesh_instanced(cmd, &mesh, &state->ui_mat, 3, &state->ui_buffer);
     break;
   }
   default:

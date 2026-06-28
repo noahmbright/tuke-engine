@@ -16,10 +16,6 @@ int main() {
   VulkanMesh *light_mesh = UPLOAD_VERTEX_ARRAY(buffer_manager, cube_position_vertices, num_cube_vertices);
   flush_buffers(&t.ctx, &buffer_manager);
 
-  // These should be at the draw call.
-  mesh->instance_count = 1;
-  light_mesh->instance_count = 1;
-
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   VkDescriptorBufferInfo *phong_light_write = push_uniform(&ub_manager, sizeof(PhongLight));
   VkDescriptorBufferInfo *light_model_write = push_uniform(&ub_manager, sizeof(ColoredPosMVP));
@@ -113,9 +109,9 @@ int main() {
     begin_render_pass(&t.ctx, cmd, t.rp, framebuffer, t.clear_values, NUM_ATTACHMENTS, t.viewport_state);
 
     push_constants_material(cmd, &lit_mat, &mvp);
-    render_mesh_material(cmd, mesh, &lit_mat);
+    render_mesh(cmd, mesh, &lit_mat);
 
-    render_mesh_material(cmd, light_mesh, &light_mat);
+    render_mesh(cmd, light_mesh, &light_mat);
 
     vkCmdEndRenderPass(cmd);
 

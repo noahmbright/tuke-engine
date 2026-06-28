@@ -1116,24 +1116,6 @@ VkPipelineCache create_pipeline_cache(VkDevice device) {
   return pipeline_cache;
 }
 
-VkVertexInputBindingDescription create_instanced_vertex_binding_description(u32 binding, u32 stride) {
-  VkVertexInputBindingDescription description = {
-      .binding = binding,
-      .stride = stride,
-      .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE,
-  };
-  return description;
-}
-
-VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u32 stride) {
-  VkVertexInputBindingDescription description = {
-      .binding = binding,
-      .stride = stride,
-      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-  };
-  return description;
-}
-
 // https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#vkCreateDescriptorPool
 static VkDescriptorPool create_descriptor_pool(VkDevice device) {
   // https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VkDescriptorPoolCreateFlagBits
@@ -1262,6 +1244,10 @@ VulkanBuffer create_buffer(const VulkanContext *ctx, BufferType buffer_type, VkD
     break;
   case BUFFER_TYPE_UNIFORM:
     usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    break;
+  case BUFFER_TYPE_STREAMING:
+    usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
     flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     break;
   default:
@@ -1835,6 +1821,25 @@ static void flush_staging_arena(const VulkanContext *ctx, StagingArena *arena) {
   end_single_use_command_buffer(ctx, cmd);
 }
 
+StreamingBuffer create_streaming_buffer(const VulkanContext *ctx, u64 size) {
+  StreamingBuffer buf = {
+      .size = size,
+      .vulkan_buffer = create_buffer(ctx, BUFFER_TYPE_STREAMING, size),
+  };
+
+  VkResult result = vkMapMemory(ctx->device, buf.vulkan_buffer.memory, 0, size, 0, (void **)&buf.mapped);
+  VK_CHECK(result, "Failed to map uniform buffer memory");
+  return buf;
+}
+
+void destroy_streaming_buffer(const VulkanContext *ctx, StreamingBuffer *buf) {
+  destroy_vulkan_buffer(ctx, buf->vulkan_buffer);
+}
+
+void write_streaming_buffer(StreamingBuffer *buf, const void *src, u64 offset, u64 range) {
+  memcpy((u8 *)buf->mapped + offset, src, range);
+}
+
 UniformBuffer finalize_ub(const VulkanContext *ctx, UniformBufferManager *mgr) {
   u64 size = mgr->current_offset;
   UniformBuffer ub = {
@@ -1856,7 +1861,7 @@ void destroy_uniform_buffer(const VulkanContext *ctx, UniformBuffer *uniform_buf
 }
 
 void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, VkDescriptorBufferInfo uniform_write) {
-  memcpy(uniform_buffer->mapped + uniform_write.offset, data, uniform_write.range);
+  memcpy((u8 *)uniform_buffer->mapped + uniform_write.offset, data, uniform_write.range);
 }
 
 // Can make textures in a GPU native format KTX: https://developer.imaginationtech.com/solutions/pvrtextool/
@@ -2015,15 +2020,11 @@ void destroy_vulkan_material(VkDevice device, VulkanMaterial *mat) {
   vkDestroyPipeline(device, mat->pipeline, NULL);
 }
 
-void render_mesh_material(VkCommandBuffer cmd, const VulkanMesh *mesh, const VulkanMaterial *mat) {
+void render_mesh(VkCommandBuffer cmd, const VulkanMesh *mesh, const VulkanMaterial *mat) {
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline);
 
-  // Still not really sure when any of these first_* are meaningful.
-  u32 first_binding = 0;
   if (mesh->num_vertex_buffers > 0) {
-    vkCmdBindVertexBuffers(
-        cmd, first_binding, mesh->num_vertex_buffers, mesh->vertex_buffers, mesh->vertex_buffer_offsets
-    );
+    vkCmdBindVertexBuffers(cmd, 0, mesh->num_vertex_buffers, mesh->vertex_buffers, mesh->vertex_buffer_offsets);
   }
 
   if (mat->num_descriptor_sets > 0) {
@@ -2040,10 +2041,49 @@ void render_mesh_material(VkCommandBuffer cmd, const VulkanMesh *mesh, const Vul
   if (mesh->index_count > 0) {
     vkCmdBindIndexBuffer(cmd, mesh->index_buffer, mesh->index_buffer_offset, VK_INDEX_TYPE_UINT16);
     u32 first_index = 0;
-    vkCmdDrawIndexed(cmd, mesh->index_count, mesh->instance_count, first_index, vertex_offset, first_instance);
+    vkCmdDrawIndexed(cmd, mesh->index_count, 1, first_index, vertex_offset, first_instance);
   } else {
     u32 first_vertex = 0;
-    vkCmdDraw(cmd, mesh->vertex_count, mesh->instance_count, first_vertex, first_instance);
+    vkCmdDraw(cmd, mesh->vertex_count, 1, first_vertex, first_instance);
+  }
+}
+
+void render_mesh_instanced(
+    VkCommandBuffer cmd,
+    const VulkanMesh *mesh,
+    const VulkanMaterial *mat,
+    u32 instance_count,
+    const StreamingBuffer *instance_buffer
+) {
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline);
+
+  if (mesh->num_vertex_buffers > 0) {
+    vkCmdBindVertexBuffers(cmd, 0, mesh->num_vertex_buffers, mesh->vertex_buffers, mesh->vertex_buffer_offsets);
+  }
+
+  if (instance_buffer != NULL) {
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(cmd, mesh->num_vertex_buffers, 1, &instance_buffer->vulkan_buffer.buffer, &offset);
+  }
+
+  if (mat->num_descriptor_sets > 0) {
+    u32 first_set = 0;
+    u32 dynamic_offset_count = 0;
+    vkCmdBindDescriptorSets(
+        cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat->pipeline_layout, first_set, mat->num_descriptor_sets,
+        mat->descriptor_sets, dynamic_offset_count, NULL
+    );
+  }
+
+  u32 first_instance = 0;
+  i32 vertex_offset = 0;
+  if (mesh->index_count > 0) {
+    vkCmdBindIndexBuffer(cmd, mesh->index_buffer, mesh->index_buffer_offset, VK_INDEX_TYPE_UINT16);
+    u32 first_index = 0;
+    vkCmdDrawIndexed(cmd, mesh->index_count, instance_count, first_index, vertex_offset, first_instance);
+  } else {
+    u32 first_vertex = 0;
+    vkCmdDraw(cmd, mesh->vertex_count, instance_count, first_vertex, first_instance);
   }
 }
 

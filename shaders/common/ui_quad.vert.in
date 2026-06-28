@@ -1,5 +1,9 @@
 #version {{ VERSION }}
 
+{{ LOCATION 0 BINDING 0 RATE_INSTANCE OFFSET TIGHTLY_PACKED }} in vec2 a_center;
+{{ LOCATION 1 BINDING 0 RATE_INSTANCE OFFSET TIGHTLY_PACKED }} in vec2 a_size;
+{{ LOCATION 2 BINDING 0 RATE_INSTANCE OFFSET TIGHTLY_PACKED }} in float a_rotation;
+
 vec2 positions[6] = vec2[](
     vec2(-0.5, -0.5),
     vec2( 0.5, -0.5),
@@ -21,6 +25,9 @@ vec2 uvs[6] = vec2[](
 {{ LOCATION 0 }} out vec2 uv;
 
 void main() {
-    gl_Position = vec4(positions[{{ VERTEX_INDEX }}], 0.0, 1.0);
+    float r = a_rotation;
+    mat2 rot = mat2(cos(r), sin(r), -sin(r), cos(r));
+    vec2 pos = rot * a_size * positions[{{ VERTEX_INDEX }}] + a_center;
+    gl_Position = vec4(pos, 0.0, 1.0);
     uv = uvs[{{ VERTEX_INDEX }}];
 }

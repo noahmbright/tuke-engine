@@ -222,9 +222,12 @@ typedef struct {
 
 typedef struct {
   VulkanBuffer vulkan_buffer;
-  u8 *mapped;
+  void *mapped;
   u64 size;
-} UniformBuffer;
+} MappedBuffer;
+
+typedef MappedBuffer UniformBuffer;
+typedef MappedBuffer StreamingBuffer;
 
 typedef struct {
   VkViewport viewport;
@@ -248,6 +251,7 @@ typedef enum {
   BUFFER_TYPE_STAGING,
   BUFFER_TYPE_VERTEX, // Vertex buffers can also be used for indices
   BUFFER_TYPE_UNIFORM,
+  BUFFER_TYPE_STREAMING,
 } BufferType;
 
 typedef struct {
@@ -303,7 +307,6 @@ typedef struct {
 
 typedef struct {
   u32 vertex_count;
-  u32 instance_count; // TODO This belongs at callsites
   u32 index_count;
 
   VkBuffer vertex_buffers[MAX_VERTEX_BINDINGS];
@@ -364,6 +367,10 @@ VulkanBuffer create_buffer(const VulkanContext *ctx, BufferType buffer_type, VkD
 void destroy_vulkan_buffer(const VulkanContext *ctx, VulkanBuffer buffer);
 BufferManager create_buffer_manager();
 
+StreamingBuffer create_streaming_buffer(const VulkanContext *ctx, u64 size);
+void destroy_streaming_buffer(const VulkanContext *ctx, StreamingBuffer *buf);
+void write_streaming_buffer(StreamingBuffer *buf, const void *src, u64 offset, u64 range);
+
 // Used for uploading all the different arrays for a single mesh.
 // Meshes can in principle have multiple vertex buffers
 //  e.g. non interleaved data, separate vertex/instance rated data
@@ -404,11 +411,27 @@ VulkanMesh *upload_arrays_single(
 void flush_buffers(VulkanContext *ctx, BufferManager *mgr);
 void destroy_buffer_manager(BufferManager *buffer_manager);
 
+// Uniforms
+UniformBuffer finalize_ub(const VulkanContext *ctx, UniformBufferManager *mgr);
+void destroy_uniform_buffer(const VulkanContext *ctx, UniformBuffer *uniform_buffer);
+void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, VkDescriptorBufferInfo uniform_write);
+UniformBufferManager create_uniform_buffer_manager();
+VkDescriptorBufferInfo *push_uniform(UniformBufferManager *uniform_buffer_manager, u64 size);
+
 ////////////////////////////// Materials //////////////////////////////
 void destroy_vulkan_material(VkDevice device, VulkanMaterial *mat);
 
 ////////////////////////////// Rendering APIs //////////////////////////////
-void render_mesh_material(VkCommandBuffer cmd, const VulkanMesh *mesh, const VulkanMaterial *mat);
+void render_mesh(VkCommandBuffer cmd, const VulkanMesh *mesh, const VulkanMaterial *mat);
+
+// Handling a single coherent buffer with instance rated vertex data.
+void render_mesh_instanced(
+    VkCommandBuffer cmd,
+    const VulkanMesh *mesh,
+    const VulkanMaterial *mat,
+    u32 instance_count,
+    const StreamingBuffer *instance_buffer
+);
 
 ////////////////////////////// Command buffers //////////////////////////////
 VkCommandBuffer begin_single_use_command_buffer(const VulkanContext *ctx);
@@ -474,17 +497,6 @@ VkRenderPass create_render_pass(
 
 VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat color_format, VkFormat depth_format);
 VkRenderPass create_color_render_pass(VkDevice device, VkFormat format);
-
-// Uniforms
-UniformBuffer finalize_ub(const VulkanContext *ctx, UniformBufferManager *mgr);
-void destroy_uniform_buffer(const VulkanContext *ctx, UniformBuffer *uniform_buffer);
-void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, VkDescriptorBufferInfo uniform_write);
-UniformBufferManager create_uniform_buffer_manager();
-VkDescriptorBufferInfo *push_uniform(UniformBufferManager *uniform_buffer_manager, u64 size);
-
-// Vertex Buffers
-VkVertexInputBindingDescription create_instanced_vertex_binding_description(u32 binding, u32 stride);
-VkVertexInputBindingDescription create_vertex_binding_description(u32 binding, u32 stride);
 
 // Descriptor Sets
 void set_descriptor_set_layouts(VulkanContext *ctx, VkDescriptorSetLayout *layouts, u32 num_layouts);

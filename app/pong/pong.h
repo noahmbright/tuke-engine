@@ -122,10 +122,18 @@ struct PowerUp {
   Vec4 position;
 };
 
+typedef struct {
+  Vec2 center;
+  Vec2 size;
+  f32 rotation;
+} UiElement;
+
 struct State {
   GLFWwindow *window;
   int window_width;
   int window_height;
+
+  UiElement ui_elements[32];
 
   u32 right_score, left_score;
   u32 current_frame;
@@ -144,6 +152,7 @@ struct State {
   UniformWrites uniform_writes;
   BufferManager buffer_manager;
   InstanceDataUBO instance_data;
+  StreamingBuffer ui_buffer;
 
   VulkanMesh mesh;
   VulkanMaterial background_mat;

@@ -13,7 +13,6 @@ int main() {
   // Why do framebuffers own render passes?
   VulkanMesh mesh = {
       .vertex_count = 3,
-      .instance_count = 1,
   };
 
   VulkanMaterial mat;
@@ -42,7 +41,7 @@ int main() {
     VkFramebuffer framebuffer = t.ctx.framebuffers[t.ctx.image_index];
     begin_render_pass(&t.ctx, cmd, t.rp, framebuffer, t.clear_values, NUM_ATTACHMENTS, t.viewport_state);
 
-    render_mesh_material(cmd, &mesh, &mat);
+    render_mesh(cmd, &mesh, &mat);
     vkCmdEndRenderPass(cmd);
 
     VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end command buffer");
