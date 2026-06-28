@@ -17,7 +17,7 @@ int main() {
   };
 
   VulkanMaterial mat;
-  init_program_spec(&t.ctx, t.rp, &common_hardcoded_triangle_program_spec, &mat);
+  init_program_spec(&t.ctx, t.rp, NULL, &common_hardcoded_triangle_program_spec, &mat);
 
   // TODO want swapchain recreation and resizeable window in this test.
   while (!glfwWindowShouldClose(window)) {

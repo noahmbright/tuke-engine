@@ -1,3 +1,4 @@
+#include "assets.h"
 #include "generated_shader_utils.h"
 
 #include "camera.h"
@@ -7,8 +8,7 @@
 #include "shaders.h"
 #include "statistics.h"
 #include "tuke_engine.h"
-#include "vulkan/vulkan_base.h"
-#include "vulkan/vulkan_core.h"
+#include "vulkan_base.h"
 #include "window.h"
 
 static const char *texture_names[NUM_TEXTURES] = {
@@ -23,15 +23,12 @@ void init_buffers(State *state) {
   // This should not be managed by the state raw - need a renderer or something
   // This is also not very clear - I forget why one mesh handles unit square indices and paddle vertices
   state->buffer_manager = create_buffer_manager();
-  VulkanMesh *mesh_ptr =
+  VulkanMesh *mesh =
       UPLOAD_ARRAYS(state->buffer_manager, paddle_vertices, unit_square_indices, ARRAY_SIZE(unit_square_indices));
   flush_buffers(ctx, &state->buffer_manager);
-  state->mesh = *mesh_ptr;
+  state->mesh = *mesh;
   state->mesh.instance_count = 1;
 
-  // uniform buffer
-  // TODO can I come up with a scheme for coordinating UBOs and the location of
-  // what data in what portion of the renderer maps to what data in the shaders?
   UniformBufferManager ub_manager = create_uniform_buffer_manager();
   VkDescriptorBufferInfo *camera_vp = push_uniform(&ub_manager, sizeof(VPUniform));
   VkDescriptorBufferInfo *arena_model = push_uniform(&ub_manager, sizeof(ModelUniform));
@@ -43,10 +40,7 @@ void init_buffers(State *state) {
 }
 
 void init_background_material(State *state) {
-  init_program_spec(&state->ctx, state->ctx.render_pass, &pong_background_program_spec, &state->background_material);
-
-  VulkanMaterial *mat = &state->background_material;
-  const UniformWrites *ws = &state->uniform_writes;
+  init_program_spec(&state->ctx, state->ctx.render_pass, NULL, &pong_background_program_spec, &state->background_mat);
 
   VkDescriptorImageInfo image_info = {
       .sampler = state->sampler,
@@ -63,27 +57,33 @@ void init_background_material(State *state) {
       {
           .set_id = LAYOUT_ID_PONG_GLOBAL,
           .binding = BINDING_PONG_GLOBAL_VP,
-          .buffer_info = ws->camera_vp,
+          .buffer_info = state->uniform_writes.camera_vp,
       },
       {
           .set_id = LAYOUT_ID_PONG_GLOBAL,
           .binding = BINDING_PONG_GLOBAL_BACKGROUND_MODEL,
-          .buffer_info = ws->arena_model,
+          .buffer_info = state->uniform_writes.arena_model,
       },
   };
-  update_vulkan_material(&state->ctx, writes, ARRAY_SIZE(writes), mat);
+  update_vulkan_material(&state->ctx, writes, ARRAY_SIZE(writes), &state->background_mat);
 }
 
 void init_paddles_material(State *state) {
-  init_program_spec(&state->ctx, state->ctx.render_pass, &pong_paddle_program_spec, &state->paddle_material);
-  VulkanMaterial *mat = &state->paddle_material;
+  init_program_spec(&state->ctx, state->ctx.render_pass, NULL, &pong_paddle_program_spec, &state->paddle_mat);
   const UniformWrites *ws = &state->uniform_writes;
-  // set 0 = PONG_GLOBAL
   DescriptorWrite writes[] = {
-      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 0, .buffer_info = ws->camera_vp},
-      {.set_id = LAYOUT_ID_PONG_GLOBAL, .binding = 2, .buffer_info = ws->instance_data},
+      {
+          .set_id = LAYOUT_ID_PONG_GLOBAL,
+          .binding = BINDING_PONG_GLOBAL_VP,
+          .buffer_info = ws->camera_vp,
+      },
+      {
+          .set_id = LAYOUT_ID_PONG_GLOBAL,
+          .binding = BINDING_PONG_GLOBAL_INSTANCE_DATA,
+          .buffer_info = ws->instance_data,
+      },
   };
-  update_vulkan_material(&state->ctx, writes, ARRAY_SIZE(writes), mat);
+  update_vulkan_material(&state->ctx, writes, ARRAY_SIZE(writes), &state->paddle_mat);
 }
 
 static void init_transforms(State *state) {
@@ -112,36 +112,9 @@ State setup_state(const char *title) {
   };
 
   VulkanContext *ctx = &state.ctx;
-
-  STBHandle stbs[NUM_TEXTURES];
-  u32 max_size = 0;
-  for (u32 i = 0; i < NUM_TEXTURES; i++) {
-    stbs[i] = load_texture(texture_names[i]);
-    u32 texture_size = stbs[i].width * stbs[i].height * stbs[i].n_channels;
-    max_size = (texture_size > max_size) ? texture_size : max_size;
-  }
-
-  VulkanBuffer staging_buffer = create_buffer(ctx, BUFFER_TYPE_STAGING, max_size);
-  void *texture_data;
-  VkResult result =
-      vkMapMemory(ctx->device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data);
-  VK_CHECK(result, "Failed to map staging buffer memory");
-
-  for (u32 i = 0; i < NUM_TEXTURES; i++) {
-    state.textures[i] = create_vulkan_texture(
-        ctx, stbs[i].width, stbs[i].height, stbs[i].n_channels, stbs[i].data, staging_buffer, texture_data
-    );
-    free_stb_handle(&stbs[i]);
-  }
-
-  vkUnmapMemory(ctx->device, staging_buffer.memory);
-  destroy_vulkan_buffer(ctx, staging_buffer);
-
+  load_vulkan_textures(ctx, texture_names, NUM_TEXTURES, state.textures);
   init_buffers(&state);
 
-  // TODO this sampler never changes - look into wiring immutable samplers
-  // All this stuff needs to be managed in the backend. I don't know how to
-  // manage samplers at all.
   state.sampler = create_sampler(ctx->device);
   set_descriptor_set_layouts(&state.ctx, state.descriptor_set_layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
   init_inputs(&state.inputs);
@@ -152,7 +125,10 @@ State setup_state(const char *title) {
 
   init_background_material(&state);
   init_paddles_material(&state);
-  init_program_spec(ctx, ctx->render_pass, &pong_main_menu_program_spec, &state.main_menu_material);
+  PipelineConfig ui_conf = vulkan_pipeline_config();
+  ui_conf.depth_test = false;
+  init_program_spec(ctx, ctx->render_pass, &ui_conf, &pong_main_menu_program_spec, &state.main_menu_mat);
+  init_program_spec(ctx, ctx->render_pass, &ui_conf, &common_ui_quad_program_spec, &state.ui_mat);
 
   state.positions[ENTITY_LEFT_PADDLE] = left_paddle_pos0;
   state.positions[ENTITY_RIGHT_PADDLE] = right_paddle_pos0;
@@ -230,9 +206,10 @@ void destroy_state(State *state) {
     destroy_vulkan_texture(ctx->device, &state->textures[i]);
   }
 
-  destroy_vulkan_material(ctx->device, &state->background_material);
-  destroy_vulkan_material(ctx->device, &state->paddle_material);
-  destroy_vulkan_material(ctx->device, &state->main_menu_material);
+  destroy_vulkan_material(ctx->device, &state->background_mat);
+  destroy_vulkan_material(ctx->device, &state->paddle_mat);
+  destroy_vulkan_material(ctx->device, &state->main_menu_mat);
+  destroy_vulkan_material(ctx->device, &state->ui_mat);
 
   destroy_buffer_manager(&state->buffer_manager);
   destroy_uniform_buffer(ctx, &state->uniform_buffer);
@@ -250,16 +227,17 @@ void render(State *state) {
   switch (state->game_mode) {
   case GAMEMODE_PLAYING:
   case GAMEMODE_PAUSED:
-    render_mesh_material(cmd, &state->mesh, &state->background_material);
+    render_mesh_material(cmd, &state->mesh, &state->background_mat);
     state->mesh.instance_count = InstanceDataUBO_model_array_size;
-    render_mesh_material(cmd, &state->mesh, &state->paddle_material);
+    render_mesh_material(cmd, &state->mesh, &state->paddle_mat);
     break;
   case GAMEMODE_MAIN_MENU: {
     VulkanMesh mesh = {.vertex_count = 6, .instance_count = 1};
     Vec2 res = vec2(state->window_width, state->window_height);
     ShaderToy st = {.res = res, .t = (f32)state->time};
-    push_constants_material(cmd, &state->main_menu_material, &st);
-    render_mesh_material(cmd, &mesh, &state->main_menu_material);
+    push_constants_material(cmd, &state->main_menu_mat, &st);
+    render_mesh_material(cmd, &mesh, &state->main_menu_mat);
+    render_mesh_material(cmd, &mesh, &state->ui_mat);
     break;
   }
   default:
@@ -318,14 +296,14 @@ void process_inputs_playing(State *state, f32 dt) {
     state->pong_mode = PONG_MODE_LIVE_BALL;
   }
 
-  // TODO Pong: replace with powerup
+  // TODO replace with powerup
   if (key_pressed(inputs, INPUT_KEY_H)) {
     state->movement_mode = (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED)
                                ? MOVEMENT_MODE_VERTICAL_ONLY
                                : MOVEMENT_MODE_HORIZONTAL_ENABLED;
   }
 
-  // TODO Pong: make the paddle scale over the course of the game
+  // TODO make the paddle scale over the course of the game
   if (len_v2(input_direction) > EPSILON) {
     Vec3 movement = Vec3(input_direction.x, input_direction.y, 0.0f);
     inc_v3(&state->positions[ENTITY_LEFT_PADDLE], scale_v3(movement, dt * state->left_paddle_speed));
@@ -377,7 +355,7 @@ void handle_collisions(State *state, const f32 dt) {
   Vec3 right_paddle_scale = scales[ENTITY_RIGHT_PADDLE];
   // Vec3 right_paddle_velocity = velocities[ENTITY_RIGHT_PADDLE];
 
-  // TODO Pong: Maybe have this resize dynamically
+  // TODO Maybe have this resize dynamically
   f32 arena_horizontal_boundary = arena_dimensions_x0 / 2.0f;
   f32 arena_vertical_boundary = arena_dimensions_y0 / 2.0f;
 

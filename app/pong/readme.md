@@ -23,15 +23,48 @@ Expandable scope – adding effects (particles, trails, distortions, bloom) test
 Shader art already running as fullscreen quad background. Layer UI on top in same render pass, depth testing disabled for UI pipeline.
 
 Screens:
-* Main menu — shader background, clickable buttons (Story Mode, Free Play 1v1, Settings)
-* Character select — 4 characters, portraits, names; practice managing cast data
-* Story mode — animations, dialogue system; isolated environment to learn cutscene/narrative infra
-* Settings — just enough to understand what a settings subsystem involves
+* Main menu — shader background, buttons: Story Mode, Free Play 1v1, Settings
+* Free play — character select screen (4 characters, portraits, names), then straight into game
+* Story mode — character select, then cutscene intro, then game
+* Settings — enough to understand what a settings subsystem involves
 
 Infrastructure needed (in order):
-* Text rendering (stb_truetype already stubbed) — unlocks labels, dialogue, scores
+* UI coordinate system — screen-space pixels or normalized [0,1]; decide before anything else
+* Text rendering (stb_truetype already stubbed) — unlocks button labels, dialogue, scores
 * Mouse picking — screen-space rect hit test, no GPU work needed
-* UI coordinate system decision — screen-space vs normalized before anything else
+
+## Character system
+
+4 characters. Each has:
+* Name, portrait image
+* Unique paddle shader / color / effect
+* Possibly a signature skill (ties into combat/HUD charge bar)
+
+Serialization: characters defined in data files (JSON or simple hand-rolled format), loaded at startup.
+Player profiles: save file per player — selected character, win/loss record, unlocks.
+Figure out a minimal save format (binary struct dump is fine to start, upgrade later).
+
+## Story mode
+
+Visual-novel style — no 3D cutscenes, just 2D panels, portraits, and dialogue.
+
+Cutscene format:
+* Sequence of frames: background image + one or two character portraits + dialogue text
+* Advance on keypress or click
+* Cutscene data is a flat array of frames, authored in a data file
+
+Serialization: story script as a simple text or JSON file. Each entry is scene + speaker + line.
+State tracking: which chapter the player is on, what choices were made (if any).
+
+Questions to figure out:
+* How to handle branching (if at all) — linear is fine for v1
+* How to animate portraits (idle breathing, reaction poses) — flipbook or shader wobble
+* Transition effects between cutscene frames
+
+## Free play
+
+Character select → 1v1 match → score screen → rematch or back to menu.
+Eventually: local multiplayer on same keyboard, then networked.
 
 ## Gameplay background shader
 

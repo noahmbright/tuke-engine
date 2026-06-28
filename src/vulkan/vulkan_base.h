@@ -234,19 +234,14 @@ typedef struct {
 typedef enum { BLEND_MODE_OPAQUE, BLEND_MODE_ALPHA } BlendMode;
 
 typedef struct {
-  VkShaderModule vertex_shader;
-  VkShaderModule fragment_shader;
   u32 stage_count; // Reserving in case I add tesselation shaders in 20 years.
-  const VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info;
-  VkRenderPass render_pass;
-  VkPipelineLayout pipeline_layout;
   VkPrimitiveTopology topology;
   VkPolygonMode polygon_mode;
   VkCullModeFlags cull_mode;
   VkFrontFace front_face;
   VkSampleCountFlagBits sample_count_flag;
   BlendMode blend_mode;
-  VkExtent2D swapchain_extent;
+  bool depth_test;
 } PipelineConfig;
 
 typedef enum {
@@ -423,16 +418,18 @@ void end_single_use_command_buffer(const VulkanContext *ctx, VkCommandBuffer com
 VkShaderModule create_shader_module(VkDevice device, const u32 *code, u32 code_size);
 
 ////////////////////////////// Pipelines //////////////////////////////
-VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *config, VkPipelineCache pipeline_cache);
-
-VkPipeline create_default_graphics_pipeline(
-    const VulkanContext *ctx,
+VkPipeline create_graphics_pipeline(
+    VkDevice device,
     VkRenderPass render_pass,
     VkShaderModule vertex_shader,
     VkShaderModule fragment_shader,
     const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
-    VkPipelineLayout pipeline_layout
+    VkPipelineLayout layout,
+    VkPipelineCache pipeline_cache,
+    const PipelineConfig *config_ptr
 );
+
+PipelineConfig vulkan_pipeline_config();
 
 VkPipelineLayout create_pipeline_layout(
     VkDevice device,

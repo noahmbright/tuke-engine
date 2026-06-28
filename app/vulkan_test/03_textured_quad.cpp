@@ -25,7 +25,7 @@ int main() {
   destroy_vulkan_buffer(&t.ctx, staging_buffer);
 
   VulkanMaterial mat;
-  init_program_spec(&t.ctx, t.rp, &common_textured_quad_bringup_program_spec, &mat);
+  init_program_spec(&t.ctx, t.rp, NULL, &common_textured_quad_bringup_program_spec, &mat);
 
   DescriptorWrite writes[] = {
       {

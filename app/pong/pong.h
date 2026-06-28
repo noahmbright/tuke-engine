@@ -146,9 +146,11 @@ struct State {
   InstanceDataUBO instance_data;
 
   VulkanMesh mesh;
-  VulkanMaterial background_material;
-  VulkanMaterial paddle_material;
-  VulkanMaterial main_menu_material;
+  VulkanMaterial background_mat;
+  VulkanMaterial paddle_mat;
+  VulkanMaterial main_menu_mat;
+  VulkanMaterial ui_mat;
+  // End renderer
 
   Inputs inputs;
   RNGs rngs;

@@ -29,7 +29,7 @@ int main() {
   f64 t0 = glfwGetTime();
   for (u32 i = 0; i < 2; i++) {
     ubs[i] = finalize_ub(&t.ctx, &ub_manager);
-    init_program_spec(&t.ctx, t.rp, &common_colored_pos_program_spec, &mats[i]);
+    init_program_spec(&t.ctx, t.rp, NULL, &common_colored_pos_program_spec, &mats[i]);
 
     DescriptorWrite writes[] = {
         {.set_id = LAYOUT_ID_COLORED_POS_MVP, .binding = 0, .buffer_info = *model_write},

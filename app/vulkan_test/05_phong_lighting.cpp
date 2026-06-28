@@ -27,7 +27,7 @@ int main() {
   UniformBuffer ub = finalize_ub(&t.ctx, &ub_manager);
 
   VulkanMaterial light_mat;
-  init_program_spec(&t.ctx, t.rp, &common_colored_pos_program_spec, &light_mat);
+  init_program_spec(&t.ctx, t.rp, NULL, &common_colored_pos_program_spec, &light_mat);
 
   Vec4 light_color = vec4(1.0f, 1.0f, 1.0f, 1.0f);
   ColoredPosColor color_pos_color = {.col = light_color};
@@ -36,7 +36,7 @@ int main() {
   write_to_uniform_buffer(&ub, &color_pos_color, *light_color_write);
 
   VulkanMaterial lit_mat;
-  init_program_spec(&t.ctx, t.rp, &common_phong_program_spec, &lit_mat);
+  init_program_spec(&t.ctx, t.rp, NULL, &common_phong_program_spec, &lit_mat);
 
   DescriptorWrite phong_writes[] = {
       {.set_id = LAYOUT_ID_PHONG, .binding = BINDING_PHONG_LIGHT, .buffer_info = *phong_light_write},

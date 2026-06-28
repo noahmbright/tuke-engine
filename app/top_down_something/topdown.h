@@ -3,13 +3,14 @@
 #include "window.h"
 
 #include "camera.h"
+#include "linalg.h"
 #include "opengl_base.h"
 #include "scene_manager.h"
 #include "tilemap.h"
 #include "tuke_engine.h"
 #include "utils.h"
 
-#include "linalg.h"
+#include <math.h>
 
 // TODO
 // Transition in and out of scene changes
@@ -447,8 +448,8 @@ inline void overworld_draw(const GLRenderer *renderer, const void *scene_data_vo
 
   Vec3 player_scale = vec3(PLAYER_SIDE_LENGTH_METERS, PLAYER_SIDE_LENGTH_METERS, PLAYER_SIDE_LENGTH_METERS);
   Mat4 player_model = mat4();
-  translate_m4(scene_data->entities.positions[scene_data->player_index.idx], &player_model);
   scale_m4(player_scale, &player_model);
+  translate_m4(scene_data->entities.positions[scene_data->player_index.idx], &player_model);
   // FIXME no rotations yet.
   // player_model = glm::rotate(player_model, scene_data->player_rotation_render, Vec3(0.0f, 0.0f, 1.0f));
 

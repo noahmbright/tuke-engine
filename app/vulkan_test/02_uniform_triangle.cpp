@@ -30,7 +30,7 @@ int main() {
     ubs[i] = finalize_ub(&t.ctx, &ub_manager);
     uniform_writes[i] = *uw;
 
-    init_program_spec(&t.ctx, t.rp, &common_uniform_bringup_program_spec, &mats[i]);
+    init_program_spec(&t.ctx, t.rp, NULL, &common_uniform_bringup_program_spec, &mats[i]);
     // Know binding, descriptor count, and type from generated layout bindings - from reflection
     // These are needed for a write to particular buffer - runtime info.
     // This write stuff should all be per descriptor in the material

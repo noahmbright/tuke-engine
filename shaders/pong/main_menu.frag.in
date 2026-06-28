@@ -1,0 +1,79 @@
+#version {{ VERSION }}
+
+{{ VERTEX_SHADER common_fullscreen_quad }}
+
+{{ PUSH_CONSTANT }} uniform ShaderToy {
+    vec2 res;
+    float t;
+} st;
+
+{{ LOCATION 0 }} in vec2 uv;
+{{ LOCATION 0 }} out vec4 frag_color;
+
+float sphere_sdf(vec3 center, float r, vec3 p) {
+    return length(p - center) - r;
+}
+
+float rectangle_sdf(vec3 halfs, vec3 p){
+    vec3 p_abs = abs(p);
+    vec3 diffs = p_abs - halfs;
+    vec3 maxs = max(diffs, vec3(0.0));
+    return length(maxs);
+}
+
+bool intersect_world(vec3 p, out vec3 normal, out vec3 c, out float d) {
+    float t2 = st.t * st.t;
+
+    float ball_y = - 5.0 * pow(abs(sin(5.0 * (1.0 + t2))), 0.9) * exp(-1.5 * t2);
+    float sphere_r = 1.0;
+    vec3 sphere_pos = vec3(0.0, ball_y, 0.0);
+    float d_sphere = sphere_sdf(sphere_pos, sphere_r, p);
+
+    float d_table = rectangle_sdf(vec3(3.0, 0.25, 5.0), p);
+
+    d = min(d_sphere, d_table);
+
+    if (d < 0.01) {
+        if (d_sphere < d_table) {
+            c = vec3(0.2, 0.1, 1.0);
+            normal = (p - sphere_pos) / sphere_r;
+        } else {
+            c = vec3(0.1, 0.8, 0.4);
+            normal = vec3(0.0, -1.0, 0.0); // TODO
+        }
+        return true;
+    }
+
+    // Miss
+    c = vec3(0.0);
+    normal = vec3(0.0);
+    return false;
+}
+
+void main (){
+    vec2 iuv = (2 * gl_FragCoord.xy - st.res) / st.res.y;
+    vec3 ro = vec3(0.0, -2.0, -5.0);         // ray origin
+    vec3 rd = normalize(vec3(iuv, 1.0));    // ray direction
+    vec3 lp = vec3(4.0, -8.0, -5.0);       // light position
+    vec3 lc = vec3(0.6, 0.6, 0.8);          // light color
+
+    float t = 0.0;
+    vec3 normal;
+    vec3 c;
+    vec3 p;
+    for (uint i = 0; i < 80; i++) {
+        p = ro + t * rd;
+        float d;
+        bool hit = intersect_world(p, normal, c, d);
+
+        if (hit || d > 100.0) {
+            break;
+        }
+
+        t += d;
+    }
+
+    float d = max(0.0, -dot(normal, normalize(p - lp)));
+    c *= d * lc;
+    frag_color = vec4(pow(c, vec3(1.0/2.2)), 1.0);
+}

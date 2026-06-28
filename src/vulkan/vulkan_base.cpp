@@ -1482,19 +1482,26 @@ VkPipelineColorBlendAttachmentState create_color_blend_attachment_state(BlendMod
 
 // TODO Need flexibility for dynamic rendering vs render passes. More architecture to do.
 //      - Pipeline config takes a render pass
-VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *config, VkPipelineCache pipeline_cache) {
-  assert(config->stage_count <= MAX_SHADER_STAGE_COUNT);
-  assert(
-      config->vertex_input_state_create_info && "create_graphics_pipeline: vertex_input_state_create_info is NULL. Did "
-                                                "you mean to fill out this structure manually?"
-  );
+VkPipeline create_graphics_pipeline(
+    VkDevice device,
+    VkRenderPass render_pass,
+    VkShaderModule vertex_shader,
+    VkShaderModule fragment_shader,
+    const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
+    VkPipelineLayout layout,
+    VkPipelineCache pipeline_cache,
+    const PipelineConfig *config_ptr
+) {
+  PipelineConfig config = (config_ptr == NULL) ? vulkan_pipeline_config() : *config_ptr;
+  assert(config.stage_count <= MAX_SHADER_STAGE_COUNT);
+  assert(vertex_input_state);
 
   VkPipelineShaderStageCreateInfo vert_stage_ci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
       .stage = VK_SHADER_STAGE_VERTEX_BIT,
-      .module = config->vertex_shader,
+      .module = vertex_shader,
       .pName = "main",
       .pSpecializationInfo = NULL,
   };
@@ -1504,7 +1511,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .pNext = NULL,
       .flags = 0,
       .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-      .module = config->fragment_shader,
+      .module = fragment_shader,
       .pName = "main",
       .pSpecializationInfo = NULL,
   };
@@ -1516,21 +1523,8 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
-      .topology = config->topology,
+      .topology = config.topology,
       .primitiveRestartEnable = VK_FALSE,
-  };
-
-  VkOffset2D offset = {.x = 0, .y = 0};
-  ViewportState viewport_state = create_viewport_state_offset(config->swapchain_extent, offset);
-
-  VkPipelineViewportStateCreateInfo viewport_state_ci = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-      .viewportCount = 1,
-      .pViewports = &viewport_state.viewport,
-      .scissorCount = 1,
-      .pScissors = &viewport_state.scissor,
   };
 
   // TODO Will need some updates here when I want to do shadow mapping
@@ -1542,9 +1536,9 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .flags = 0,
       .depthClampEnable = VK_FALSE,
       .rasterizerDiscardEnable = VK_FALSE,
-      .polygonMode = config->polygon_mode,
-      .cullMode = config->cull_mode,
-      .frontFace = config->front_face,
+      .polygonMode = config.polygon_mode,
+      .cullMode = config.cull_mode,
+      .frontFace = config.front_face,
       .depthBiasEnable = VK_FALSE,
       .depthBiasConstantFactor = 0.0f,
       .depthBiasClamp = 0.0f,
@@ -1556,7 +1550,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
-      .rasterizationSamples = config->sample_count_flag,
+      .rasterizationSamples = config.sample_count_flag,
       // TODO if sample count flag is not VK_SAMPLE_COUNT_1_BIT, make this true?
       .sampleShadingEnable = VK_FALSE,
       .minSampleShading = 1.0f,
@@ -1572,8 +1566,8 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
       .pNext = NULL,
       .flags = 0,
-      .depthTestEnable = VK_TRUE,
-      .depthWriteEnable = VK_TRUE,
+      .depthTestEnable = config.depth_test ? VK_TRUE : VK_FALSE,
+      .depthWriteEnable = config.depth_test ? VK_TRUE : VK_FALSE, // Not in general tied to test enabled
       .depthCompareOp = VK_COMPARE_OP_LESS,
       .depthBoundsTestEnable = VK_FALSE,
       .stencilTestEnable = VK_FALSE,
@@ -1584,7 +1578,7 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
   };
 
   const u32 num_color_blend_attachments = 1;
-  VkPipelineColorBlendAttachmentState color_blend_state = create_color_blend_attachment_state(config->blend_mode);
+  VkPipelineColorBlendAttachmentState color_blend_state = create_color_blend_attachment_state(config.blend_mode);
   VkPipelineColorBlendStateCreateInfo color_blend_state_ci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
       .pNext = NULL,
@@ -1609,24 +1603,30 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
       .pDynamicStates = dynamic_states,
   };
 
+  VkPipelineViewportStateCreateInfo viewport_state_ci = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+      .viewportCount = 1,
+      .scissorCount = 1,
+  };
+
   // https://docs.vulkan.org/refpages/latest/refpages/source/VkGraphicsPipelineCreateInfo.html
   VkGraphicsPipelineCreateInfo pipeline_ci = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .pNext = 0,
       .flags = 0,
-      .stageCount = config->stage_count,
+      .stageCount = config.stage_count,
       .pStages = stages,
-      .pVertexInputState = config->vertex_input_state_create_info,
+      .pVertexInputState = vertex_input_state,
       .pInputAssemblyState = &input_assembly_state,
-      .pTessellationState = NULL, // TOOD?
+      .pTessellationState = NULL,
       .pViewportState = &viewport_state_ci,
       .pRasterizationState = &rasterization_state_ci,
       .pMultisampleState = &multisample_state_ci,
       .pDepthStencilState = &depth_stencil_state_ci,
       .pColorBlendState = &color_blend_state_ci,
       .pDynamicState = &dynamic_state_create_info,
-      .layout = config->pipeline_layout,
-      .renderPass = config->render_pass,
+      .layout = layout,
+      .renderPass = render_pass,
       .subpass = 0,
       .basePipelineHandle = VK_NULL_HANDLE,
       .basePipelineIndex = -1,
@@ -1639,31 +1639,20 @@ VkPipeline create_graphics_pipeline(VkDevice device, const PipelineConfig *confi
   return graphics_pipeline;
 }
 
-VkPipeline create_default_graphics_pipeline(
-    const VulkanContext *ctx,
-    VkRenderPass render_pass,
-    VkShaderModule vertex_shader,
-    VkShaderModule fragment_shader,
-    const VkPipelineVertexInputStateCreateInfo *vertex_input_state,
-    VkPipelineLayout pipeline_layout
-) {
-
+PipelineConfig vulkan_pipeline_config() {
+  // clang-format off
   PipelineConfig config = {
-      .vertex_shader = vertex_shader,
-      .fragment_shader = fragment_shader,
-      .stage_count = 2,
-      .vertex_input_state_create_info = vertex_input_state,
-      .render_pass = render_pass,
-      .pipeline_layout = pipeline_layout,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .polygon_mode = VK_POLYGON_MODE_FILL,
-      .cull_mode = VK_CULL_MODE_NONE,
-      .front_face = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .sample_count_flag = VK_SAMPLE_COUNT_1_BIT,
-      .blend_mode = BLEND_MODE_ALPHA,
+      .stage_count          = 2,
+      .topology             = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      .polygon_mode         = VK_POLYGON_MODE_FILL,
+      .cull_mode            = VK_CULL_MODE_NONE,
+      .front_face           = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .sample_count_flag    = VK_SAMPLE_COUNT_1_BIT,
+      .blend_mode           = BLEND_MODE_ALPHA,
+      .depth_test           = true,
   };
-
-  return create_graphics_pipeline(ctx->device, &config, ctx->pipeline_cache);
+  // clang-format on
+  return config;
 }
 
 void begin_frame(VulkanContext *ctx) {

@@ -50,8 +50,13 @@ update_vulkan_material(const VulkanContext *ctx, const DescriptorWrite *writes, 
 }
 
 // TODO would like this render pass removed
-inline void
-init_program_spec(VulkanContext *ctx, VkRenderPass render_pass, const ProgramSpec *spec, VulkanMaterial *mat) {
+inline void init_program_spec(
+    VulkanContext *ctx,
+    VkRenderPass render_pass,
+    const PipelineConfig *config,
+    const ProgramSpec *spec,
+    VulkanMaterial *mat
+) {
   VkDevice dev = ctx->device;
 
   VkShaderModule vert_mod = create_shader_module(dev, spec->vert_spv, spec->vert_spv_size);
@@ -92,8 +97,9 @@ init_program_spec(VulkanContext *ctx, VkRenderPass render_pass, const ProgramSpe
 
   mat->pipeline_layout =
       create_pipeline_layout(dev, temp_layouts, spec->num_descriptor_set_layouts, range_ptr, num_push_constants);
-  mat->pipeline =
-      create_default_graphics_pipeline(ctx, render_pass, vert_mod, frag_mod, vertex_layout, mat->pipeline_layout);
+  mat->pipeline = create_graphics_pipeline(
+      ctx->device, render_pass, vert_mod, frag_mod, vertex_layout, mat->pipeline_layout, ctx->pipeline_cache, config
+  );
 
   vkDestroyShaderModule(dev, vert_mod, NULL);
   vkDestroyShaderModule(dev, frag_mod, NULL);

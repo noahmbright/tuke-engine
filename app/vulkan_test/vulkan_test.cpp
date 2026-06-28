@@ -52,7 +52,7 @@ int main() {
 
   // triangle: SIMPLE set=0 (binding 0=x, 1=camera_vp, 2=light_position)
   VulkanMaterial triangle_mat;
-  init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_simple_program_spec, &triangle_mat);
+  init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, NULL, &common_simple_program_spec, &triangle_mat);
   {
     DescriptorWrite writes[] = {
         {.set_id = LAYOUT_ID_SIMPLE, .binding = 0, .buffer_info = *x_write},
@@ -64,7 +64,7 @@ int main() {
 
   // square: SIMPLE set=0 (binding 0=x, 1=camera_vp, 2=light_position)
   VulkanMaterial square_mat;
-  init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_simple_program_spec, &square_mat);
+  init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, NULL, &common_simple_program_spec, &square_mat);
   {
     DescriptorWrite writes[] = {
         {.set_id = LAYOUT_ID_SIMPLE, .binding = 0, .buffer_info = *x_write},
@@ -77,7 +77,7 @@ int main() {
   // instanced_quad: INSTANCED_QUAD set=0 (binding 0=mvp, 1=x, 2=tex)
   VulkanMaterial instanced_quad_mat;
   init_program_spec(
-      &t.ctx, offscreen_framebuffer.render_pass, &common_instanced_quad_program_spec, &instanced_quad_mat
+      &t.ctx, offscreen_framebuffer.render_pass, NULL, &common_instanced_quad_program_spec, &instanced_quad_mat
   );
   {
     DescriptorWrite writes[] = {
@@ -96,7 +96,7 @@ int main() {
 
   // cube: PHONG set=0 (binding 1=light); model+vp via push constants
   VulkanMaterial cube_mat;
-  init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, &common_phong_program_spec, &cube_mat);
+  init_program_spec(&t.ctx, offscreen_framebuffer.render_pass, NULL, &common_phong_program_spec, &cube_mat);
   {
     DescriptorWrite writes[] = {
         {.set_id = LAYOUT_ID_PHONG, .binding = BINDING_PHONG_LIGHT, .buffer_info = *phong_light_write},
@@ -106,7 +106,7 @@ int main() {
 
   // fullscreen_quad: PLACEHOLDER set=0 binding 0=offscreen image
   VulkanMaterial fullscreen_quad_mat;
-  init_program_spec(&t.ctx, t.ctx.render_pass, &common_fullscreen_quad_program_spec, &fullscreen_quad_mat);
+  init_program_spec(&t.ctx, t.ctx.render_pass, NULL, &common_fullscreen_quad_program_spec, &fullscreen_quad_mat);
   {
     DescriptorWrite write = {
         .set_id = LAYOUT_ID_PLACEHOLDER,
