@@ -75,7 +75,7 @@ int main() {
     t0 = t1;
     t_total += dt;
 
-    update_key_inputs_glfw(&inputs, window);
+    update_inputs_glfw(&inputs, window);
 
     // Simulate
     f32 aspect = f32(width) / f32(height);

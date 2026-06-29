@@ -6,8 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// global for scroll callback, ugly would like to upgrade
-ScrollDeltas scroll_deltas;
+// Globals for scroll callback
+f64 scroll_dx, scroll_dy;
 
 // need to init in place, because inputs contains arrays that would be
 // stack allocated. the problem is when we go to point with the prev/cur
@@ -18,20 +18,14 @@ void init_inputs(Inputs *inputs) {
     inputs->key_inputs_array[1][i] = false;
   }
 
-  inputs->key_inputs = inputs->key_inputs_array[0];
-  inputs->prev_key_inputs = inputs->key_inputs_array[1];
+  inputs->curr = inputs->key_inputs_array[0];
+  inputs->prev = inputs->key_inputs_array[1];
 
-  inputs->left_mouse_clicked = false;
-  inputs->right_mouse_clicked = false;
-}
-
-void update_mouse_input_glfw(Inputs *inputs, GLFWwindow *window) {
-  inputs->left_mouse_clicked = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
-  inputs->right_mouse_clicked = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+  inputs->curr_lclick = false;
+  inputs->curr_rclick = false;
 }
 
 static const i32 key_to_glfw_key[] = {
-
     [INPUT_KEY_SPACEBAR] = GLFW_KEY_SPACE,
     [INPUT_KEY_W] = GLFW_KEY_W,
     [INPUT_KEY_A] = GLFW_KEY_A,
@@ -64,21 +58,30 @@ static const i32 key_to_glfw_key[] = {
 };
 
 // update the inputs AND swap the pointers to the current frames inputs
-void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
+void update_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
   glfwPollEvents();
 
-  bool *temp = inputs->key_inputs;
-  inputs->key_inputs = inputs->prev_key_inputs;
-  inputs->prev_key_inputs = temp;
+  bool *temp = inputs->curr;
+  inputs->curr = inputs->prev;
+  inputs->prev = temp;
 
   for (u32 i = 0; i < NUM_INPUTS; i++) {
-    inputs->key_inputs[i] = (glfwGetKey(window, key_to_glfw_key[i]) == GLFW_PRESS);
+    inputs->curr[i] = (glfwGetKey(window, key_to_glfw_key[i]) == GLFW_PRESS);
   }
 
-  inputs->scroll_dx = scroll_deltas.dx;
-  inputs->scroll_dy = scroll_deltas.dy;
-  scroll_deltas.dx = 0.0f;
-  scroll_deltas.dy = 0.0f;
+  inputs->scroll_dx = scroll_dx;
+  inputs->scroll_dy = scroll_dy;
+  scroll_dx = 0.0f;
+  scroll_dy = 0.0f;
+
+  // https://www.glfw.org/docs/latest/input_guide.html#input_mouse
+  inputs->prev_lclick = inputs->curr_lclick;
+  inputs->curr_lclick = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+
+  inputs->prev_rclick = inputs->curr_rclick;
+  inputs->curr_rclick = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+
+  glfwGetCursorPos(window, &inputs->cursor_x, &inputs->cursor_y);
 }
 
 Vec2 get_cursor_position(GLFWwindow *window) {
@@ -103,10 +106,9 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 }
 
 static void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
-  (void)window; // unused
-  scroll_deltas.dx += xoffset;
-  scroll_deltas.dy += yoffset;
-  // printf("scrollin, %f, %f\n", scroll_deltas.dx, scroll_deltas.dy);
+  (void)window;
+  scroll_dx += xoffset;
+  scroll_dy += yoffset;
 }
 
 GLFWwindow *create_window(bool is_vulkan, const char *title, const int width, const int height) {
@@ -139,9 +141,66 @@ GLFWwindow *create_window(bool is_vulkan, const char *title, const int width, co
     gladLoadGL(glfwGetProcAddress);
   }
 
-  scroll_deltas.dx = 0.0;
-  scroll_deltas.dy = 0.0;
+  scroll_dx = 0.0;
+  scroll_dy = 0.0;
   glfwSetScrollCallback(window, scroll_callback);
 
   return window;
+}
+
+Vec2 inputs_to_direction(const Inputs *inputs) {
+  Vec2 direction = {};
+
+  if (key_held(inputs, INPUT_KEY_W) || key_held(inputs, INPUT_KEY_UP_ARROW)) {
+    direction.y += 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_A) || key_held(inputs, INPUT_KEY_LEFT_ARROW)) {
+    direction.x -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_S) || key_held(inputs, INPUT_KEY_DOWN_ARROW)) {
+    direction.y -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_D) || key_held(inputs, INPUT_KEY_RIGHT_ARROW)) {
+    direction.x += 1.0f;
+  }
+
+  return direction;
+}
+
+Vec2 inputs_to_direction_wasd(const Inputs *inputs) {
+  Vec2 direction = {};
+
+  if (key_held(inputs, INPUT_KEY_W)) {
+    direction.y += 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_A)) {
+    direction.x -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_S)) {
+    direction.y -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_D)) {
+    direction.x += 1.0f;
+  }
+
+  return direction;
+}
+
+Vec2 inputs_to_direction_arrow_keys(const Inputs *inputs) {
+  Vec2 direction = {};
+
+  if (key_held(inputs, INPUT_KEY_UP_ARROW)) {
+    direction.y += 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_LEFT_ARROW)) {
+    direction.x -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_DOWN_ARROW)) {
+    direction.y -= 1.0f;
+  }
+  if (key_held(inputs, INPUT_KEY_RIGHT_ARROW)) {
+    direction.x += 1.0f;
+  }
+
+  return direction;
 }

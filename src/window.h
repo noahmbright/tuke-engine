@@ -4,7 +4,6 @@
 #include "linalg.h"
 #include "tuke_engine.h"
 
-// TODO does input belong in the windowing file?
 enum Input {
   INPUT_KEY_UNKNOWN = -1,
 
@@ -45,86 +44,33 @@ enum Input {
 struct Inputs {
   f64 scroll_dx;
   f64 scroll_dy;
+
+  f64 cursor_x;
+  f64 cursor_y;
+
   bool key_inputs_array[2][NUM_INPUTS];
-  bool *key_inputs;
-  bool *prev_key_inputs;
+  bool *curr;
+  bool *prev;
 
-  bool left_mouse_clicked;
-  bool right_mouse_clicked;
-};
+  bool curr_lclick;
+  bool prev_lclick;
 
-// scroll callback for glfw
-struct ScrollDeltas {
-  f64 dx, dy;
+  bool curr_rclick;
+  bool prev_rclick;
 };
 
 GLFWwindow *create_window(bool is_vulkan, const char *title = "Tuke", const int width = 800, const int height = 600);
-void update_key_inputs_glfw(Inputs *inputs, GLFWwindow *window);
+void update_inputs_glfw(Inputs *inputs, GLFWwindow *window);
 void init_inputs(Inputs *inputs);
 
-inline bool key_pressed(const Inputs *inputs, Input key) {
-  return inputs->key_inputs[key] && !inputs->prev_key_inputs[key];
-}
+Vec2 inputs_to_direction_arrow_keys(const Inputs *inputs);
+Vec2 inputs_to_direction_wasd(const Inputs *inputs);
+Vec2 inputs_to_direction(const Inputs *inputs);
 
-inline bool key_released(const Inputs *inputs, Input key) {
-  return !inputs->key_inputs[key] && inputs->prev_key_inputs[key];
-}
+inline bool key_pressed(const Inputs *inputs, Input key) { return inputs->curr[key] && !inputs->prev[key]; }
 
-inline bool key_held(const Inputs *inputs, Input key) { return inputs->key_inputs[key]; }
+inline bool lclick_pressed(const Inputs *inputs) { return inputs->curr_lclick && !inputs->prev_lclick; }
 
-inline Vec2 inputs_to_direction(const Inputs *inputs) {
-  Vec2 direction = {};
+inline bool key_released(const Inputs *inputs, Input key) { return !inputs->curr[key] && inputs->prev[key]; }
 
-  if (key_held(inputs, INPUT_KEY_W) || key_held(inputs, INPUT_KEY_UP_ARROW)) {
-    direction.y += 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_A) || key_held(inputs, INPUT_KEY_LEFT_ARROW)) {
-    direction.x -= 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_S) || key_held(inputs, INPUT_KEY_DOWN_ARROW)) {
-    direction.y -= 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_D) || key_held(inputs, INPUT_KEY_RIGHT_ARROW)) {
-    direction.x += 1.0f;
-  }
-
-  return direction;
-}
-
-inline Vec2 inputs_to_direction_wasd(const Inputs *inputs) {
-  Vec2 direction = {};
-
-  if (key_held(inputs, INPUT_KEY_W)) {
-    direction.y += 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_A)) {
-    direction.x -= 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_S)) {
-    direction.y -= 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_D)) {
-    direction.x += 1.0f;
-  }
-
-  return direction;
-}
-
-inline Vec2 inputs_to_direction_arrow_keys(const Inputs *inputs) {
-  Vec2 direction = {};
-
-  if (key_held(inputs, INPUT_KEY_UP_ARROW)) {
-    direction.y += 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_LEFT_ARROW)) {
-    direction.x -= 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_DOWN_ARROW)) {
-    direction.y -= 1.0f;
-  }
-  if (key_held(inputs, INPUT_KEY_RIGHT_ARROW)) {
-    direction.x += 1.0f;
-  }
-
-  return direction;
-}
+inline bool key_held(const Inputs *inputs, Input key) { return inputs->curr[key]; }

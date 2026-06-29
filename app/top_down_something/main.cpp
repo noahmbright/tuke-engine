@@ -177,7 +177,7 @@ int main() {
     f64 t = glfwGetTime();
     f64 dt = t - t0;
     t0 = t;
-    update_key_inputs_glfw(&global_state.inputs, global_state.window);
+    update_inputs_glfw(&global_state.inputs, global_state.window);
 
     // TODO lazy resize
     glfwGetFramebufferSize(global_state.window, &global_state.window_width, &global_state.window_height);

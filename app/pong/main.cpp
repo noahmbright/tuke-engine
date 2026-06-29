@@ -8,7 +8,6 @@ int main() {
   f64 total_time = 0.0f;
   while (!glfwWindowShouldClose(state.window)) {
     glfwPollEvents();
-    glfwGetFramebufferSize(state.window, &state.window_width, &state.window_height);
     f64 t = glfwGetTime();
     f64 dt = t - t_prev;
     state.time += dt;

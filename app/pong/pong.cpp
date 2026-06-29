@@ -3,6 +3,7 @@
 
 #include "camera.h"
 #include "glfw_vulkan.h"
+#include "linalg.h"
 #include "physics.h"
 #include "pong.h"
 #include "shaders.h"
@@ -108,6 +109,7 @@ State setup_state(const char *title) {
       .left_score = state.right_score = 0,
       .window = window,
       .ctx = create_vulkan_context(title, window_info),
+      .intro_active = true,
   };
 
   VulkanContext *ctx = &state.ctx;
@@ -240,9 +242,9 @@ void render(State *state) {
     ShaderToy st = {.res = res, .t = (f32)state->time};
     push_constants_material(cmd, &state->main_menu_mat, &st);
     render_mesh(cmd, &mesh, &state->main_menu_mat);
-    state->ui_elements[0] = {.center = vec2(0.0f, 0.0f), .rotation = 0.0f, .size = vec2(1.0, 1.0)};
+
     write_streaming_buffer(&state->ui_buffer, state->ui_elements, 0, sizeof(state->ui_elements));
-    render_mesh_instanced(cmd, &mesh, &state->ui_mat, 3, &state->ui_buffer);
+    render_mesh_instanced(cmd, &mesh, &state->ui_mat, NUM_MENU_UIS, &state->ui_buffer);
     break;
   }
   default:
@@ -255,6 +257,22 @@ void render(State *state) {
 
   state->current_frame++;
   update_frame_index(ctx);
+}
+
+static bool intersect_ui(const UiElement *ui, f32 x0, f32 y0) {
+  Vec2 w = scale_v2(ui->size, 0.5);
+  Vec2 cen = ui->center;
+  f32 s = sinf(ui->rotation);
+  f32 c = cosf(ui->rotation);
+  f32 x = c * x0 - s * y0;
+  f32 y = s * x0 + c * y0;
+  f32 x_min = cen.x - w.x;
+  f32 x_max = cen.x + w.x;
+  f32 y_min = cen.y - w.y;
+  f32 y_max = cen.y + w.y;
+  bool in_x = x_min < x && x < x_max;
+  bool in_y = y_min < y && y < y_max;
+  return in_x && in_y;
 }
 
 void process_inputs_paused(State *state) {
@@ -320,12 +338,25 @@ void process_inputs_main_menu(State *state) {
 
   if (key_pressed(inputs, INPUT_KEY_SPACEBAR)) {
     printf("starting game\n");
-    state->game_mode = GAMEMODE_PLAYING;
+    state->intro_active = false;
+  }
+
+  if (lclick_pressed(inputs)) {
+    f32 x0 = (f32)inputs->cursor_x / (f32)state->window_width * 2.0f - 1.0f;
+    f32 y0 = (f32)inputs->cursor_y / (f32)state->window_height * 2.0f - 1.0f;
+
+    printf("%f, %f\n", x0, y0);
+    bool hit_logo = intersect_ui(&state->ui_elements[MENU_UI_LOGO], x0, y0);
+    if (hit_logo) {
+      printf("clicked logo\n");
+      state->game_mode = GAMEMODE_PLAYING;
+    }
   }
 }
 
 void process_inputs(State *state, const f32 dt) {
-  update_key_inputs_glfw(&state->inputs, state->window);
+  glfwGetFramebufferSize(state->window, &state->window_width, &state->window_height);
+  update_inputs_glfw(&state->inputs, state->window);
 
   switch (state->game_mode) {
   case GAMEMODE_PAUSED: {
@@ -478,7 +509,17 @@ void update_screen_shake(State *state, f32 dt) {
 
 void update_game_state(State *state, const f32 dt) {
 
-  if (state->game_mode == GAMEMODE_PAUSED || state->game_mode == GAMEMODE_MAIN_MENU) {
+  if (state->game_mode == GAMEMODE_PAUSED) {
+    return;
+  }
+
+  if (state->game_mode == GAMEMODE_MAIN_MENU) {
+    Vec2 size = vec2(1.0f, 1.0f);
+    if (state->intro_active) {
+      size = vec2(0.0f, 0.0f);
+    }
+
+    state->ui_elements[MENU_UI_LOGO] = {.center = vec2(0.0f, 0.0f), .rotation = (f32)state->time, .size = size};
     return;
   }
 

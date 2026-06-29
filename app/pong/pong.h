@@ -122,10 +122,13 @@ struct PowerUp {
   Vec4 position;
 };
 
+typedef enum { MENU_UI_LOGO, NUM_MENU_UIS } MenuUI;
+
 typedef struct {
   Vec2 center;
   Vec2 size;
   f32 rotation;
+  u32 tex_id;
 } UiElement;
 
 struct State {
@@ -134,6 +137,7 @@ struct State {
   int window_height;
 
   UiElement ui_elements[32];
+  bool intro_active;
 
   u32 right_score, left_score;
   u32 current_frame;

@@ -683,8 +683,8 @@ void transition_image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout o
   vkCmdPipelineBarrier(cmd, src_stage, dst_stage, 0, 0, NULL, 0, NULL, 1, &image_memory_barrier);
 }
 
-VkImageView
-create_default_image_view(const VulkanContext *ctx, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags) {
+static VkImageView
+create_image_view(const VulkanContext *ctx, VkImage image, VkFormat format, VkImageAspectFlags aspect_flags) {
   // TODO allow for depth and stencil attachments
   VkImageViewCreateInfo image_view_create_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -711,8 +711,7 @@ create_default_image_view(const VulkanContext *ctx, VkImage image, VkFormat form
   return image_view;
 }
 
-VkImage
-create_default_image(const VulkanContext *ctx, u32 width, u32 height, VkImageUsageFlags usage, VkFormat format) {
+static VkImage create_image(const VulkanContext *ctx, u32 width, u32 height, VkImageUsageFlags usage, VkFormat format) {
   // TODO Better understand all these fields
   //      When do I need more samples? Need mipmap support
   //      Don't understand queue families
@@ -726,7 +725,7 @@ create_default_image(const VulkanContext *ctx, u32 width, u32 height, VkImageUsa
       .extent.width = width,
       .extent.height = height,
       .extent.depth = 1,
-      .mipLevels = 1,
+      .mipLevels = 1, // TODO
       .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT,
       .tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -801,9 +800,9 @@ DepthBuffer create_depth_buffer(VulkanContext *ctx) {
   VkExtent2D extent = ctx->swapchain_extent;
   VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
   DepthBuffer depth_buffer;
-  depth_buffer.image = create_default_image(ctx, extent.width, extent.height, usage, ctx->depth_format);
+  depth_buffer.image = create_image(ctx, extent.width, extent.height, usage, ctx->depth_format);
   depth_buffer.device_memory = allocate_and_bind_image_memory(ctx, depth_buffer.image);
-  depth_buffer.image_view = create_default_image_view(ctx, depth_buffer.image, ctx->depth_format, flags);
+  depth_buffer.image_view = create_image_view(ctx, depth_buffer.image, ctx->depth_format, flags);
 
   VkCommandBuffer cmd = begin_single_use_command_buffer(ctx);
   VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -832,7 +831,7 @@ static SwapchainStorage create_swapchain_storage(VulkanContext *ctx) {
   VkFormat surface_format = ctx->surface_format.format;
   for (u32 i = 0; i < image_count; i++) {
     VkImageAspectFlags aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT;
-    storage.image_views[i] = create_default_image_view(ctx, storage.images[i], surface_format, aspect_flags);
+    storage.image_views[i] = create_image_view(ctx, storage.images[i], surface_format, aspect_flags);
   }
 
   // TODO Want to better manage depth buffers and not have a hardcoded depth/color framebuffer in the context
@@ -1864,7 +1863,6 @@ void write_to_uniform_buffer(UniformBuffer *uniform_buffer, const void *data, Vk
   memcpy((u8 *)uniform_buffer->mapped + uniform_write.offset, data, uniform_write.range);
 }
 
-// Can make textures in a GPU native format KTX: https://developer.imaginationtech.com/solutions/pvrtextool/
 VulkanTexture create_vulkan_texture(
     VulkanContext *ctx,
     u32 width,
@@ -1881,7 +1879,7 @@ VulkanTexture create_vulkan_texture(
 
   VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
   VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
-  texture.image = create_default_image(ctx, width, height, usage, format);
+  texture.image = create_image(ctx, width, height, usage, format);
 
   // Allocating device memory must come after image creation.
   texture.device_memory = allocate_and_bind_image_memory(ctx, texture.image);
@@ -1927,7 +1925,7 @@ VulkanTexture create_vulkan_texture(
 
   VkImageAspectFlags aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT;
   format = VK_FORMAT_R8G8B8A8_SRGB; // TODO should be determined from image
-  texture.image_view = create_default_image_view(ctx, texture.image, format, aspect_flags);
+  texture.image_view = create_image_view(ctx, texture.image, format, aspect_flags);
 
   return texture;
 }
@@ -2221,15 +2219,15 @@ ColorDepthFramebuffer create_color_depth_framebuffer(
 
   // Color
   VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  fb.color_image = create_default_image(ctx, extent.width, extent.height, usage, color_format);
+  fb.color_image = create_image(ctx, extent.width, extent.height, usage, color_format);
   fb.color_image_device_memory = allocate_and_bind_image_memory(ctx, fb.color_image);
-  fb.color_image_view = create_default_image_view(ctx, fb.color_image, color_format, VK_IMAGE_ASPECT_COLOR_BIT);
+  fb.color_image_view = create_image_view(ctx, fb.color_image, color_format, VK_IMAGE_ASPECT_COLOR_BIT);
 
   // Depth
   usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-  fb.depth_image = create_default_image(ctx, extent.width, extent.height, usage, depth_format);
+  fb.depth_image = create_image(ctx, extent.width, extent.height, usage, depth_format);
   fb.depth_image_device_memory = allocate_and_bind_image_memory(ctx, fb.depth_image);
-  fb.depth_image_view = create_default_image_view(ctx, fb.depth_image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
+  fb.depth_image_view = create_image_view(ctx, fb.depth_image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT);
 
   VkImageView offscreen_image_views[] = {fb.color_image_view, fb.depth_image_view};
   fb.framebuffer = create_framebuffer(ctx->device, fb.render_pass, 2, offscreen_image_views, extent);

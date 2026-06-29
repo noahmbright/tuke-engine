@@ -526,6 +526,7 @@ void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *col
 // Want to have this transitioning business be entirely backend
 void transition_image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout);
 
+// Can make textures in a GPU native format KTX: https://developer.imaginationtech.com/solutions/pvrtextool/
 VulkanTexture create_vulkan_texture(
     VulkanContext *ctx,
     u32 width,

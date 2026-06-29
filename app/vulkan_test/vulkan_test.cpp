@@ -138,7 +138,7 @@ int main() {
   while (!glfwWindowShouldClose(window)) {
     i32 height, width;
     glfwGetWindowSize(window, &width, &height);
-    update_key_inputs_glfw(&inputs, window);
+    update_inputs_glfw(&inputs, window);
     glfwPollEvents();
 
     f32 t1 = glfwGetTime();
