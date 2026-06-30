@@ -5,6 +5,7 @@
 {{ PUSH_CONSTANT }} uniform ShaderToy {
     vec2 res;
     float t;
+    vec4 data0;
 } st;
 
 {{ LOCATION 0 }} in vec2 uv;
@@ -29,16 +30,21 @@ bool intersect_world(vec3 p, out vec3 normal, out vec3 c, out float d) {
     vec3 sphere_pos = vec3(0.0, ball_y, 0.0);
     float d_sphere = sphere_sdf(sphere_pos, sphere_r, p);
 
-    float d_table = rectangle_sdf(vec3(3.0, 0.25, 5.0), p);
+    vec3 table_dims = vec3(3.0, 0.25, 5.0);
+    float d_table = rectangle_sdf(table_dims, p);
 
     d = min(d_sphere, d_table);
 
     if (d < 0.01) {
-        if (d_sphere < d_table) {
+        if (d_sphere < d_table) { // Hit sphere
             c = vec3(0.2, 0.1, 1.0);
             normal = (p - sphere_pos) / sphere_r;
-        } else {
-            c = vec3(0.1, 0.8, 0.4);
+        } else { // Hit table
+            // Need to move this to the table's coordinate system
+            float stripe_width = 0.1;
+            float is_stripe = min(abs(p.x) - stripe_width / 2.0,(table_dims.x - abs(p.x) - stripe_width));
+            float blend = smoothstep(fwidth(is_stripe), 0.0, is_stripe);
+            c = mix(vec3(0.9), vec3(0.1, 0.8, 0.4), blend);
             normal = vec3(0.0, -1.0, 0.0); // TODO
         }
         return true;
@@ -52,10 +58,15 @@ bool intersect_world(vec3 p, out vec3 normal, out vec3 c, out float d) {
 
 void main (){
     vec2 iuv = (2 * gl_FragCoord.xy - st.res) / st.res.y;
-    vec3 ro = vec3(0.0, -2.0, -5.0);         // ray origin
-    vec3 rd = normalize(vec3(iuv, 1.0));    // ray direction
-    vec3 lp = vec3(4.0, -8.0, -5.0);       // light position
-    vec3 lc = vec3(0.6, 0.6, 0.8);          // light color
+    vec3 ro = vec3(0.0, -2.0, -5.0);
+    vec3 rd = normalize(vec3(iuv, 1.0));
+    vec3 lp = vec3(4.0, -8.0, -5.0);
+    vec3 lc = vec3(0.6, 0.6, 0.8);
+
+    if (length(iuv - vec2(st.data0)) < st.data0.z) {
+        frag_color = vec4(vec3(1.0), 1.0);
+        return;
+    }
 
     float t = 0.0;
     vec3 normal;

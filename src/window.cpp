@@ -81,7 +81,9 @@ void update_inputs_glfw(Inputs *inputs, GLFWwindow *window) {
   inputs->prev_rclick = inputs->curr_rclick;
   inputs->curr_rclick = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
 
-  glfwGetCursorPos(window, &inputs->cursor_x, &inputs->cursor_y);
+  inputs->prev_cursor_x = inputs->curr_cursor_x;
+  inputs->prev_cursor_y = inputs->curr_cursor_y;
+  glfwGetCursorPos(window, &inputs->curr_cursor_x, &inputs->curr_cursor_y);
 }
 
 Vec2 get_cursor_position(GLFWwindow *window) {

@@ -44,6 +44,25 @@ Deferred pending render pass / dynamic rendering redesign. Issues to revisit:
 
 ## Missing Features
 
+**Texture arrays (`sampler2DArray`). [HIGH PRIORITY]**
+Needed for UI (logo, buttons, icons). One `VkImage` with `arrayLayers=N`, view type
+`VK_IMAGE_VIEW_TYPE_2D_ARRAY`, per-layer upload via `baseArrayLayer` in `VkBufferImageCopy`.
+Reflector needs a `sampler2DArray` token that emits the same `VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER`
+as `sampler2D`. Asset system needs to store aspect ratio per layer at load time.
+
+**Hot reloading. [HIGH PRIORITY]**
+Two phases:
+1. Game library: compile game logic as `.dylib`, main loop calls through function pointer table,
+   `dlopen`/`dlclose` on file change. All game state lives in a blob owned by the executable
+   and passed in each frame — library is stateless functions only.
+2. Shader hot reload: poll `stat()` on shader source files, recompile on change,
+   `vkDeviceWaitIdle`, swap `VkPipeline` in `VulkanMaterial`, destroy old pipeline.
+
+**Fullscreen and window resize. [HIGH PRIORITY]**
+Fullscreen: `glfwSetWindowMonitor`. Resize requires catching `VK_ERROR_OUT_OF_DATE_KHR` from
+`vkAcquireNextImageKHR` / `vkQueuePresentKHR` and rebuilding the swapchain, framebuffers, and
+any size-dependent images (offscreen buffers, depth).
+
 **Swapchain recreation on window resize.**
 Current code crashes or produces validation errors if the window is resized. Requires catching
 `VK_ERROR_OUT_OF_DATE_KHR` from `vkAcquireNextImageKHR` / `vkQueuePresentKHR` and rebuilding

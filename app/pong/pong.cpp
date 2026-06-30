@@ -12,6 +12,15 @@
 #include "vulkan_base.h"
 #include "window.h"
 
+static const f32 MENU_UI_WIDTH = 0.7f;
+
+static const Vec2 menu_ui_pos[NUM_MENU_UIS] = {
+    [MENU_UI_LOGO] = vec2(0.0f, -0.5f),
+    [MENU_UI_STORY] = vec2(0.0f, 0.0),
+    [MENU_UI_1V1] = vec2(0.0f, 0.3f),
+    [MENU_UI_OPTIONS] = vec2(0.0f, 0.6f),
+};
+
 static const char *texture_names[NUM_TEXTURES] = {
     "textures/generic_girl.jpg", "textures/pong/field_background.jpg", "textures/girl_face.jpg",
     "textures/girl_face_normal_map.jpg"
@@ -109,7 +118,7 @@ State setup_state(const char *title) {
       .left_score = state.right_score = 0,
       .window = window,
       .ctx = create_vulkan_context(title, window_info),
-      .intro_active = true,
+      .menu_state = {.intro_active = true, .selected_option = MENU_UI_STORY},
   };
 
   VulkanContext *ctx = &state.ctx;
@@ -222,29 +231,32 @@ void destroy_state(State *state) {
   destroy_vulkan_context(ctx);
 }
 
-void render(State *state) {
-  VulkanContext *ctx = &state->ctx;
+void render(State *s) {
+  VulkanContext *ctx = &s->ctx;
   begin_frame(ctx);
   VkCommandBuffer cmd = begin_command_buffer(ctx);
   begin_render_pass(
-      ctx, cmd, ctx->render_pass, ctx->framebuffers[ctx->image_index], state->clear_values, 2, state->viewport_state
+      ctx, cmd, ctx->render_pass, ctx->framebuffers[ctx->image_index], s->clear_values, 2, s->viewport_state
   );
 
-  switch (state->game_mode) {
+  switch (s->game_mode) {
   case GAMEMODE_PLAYING:
   case GAMEMODE_PAUSED:
-    render_mesh(cmd, &state->mesh, &state->background_mat);
-    render_mesh_instanced(cmd, &state->mesh, &state->paddle_mat, InstanceDataUBO_model_array_size, NULL);
+    render_mesh(cmd, &s->mesh, &s->background_mat);
+    render_mesh_instanced(cmd, &s->mesh, &s->paddle_mat, InstanceDataUBO_model_array_size, NULL);
     break;
   case GAMEMODE_MAIN_MENU: {
     VulkanMesh mesh = {.vertex_count = 6};
-    Vec2 res = vec2(state->window_width, state->window_height);
-    ShaderToy st = {.res = res, .t = (f32)state->time};
-    push_constants_material(cmd, &state->main_menu_mat, &st);
-    render_mesh(cmd, &mesh, &state->main_menu_mat);
+    Vec2 res = vec2(s->window_width, s->window_height);
+    f32 selector_size = s->menu_state.intro_active ? 0.0f : 0.05f;
+    Vec4 data0 = vec4(s->menu_state.selector_pos.x, s->menu_state.selector_pos.y, selector_size, 0.0f);
+    ShaderToy st = {.res = res, .t = (f32)s->menu_state.anim_t, .data0 = data0};
+    push_constants_material(cmd, &s->main_menu_mat, &st);
+    render_mesh(cmd, &mesh, &s->main_menu_mat);
 
-    write_streaming_buffer(&state->ui_buffer, state->ui_elements, 0, sizeof(state->ui_elements));
-    render_mesh_instanced(cmd, &mesh, &state->ui_mat, NUM_MENU_UIS, &state->ui_buffer);
+    u32 instance_count = s->menu_state.intro_active ? 0 : NUM_MENU_UIS;
+    write_streaming_buffer(&s->ui_buffer, s->ui_elements, 0, sizeof(s->ui_elements));
+    render_mesh_instanced(cmd, &mesh, &s->ui_mat, instance_count, &s->ui_buffer);
     break;
   }
   default:
@@ -255,7 +267,7 @@ void render(State *state) {
   VK_CHECK(vkEndCommandBuffer(cmd), "Failed to end command buffer");
   submit_and_present(ctx, cmd);
 
-  state->current_frame++;
+  s->current_frame++;
   update_frame_index(ctx);
 }
 
@@ -284,22 +296,22 @@ void process_inputs_paused(State *state) {
   }
 }
 
-void process_inputs_playing(State *state, f32 dt) {
-  const Inputs *inputs = &state->inputs;
+void process_inputs_playing(State *st, f32 dt) {
+  const Inputs *inputs = &st->inputs;
 
   if (key_pressed(inputs, INPUT_KEY_ESCAPE)) {
     printf("pausing\n");
-    state->game_mode = GAMEMODE_PAUSED;
+    st->game_mode = GAMEMODE_PAUSED;
   }
 
-  bool horizontal_enabled = (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED);
+  bool horizontal_enabled = (st->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED);
   Vec2 input_direction = inputs_to_direction(inputs);
   input_direction.x *= horizontal_enabled;
 
-  if (key_pressed(inputs, INPUT_KEY_SPACEBAR) && state->pong_mode == PONG_MODE_BETWEEN_POINTS) {
+  if (key_pressed(inputs, INPUT_KEY_SPACEBAR) && st->pong_mode == PONG_MODE_BETWEEN_POINTS) {
 
     // TODO engine: convert to a branchless scheme
-    f32 theta = 2 * PI * random_f32_xoroshiro128_plus(&state->rngs.ball_direction);
+    f32 theta = 2 * PI * random_f32_xoroshiro128_plus(&st->rngs.ball_direction);
     const f32 half_pi = PI / 2.0f;
     const f32 epsilon = PI / 16.0f;
     const f32 top_min = half_pi - epsilon;
@@ -308,76 +320,131 @@ void process_inputs_playing(State *state, f32 dt) {
     const f32 bottom_max = 3 * half_pi + epsilon;
 
     while (interval_contains(theta, top_min, top_max) || interval_contains(theta, bottom_min, bottom_max)) {
-      theta = random_f32_xoroshiro128_plus(&state->rngs.ball_direction);
+      theta = random_f32_xoroshiro128_plus(&st->rngs.ball_direction);
     }
 
     const f32 x = cosf(theta);
     const f32 y = sinf(theta);
-    state->velocities[ENTITY_BALL].x = state->ball_speed * x;
-    state->velocities[ENTITY_BALL].y = state->ball_speed * y;
+    st->velocities[ENTITY_BALL].x = st->ball_speed * x;
+    st->velocities[ENTITY_BALL].y = st->ball_speed * y;
 
-    state->pong_mode = PONG_MODE_LIVE_BALL;
+    st->pong_mode = PONG_MODE_LIVE_BALL;
   }
 
   // TODO replace with powerup
   if (key_pressed(inputs, INPUT_KEY_H)) {
-    state->movement_mode = (state->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED)
-                               ? MOVEMENT_MODE_VERTICAL_ONLY
-                               : MOVEMENT_MODE_HORIZONTAL_ENABLED;
+    st->movement_mode = (st->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED) ? MOVEMENT_MODE_VERTICAL_ONLY
+                                                                                : MOVEMENT_MODE_HORIZONTAL_ENABLED;
   }
 
   // TODO make the paddle scale over the course of the game
   if (len_v2(input_direction) > EPSILON) {
     Vec3 movement = Vec3(input_direction.x, input_direction.y, 0.0f);
-    inc_v3(&state->positions[ENTITY_LEFT_PADDLE], scale_v3(movement, dt * state->left_paddle_speed));
+    inc_v3(&st->positions[ENTITY_LEFT_PADDLE], scale_v3(movement, dt * st->left_paddle_speed));
   }
 }
 
-void process_inputs_main_menu(State *state) {
-  const Inputs *inputs = &state->inputs;
+void press_menu_ui(State *st) {
+  switch (st->menu_state.selected_option) {
+  case MENU_UI_STORY:
+    st->game_mode = GAMEMODE_PLAYING;
+    break;
+  case MENU_UI_1V1:
+    break;
+  case MENU_UI_OPTIONS:
+    break;
+
+  case MENU_UI_LOGO:
+  default:
+    return;
+  }
+}
+
+void process_inputs_main_menu(State *st) {
+  const Inputs *inputs = &st->inputs;
+  MenuState *ms = &st->menu_state;
 
   if (key_pressed(inputs, INPUT_KEY_SPACEBAR)) {
-    printf("starting game\n");
-    state->intro_active = false;
+    ms->intro_active = false;
+  }
+
+  if (ms->intro_active) {
+    return;
+  }
+
+  f32 x0 = (f32)inputs->curr_cursor_x / (f32)st->window_width * 2.0f - 1.0f;
+  f32 y0 = (f32)inputs->curr_cursor_y / (f32)st->window_height * 2.0f - 1.0f;
+  if (mouse_moved(inputs)) {
+    for (u32 i = MENU_UI_STORY; i < NUM_MENU_UIS; i++) {
+      bool hit = intersect_ui(&st->ui_elements[i], x0, y0);
+      if (hit) {
+        st->menu_state.selected_option = (MenuUI)i;
+
+        break;
+      }
+    }
   }
 
   if (lclick_pressed(inputs)) {
-    f32 x0 = (f32)inputs->cursor_x / (f32)state->window_width * 2.0f - 1.0f;
-    f32 y0 = (f32)inputs->cursor_y / (f32)state->window_height * 2.0f - 1.0f;
-
-    printf("%f, %f\n", x0, y0);
-    bool hit_logo = intersect_ui(&state->ui_elements[MENU_UI_LOGO], x0, y0);
-    if (hit_logo) {
-      printf("clicked logo\n");
-      state->game_mode = GAMEMODE_PLAYING;
+    bool hit = intersect_ui(&st->ui_elements[ms->selected_option], x0, y0);
+    if (hit) {
+      press_menu_ui(st);
     }
+  } else if (key_pressed(inputs, INPUT_KEY_DOWN_ARROW)) {
+    printf("down\n");
+    switch (ms->selected_option) {
+    case MENU_UI_STORY:
+      ms->selected_option = MENU_UI_1V1;
+      break;
+    case MENU_UI_1V1:
+      ms->selected_option = MENU_UI_OPTIONS;
+      break;
+    default:
+      break;
+    }
+  } else if (key_pressed(inputs, INPUT_KEY_UP_ARROW)) {
+    printf("up\n");
+    switch (ms->selected_option) {
+    case MENU_UI_1V1:
+      ms->selected_option = MENU_UI_STORY;
+      break;
+    case MENU_UI_OPTIONS:
+      ms->selected_option = MENU_UI_1V1;
+      break;
+    default:
+      break;
+    }
+  } else if (key_pressed(inputs, INPUT_KEY_ENTER)) {
+    press_menu_ui(st);
   }
 }
 
-void process_inputs(State *state, const f32 dt) {
-  glfwGetFramebufferSize(state->window, &state->window_width, &state->window_height);
-  update_inputs_glfw(&state->inputs, state->window);
+void process_inputs(State *st, const f32 dt) {
+  glfwGetFramebufferSize(st->window, &st->window_width, &st->window_height);
+  update_inputs_glfw(&st->inputs, st->window);
 
-  switch (state->game_mode) {
+  switch (st->game_mode) {
   case GAMEMODE_PAUSED: {
-    process_inputs_paused(state);
+    process_inputs_paused(st);
     break;
   }
   case GAMEMODE_PLAYING: {
-    process_inputs_playing(state, dt);
+    process_inputs_playing(st, dt);
     break;
   }
   case GAMEMODE_MAIN_MENU: {
-    process_inputs_main_menu(state);
+    process_inputs_main_menu(st);
+    st->menu_state.anim_t += dt;
+    st->menu_state.intro_active = st->menu_state.anim_t < INTRO_DURATION;
     break;
   }
   }
 }
 
-void handle_collisions(State *state, const f32 dt) {
-  Vec3 *positions = state->positions;
-  Vec3 *scales = state->scales;
-  Vec3 *velocities = state->velocities;
+void handle_collisions(State *st, const f32 dt) {
+  Vec3 *positions = st->positions;
+  Vec3 *scales = st->scales;
+  Vec3 *velocities = st->velocities;
 
   Vec3 ball_pos = positions[ENTITY_BALL];
   Vec3 ball_scale = scales[ENTITY_BALL];
@@ -397,24 +464,24 @@ void handle_collisions(State *state, const f32 dt) {
 
   // collisions with boundaries
   if (ball_pos.x + 0.5f * ball_scale.x > arena_horizontal_boundary) {
-    state->left_score++;
+    st->left_score++;
     positions[ENTITY_BALL] = ball_pos0;
-    state->pong_mode = PONG_MODE_BETWEEN_POINTS;
-    state->velocities[ENTITY_BALL] = Vec3(0.0f);
+    st->pong_mode = PONG_MODE_BETWEEN_POINTS;
+    st->velocities[ENTITY_BALL] = Vec3(0.0f);
   }
   if (ball_pos.x - 0.5f * ball_scale.x < -arena_horizontal_boundary) {
-    state->right_score++;
+    st->right_score++;
     positions[ENTITY_BALL] = ball_pos0;
-    state->pong_mode = PONG_MODE_BETWEEN_POINTS;
-    state->velocities[ENTITY_BALL] = Vec3(0.0f);
+    st->pong_mode = PONG_MODE_BETWEEN_POINTS;
+    st->velocities[ENTITY_BALL] = Vec3(0.0f);
   }
 
   if (ball_pos.y + 0.5f * ball_scale.y > arena_vertical_boundary) {
-    state->velocities[ENTITY_BALL].y = -fabs(state->velocities[ENTITY_BALL].y);
+    st->velocities[ENTITY_BALL].y = -fabs(st->velocities[ENTITY_BALL].y);
     ball_pos.y = arena_vertical_boundary - 0.5f * ball_scale.y;
   }
   if (ball_pos.y - 0.5f * ball_scale.y < -arena_vertical_boundary) {
-    state->velocities[ENTITY_BALL].y = fabs(state->velocities[ENTITY_BALL].y);
+    st->velocities[ENTITY_BALL].y = fabs(st->velocities[ENTITY_BALL].y);
     ball_pos.y = -arena_vertical_boundary + 0.5f * ball_scale.y;
   }
 
@@ -447,37 +514,37 @@ void handle_collisions(State *state, const f32 dt) {
     positions[ENTITY_RIGHT_PADDLE].y = arena_vertical_boundary - 0.5f * right_paddle_scale.y;
   }
 
-  if (state->left_paddle_cooldown <= 0.0f) {
+  if (st->left_paddle_cooldown <= 0.0f) {
     // ball paddle collisions
     SweptAABBCollisionCheck left_collision_check = swept_aabb_collision(
         dt, left_paddle_pos, left_paddle_scale, left_paddle_velocity, ball_pos, ball_scale, ball_velocity
     );
 
     if (left_collision_check.did_collide) {
-      state->left_paddle_cooldown = 1.0f;
+      st->left_paddle_cooldown = 1.0f;
       Vec3 normal = left_collision_check.normal;
       log_v3(normal);
-      state->last_paddle_to_hit = LAST_PADDLE_LEFT;
+      st->last_paddle_to_hit = LAST_PADDLE_LEFT;
       // state->screen_shake.active = true;
 
       // normal is from paddles's perspective
       if (left_collision_check.was_overlapping) {
         const Vec3 displacement = scale_v3(normal, left_collision_check.penetration_depth);
-        inc_v3(&state->positions[ENTITY_BALL], displacement);
+        inc_v3(&st->positions[ENTITY_BALL], displacement);
       } else {
-        inc_v3(&state->positions[ENTITY_BALL], scale_v3(ball_velocity, left_collision_check.t));
+        inc_v3(&st->positions[ENTITY_BALL], scale_v3(ball_velocity, left_collision_check.t));
       }
 
       f32 asdf = 2.0f * dot_v3(ball_velocity, normal);
-      state->velocities[ENTITY_BALL] = sub_v3(ball_velocity, scale_v3(normal, asdf));
+      st->velocities[ENTITY_BALL] = sub_v3(ball_velocity, scale_v3(normal, asdf));
     }
   } else {
-    state->left_paddle_cooldown -= dt;
+    st->left_paddle_cooldown -= dt;
   }
 
   if (aabb_collision(ball_pos, ball_scale, right_paddle_pos, right_paddle_scale)) {
-    state->last_paddle_to_hit = LAST_PADDLE_RIGHT;
-    state->velocities[ENTITY_BALL].x = -state->velocities[ENTITY_BALL].x;
+    st->last_paddle_to_hit = LAST_PADDLE_RIGHT;
+    st->velocities[ENTITY_BALL].x = -st->velocities[ENTITY_BALL].x;
     // state->screen_shake.active = true;
   }
 }
@@ -507,54 +574,55 @@ void update_screen_shake(State *state, f32 dt) {
   write_to_uniform_buffer(&state->uniform_buffer, &camera_vp, state->uniform_writes.camera_vp);
 }
 
-void update_game_state(State *state, const f32 dt) {
+void update_game_state(State *st, const f32 dt) {
 
-  if (state->game_mode == GAMEMODE_PAUSED) {
+  if (st->game_mode == GAMEMODE_PAUSED) {
     return;
   }
 
-  if (state->game_mode == GAMEMODE_MAIN_MENU) {
-    Vec2 size = vec2(1.0f, 1.0f);
-    if (state->intro_active) {
-      size = vec2(0.0f, 0.0f);
-    }
-
-    state->ui_elements[MENU_UI_LOGO] = {.center = vec2(0.0f, 0.0f), .rotation = (f32)state->time, .size = size};
+  if (st->game_mode == GAMEMODE_MAIN_MENU) {
+    Vec2 logo_size = vec2(1.0f, 0.3f);
+    Vec2 option_size = vec2(MENU_UI_WIDTH, 0.2f);
+    st->menu_state.selector_pos = vec2(-1.1 * MENU_UI_WIDTH, menu_ui_pos[st->menu_state.selected_option].y);
+    st->ui_elements[MENU_UI_LOGO] = {.center = vec2(0.0f, -0.5f), .rotation = 0.0f, .size = logo_size};
+    st->ui_elements[MENU_UI_STORY] = {.center = menu_ui_pos[MENU_UI_STORY], .rotation = 0.0f, .size = option_size};
+    st->ui_elements[MENU_UI_1V1] = {.center = menu_ui_pos[MENU_UI_1V1], .rotation = 0.0f, .size = option_size};
+    st->ui_elements[MENU_UI_OPTIONS] = {.center = menu_ui_pos[MENU_UI_OPTIONS], .rotation = 0.0f, .size = option_size};
     return;
   }
 
-  state->time_since_last_powerup_draw += dt;
-  if (state->time_since_last_powerup_draw > powerup_draw_interval_in_sec) {
-    state->time_since_last_powerup_draw -= powerup_draw_interval_in_sec;
+  st->time_since_last_powerup_draw += dt;
+  if (st->time_since_last_powerup_draw > powerup_draw_interval_in_sec) {
+    st->time_since_last_powerup_draw -= powerup_draw_interval_in_sec;
 
-    f32 prob_to_spawn = random_f32_xoroshiro128_plus(&state->rngs.powerup_spawn);
+    f32 prob_to_spawn = random_f32_xoroshiro128_plus(&st->rngs.powerup_spawn);
     if (prob_to_spawn < prob_powerup_spawns) {
       // u32 powerup_index = draw_alias_method(&state->powerup_alias_table);
     }
   }
 
-  if (state->positions[ENTITY_BALL].y > state->positions[ENTITY_RIGHT_PADDLE].y) {
-    state->velocities[ENTITY_RIGHT_PADDLE].y = cpu_speed0;
+  if (st->positions[ENTITY_BALL].y > st->positions[ENTITY_RIGHT_PADDLE].y) {
+    st->velocities[ENTITY_RIGHT_PADDLE].y = cpu_speed0;
   } else {
-    state->velocities[ENTITY_RIGHT_PADDLE].y = -cpu_speed0;
+    st->velocities[ENTITY_RIGHT_PADDLE].y = -cpu_speed0;
   }
 
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
-    inc_v3(&state->positions[i], scale_v3(state->velocities[i], dt));
+    inc_v3(&st->positions[i], scale_v3(st->velocities[i], dt));
   }
 
-  handle_collisions(state, dt);
+  handle_collisions(st, dt);
 
   for (u32 i = 0; i < NUM_ENTITIES; i++) {
-    Mat4 *m = &state->instance_data.model[i];
+    Mat4 *m = &st->instance_data.model[i];
     *m = mat4();
-    scale_m4(state->scales[i], m);
-    translate_m4(state->positions[i], m);
+    scale_m4(st->scales[i], m);
+    translate_m4(st->positions[i], m);
   }
 
-  write_to_uniform_buffer(&state->uniform_buffer, &state->instance_data, state->uniform_writes.instance_data);
+  write_to_uniform_buffer(&st->uniform_buffer, &st->instance_data, st->uniform_writes.instance_data);
 
-  if (state->screen_shake.active) {
-    update_screen_shake(state, dt);
+  if (st->screen_shake.active) {
+    update_screen_shake(st, dt);
   }
 }

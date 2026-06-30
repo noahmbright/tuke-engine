@@ -27,6 +27,8 @@ const u16 unit_square_indices[] = {
 };
 // clang-format on
 
+const f32 INTRO_DURATION = 2.0f;
+
 // using dimensions in meters
 // 30m is about 96ft, a basketball court
 const f32 aspect_ratio = 16.0f / 9.0f;
@@ -36,7 +38,7 @@ const f32 x_inset_from_wall0 = 0.05f * arena_dimensions_x0;
 const f32 x_offset0 = arena_dimensions_x0 / 2.0f - x_inset_from_wall0;
 const Vec3 arena_dimensions0{arena_dimensions_x0, arena_dimensions_y0, 1.0f};
 
-enum EntityIndex { ENTITY_LEFT_PADDLE = 0, ENTITY_RIGHT_PADDLE, ENTITY_BALL, NUM_ENTITIES };
+typedef enum { ENTITY_LEFT_PADDLE = 0, ENTITY_RIGHT_PADDLE, ENTITY_BALL, NUM_ENTITIES } EntityIndex;
 
 enum LastPaddle {
   LAST_PADDLE_NEITHER,
@@ -122,7 +124,7 @@ struct PowerUp {
   Vec4 position;
 };
 
-typedef enum { MENU_UI_LOGO, NUM_MENU_UIS } MenuUI;
+typedef enum { MENU_UI_LOGO, MENU_UI_STORY, MENU_UI_1V1, MENU_UI_OPTIONS, NUM_MENU_UIS } MenuUI;
 
 typedef struct {
   Vec2 center;
@@ -131,13 +133,21 @@ typedef struct {
   u32 tex_id;
 } UiElement;
 
-struct State {
+typedef struct {
+  bool intro_active;
+  MenuUI selected_option;
+  Vec2 selector_pos;
+  f32 anim_t;
+} MenuState;
+
+typedef struct {
   GLFWwindow *window;
   int window_width;
   int window_height;
 
   UiElement ui_elements[32];
-  bool intro_active;
+
+  MenuState menu_state;
 
   u32 right_score, left_score;
   u32 current_frame;
@@ -194,7 +204,7 @@ struct State {
   PowerUp powerups[MAX_POWERUPS];
   u32 current_powerup_index;
   AliasMethod powerup_alias_table;
-};
+} State;
 
 State setup_state(const char *title);
 void destroy_state(State *state);

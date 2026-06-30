@@ -45,8 +45,10 @@ struct Inputs {
   f64 scroll_dx;
   f64 scroll_dy;
 
-  f64 cursor_x;
-  f64 cursor_y;
+  f64 curr_cursor_x;
+  f64 curr_cursor_y;
+  f64 prev_cursor_x;
+  f64 prev_cursor_y;
 
   bool key_inputs_array[2][NUM_INPUTS];
   bool *curr;
@@ -69,8 +71,11 @@ Vec2 inputs_to_direction(const Inputs *inputs);
 
 inline bool key_pressed(const Inputs *inputs, Input key) { return inputs->curr[key] && !inputs->prev[key]; }
 
-inline bool lclick_pressed(const Inputs *inputs) { return inputs->curr_lclick && !inputs->prev_lclick; }
-
 inline bool key_released(const Inputs *inputs, Input key) { return !inputs->curr[key] && inputs->prev[key]; }
 
 inline bool key_held(const Inputs *inputs, Input key) { return inputs->curr[key]; }
+
+inline bool lclick_pressed(const Inputs *inputs) { return inputs->curr_lclick && !inputs->prev_lclick; }
+inline bool mouse_moved(const Inputs *inputs) {
+  return inputs->curr_cursor_x != inputs->prev_cursor_x || inputs->curr_cursor_y != inputs->prev_cursor_y;
+}
