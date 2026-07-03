@@ -326,7 +326,7 @@ static TemplateStringReplacement directive_replacement_set_binding(Backend backe
 
   switch (backend) {
   case BACKEND_OPENGL:
-    if (descriptor_type == DESCRIPTOR_TYPE_SAMPLER2D) {
+    if (descriptor_type == DESCRIPTOR_TYPE_SAMPLER2D || descriptor_type == DESCRIPTOR_TYPE_SAMPLER2D_ARRAY) {
       replacement.string = "";
       replacement.length = 0;
     } else if (descriptor_type == DESCRIPTOR_TYPE_UNIFORM) {
@@ -897,10 +897,9 @@ static void generate_vulkan_descriptor_pool_size_array(FILE *dst, const ParsedSh
       ir->descriptor_binding_types[DESCRIPTOR_TYPE_UNIFORM]
   );
 
-  fprintf(
-      dst, "  { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = %u },\n",
-      ir->descriptor_binding_types[DESCRIPTOR_TYPE_SAMPLER2D]
-  );
+  u32 num_samplers = ir->descriptor_binding_types[DESCRIPTOR_TYPE_SAMPLER2D] +
+                     ir->descriptor_binding_types[DESCRIPTOR_TYPE_SAMPLER2D_ARRAY];
+  fprintf(dst, "  { .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = %u },\n", num_samplers);
   fprintf(dst, "};\n\n");
 }
 

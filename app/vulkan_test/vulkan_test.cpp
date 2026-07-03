@@ -17,14 +17,16 @@ enum TextureId {
   NUM_TEXTURES
 };
 
-static const char *texture_names[NUM_TEXTURES] = {
-    "textures/generic_girl.jpg", "textures/girl_face.jpg", "textures/girl_face_normal_map.jpg", "textures/brickwall.jpg"
-};
-
 int main() {
   GLFWwindow *window = create_window(true /* is_vulkan */);
   VulkanTest t = init_vulkan_test(window);
 
+  static const StringArray texture_names[NUM_TEXTURES] = {
+      TEX("textures/generic_girl.jpg"),
+      TEX("textures/girl_face.jpg"),
+      TEX("textures/girl_face_normal_map.jpg"),
+      TEX("textures/brickwall.jpg"),
+  };
   VulkanTexture textures[NUM_TEXTURES];
   load_vulkan_textures(&t.ctx, texture_names, NUM_TEXTURES, textures);
 

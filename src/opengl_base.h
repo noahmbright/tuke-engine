@@ -180,11 +180,11 @@ inline void gl_texture_resize(GLTexture *texture, u32 height, u32 width) {
 }
 
 inline GLTexture create_gl_texture_from_image(const char *filepath) {
-  STBHandle stb_handle = load_texture(filepath);
+  STBImage stb_handle = load_texture(filepath, true /*flip_vertically*/);
   GLenum texture_format = (stb_handle.n_channels == 4) ? GL_RGBA : GL_RGB;
   GLTexture texture = create_gl_texture2d(stb_handle.height, stb_handle.width, texture_format, GL_UNSIGNED_BYTE);
   gl_texture_buffer_data(&texture, stb_handle.data);
-  free_stb_handle(&stb_handle);
+  free_stb_image(&stb_handle);
   return texture;
 }
 

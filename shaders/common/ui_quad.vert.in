@@ -24,6 +24,7 @@ vec2 uvs[6] = vec2[](
 );
 
 {{ LOCATION 0 }} out vec2 uv;
+{{ LOCATION 1 }} out float tex_id;
 
 void main() {
     float r = a_rotation;
@@ -31,4 +32,5 @@ void main() {
     vec2 pos = rot * (a_size * positions[{{ VERTEX_INDEX }}]) + a_center;
     gl_Position = vec4(pos, 0.0, 1.0);
     uv = uvs[{{ VERTEX_INDEX }}];
+    tex_id = float(a_tex_id);
 }

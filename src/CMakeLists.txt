@@ -9,8 +9,16 @@ file(GLOB_RECURSE ENGINE_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/physics.cpp
     ${CMAKE_SOURCE_DIR}/src/linalg.cpp
     ${CMAKE_SOURCE_DIR}/src/statistics.cpp
-    ${CMAKE_SOURCE_DIR}/src/stb_image.cpp
-    ${CMAKE_SOURCE_DIR}/src/stb_truetype.cpp
+    ${CMAKE_SOURCE_DIR}/src/stb_image.c
+    ${CMAKE_SOURCE_DIR}/src/stb_image_resize.c
+    ${CMAKE_SOURCE_DIR}/src/stb_truetype.c
+)
+
+set_source_files_properties (
+    ${CMAKE_SOURCE_DIR}/src/stb_image.c
+    ${CMAKE_SOURCE_DIR}/src/stb_image_resize.c
+    ${CMAKE_SOURCE_DIR}/src/stb_truetype.c
+    PROPERTIES COMPILE_OPTIONS "-O3"
 )
 
 add_library(engine STATIC ${ENGINE_SOURCE_FILES})

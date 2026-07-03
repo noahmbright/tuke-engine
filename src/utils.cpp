@@ -35,28 +35,19 @@ const char *read_file(const char *path, unsigned long *size) {
   return buffer;
 }
 
-STBHandle load_texture_metadata(const char *path) {
-  STBHandle handle;
-  if (!stbi_info(path, &handle.width, &handle.height, &handle.n_channels)) {
-    fprintf(stderr, "load_texture_metadata: Failed to load %s, for reason %s\n", path, stbi_failure_reason());
-  }
-  handle.data = NULL;
-  return handle;
-}
-
-STBHandle load_texture(const char *path) {
-  STBHandle handle;
-  stbi_set_flip_vertically_on_load(true);
+STBImage load_texture(const char *path, bool flip_vertically) {
+  STBImage handle;
+  stbi_set_flip_vertically_on_load(flip_vertically);
   handle.data = stbi_load(path, &handle.width, &handle.height, &handle.n_channels, 4);
   handle.n_channels = 4;
   if (!handle.data) {
-    fprintf(stderr, "load_texture: Failed to stbi_load %s\n", path);
+    fprintf(stderr, "%s: Failed to stbi_load %s\n", __func__, path);
     exit(1);
   }
   return handle;
 }
 
-void free_stb_handle(STBHandle *handle) {
+void free_stb_image(STBImage *handle) {
   if (handle->data) {
     stbi_image_free(handle->data);
   } else {

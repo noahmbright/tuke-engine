@@ -68,6 +68,7 @@ enum TextureID {
   TEXTURE_FIELD_BACKGROUND,
   TEXTURE_GIRL_FACE,
   TEXTURE_GIRL_FACE_NORMAL_MAP,
+  TEXTURE_UI,
   NUM_TEXTURES
 };
 
@@ -158,8 +159,7 @@ typedef struct {
   // Renderer
   VulkanContext ctx;
   VulkanTexture textures[NUM_TEXTURES];
-  VkSampler sampler;
-  VkDescriptorSetLayout descriptor_set_layouts[NUM_DESCRIPTOR_SET_LAYOUTS];
+  VkDescriptorSetLayout descriptor_set_layouts[NUM_DESCRIPTOR_SET_LAYOUTS]; // Storage
   VkClearValue clear_values[NUM_ATTACHMENTS];
   ViewportState viewport_state;
   UniformBuffer uniform_buffer;

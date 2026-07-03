@@ -48,6 +48,7 @@ static TokenType string_slice_to_keyword_or_identifier(const char *string, u32 l
   KW("uniform",         TOKEN_TYPE_UNIFORM)
   KW("sampler",         TOKEN_TYPE_SAMPLER)
   KW("sampler2D",       TOKEN_TYPE_SAMPLER2D)
+  KW("sampler2DArray",  TOKEN_TYPE_SAMPLER2D_ARRAY)
   KW("texture2D",       TOKEN_TYPE_TEXTURE2D)
   KW("image2D",         TOKEN_TYPE_IMAGE2D)
   KW("uint",            TOKEN_TYPE_UINT)
@@ -838,7 +839,7 @@ static bool parse_struct(Parser *parser, GLSLStruct *glsl_struct, const char **n
   return true;
 }
 
-//{{ SET_BINDING set binding SET_LABEL label}} uniform sampler2D identifier;
+//{{ SET_BINDING set binding SET_LABEL label}} uniform (sampler2D|sampler2DArray) identifier;
 //{{ SET_BINDING set binding SET_LABEL label}} uniform struct_declaration;
 //  first identifier is a typename, the second is the instance identifier
 static SetBindingDirectiveParse
@@ -925,25 +926,30 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
   template_string_slice->end = cur_tok.start;
   directive_parse.next_glsl_source_start = cur_tok.start;
 
-  // Diverge here - either sampler2D or uniform struct's typename
+  // Diverge here - either sampler2D(Array) or uniform struct's typename
   cur_tok = get_next_token(parser);
-  if (cur_tok.type != TOKEN_TYPE_SAMPLER2D && cur_tok.type != TOKEN_TYPE_TEXT) {
+  if (cur_tok.type != TOKEN_TYPE_SAMPLER2D && cur_tok.type != TOKEN_TYPE_SAMPLER2D_ARRAY &&
+      cur_tok.type != TOKEN_TYPE_TEXT) {
     report_parser_error(
         parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
-        "In SET_BINDING, expected sampler2D or structure type after DOUBLE_R_BRACKETS, got %s",
+        "In SET_BINDING, expected sampler2D(Array) or structure type after DOUBLE_R_BRACKETS, got %s",
         token_type_to_string[cur_tok.type]
     );
     return directive_parse;
   }
 
-  // Sampler
-  if (cur_tok.type == TOKEN_TYPE_SAMPLER2D) {
+  // Sampler/Sampler Array
+  if (cur_tok.type == TOKEN_TYPE_SAMPLER2D || cur_tok.type == TOKEN_TYPE_SAMPLER2D_ARRAY) {
+    DescriptorType descriptor_type =
+        (cur_tok.type == TOKEN_TYPE_SAMPLER2D) ? DESCRIPTOR_TYPE_SAMPLER2D : DESCRIPTOR_TYPE_SAMPLER2D_ARRAY;
+    const char *expected = token_type_to_string[cur_tok.type];
     // Identifier
     cur_tok = get_next_token(parser);
     if (cur_tok.type != TOKEN_TYPE_TEXT) {
       report_parser_error(
           parser, cur_tok.start, TOKEN_TYPE_SEMICOLON,
-          "In SET_BINDING for sampler, expected identifier after sampler2D, got %s", token_type_to_string[cur_tok.type]
+          "In SET_BINDING for sampler, expected identifier after %s, got %s", expected,
+          token_type_to_string[cur_tok.type]
       );
       return directive_parse;
     }
@@ -976,14 +982,14 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
     advance(parser);
     directive_parse.was_successful = true;
     directive_parse.binding = binding;
-    directive_parse.descriptor_type = DESCRIPTOR_TYPE_SAMPLER2D;
+    directive_parse.descriptor_type = descriptor_type;
     directive_parse.descriptor_count = descriptor_count;
     directive_parse.instance_name = instance_tok.start;
     directive_parse.instance_name_len = instance_tok.text_length;
 
     // TODO Don't like the repetition between the directive parse and slice here.
     template_string_slice->binding = binding;
-    template_string_slice->descriptor_type = DESCRIPTOR_TYPE_SAMPLER2D;
+    template_string_slice->descriptor_type = descriptor_type;
     return directive_parse;
   }
 

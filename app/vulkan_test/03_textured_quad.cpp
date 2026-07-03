@@ -1,3 +1,4 @@
+#include "assets.h"
 #include "generated_shader_utils.h"
 
 #include "shaders.h"
@@ -10,19 +11,9 @@ int main() {
   VulkanTest t = init_vulkan_test(window);
 
   // Load texture
-  STBHandle stb = load_texture("textures/brickwall.jpg");
-  u32 size = stb.width * stb.height * stb.n_channels;
-  VulkanBuffer staging_buffer = create_buffer(&t.ctx, BUFFER_TYPE_STAGING, size);
-  void *texture_data;
-  VkResult result =
-      vkMapMemory(t.ctx.device, staging_buffer.memory, 0, staging_buffer.memory_requirements.size, 0, &texture_data);
-  VK_CHECK(result, "Failed to map staging buffer memory");
-
-  VulkanTexture texture =
-      create_vulkan_texture(&t.ctx, stb.width, stb.height, stb.n_channels, stb.data, staging_buffer, texture_data);
-  free_stb_handle(&stb);
-  vkUnmapMemory(t.ctx.device, staging_buffer.memory);
-  destroy_vulkan_buffer(&t.ctx, staging_buffer);
+  VulkanTexture texture;
+  StringArray arr = TEX("textures/brickwall.jpg");
+  load_vulkan_textures(&t.ctx, &arr, 1, &texture);
 
   VulkanMaterial mat;
   init_program_spec(&t.ctx, t.rp, NULL, &common_textured_quad_bringup_program_spec, &mat);

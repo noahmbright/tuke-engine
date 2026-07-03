@@ -1,5 +1,17 @@
 # Pong
 
+## Story
+
+Barun "Baby" Babins enters the pong tournament. Kola is the MC. 
+
+Baby has several power ups:
+    The Great Bambino: Baseball swing, super smash bros sound effect
+    Boss Baby:
+    Baby Driver:
+
+Other characters:
+Devil: Power is breathing fire on the ball which makes it go faster. Emits particles.
+
 Skill checks:
 * AABB collision detection
 * How to batch draw calls - one pipeline for ball and both paddles?
@@ -13,8 +25,6 @@ Skill checks:
 
 Expandable scope – adding effects (particles, trails, distortions, bloom) tests:
 * Dynamic uniform updates
-* Push constants
-* Descriptor updates
 * Multi-pass rendering
 * Sprite batching or instancing
 
@@ -29,9 +39,7 @@ Screens:
 * Settings — enough to understand what a settings subsystem involves
 
 Infrastructure needed (in order):
-* UI coordinate system — screen-space pixels or normalized [0,1]; decide before anything else
 * Text rendering (stb_truetype already stubbed) — unlocks button labels, dialogue, scores
-* Mouse picking — screen-space rect hit test, no GPU work needed
 
 ## Character system
 

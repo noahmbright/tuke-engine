@@ -21,9 +21,12 @@ static const Vec2 menu_ui_pos[NUM_MENU_UIS] = {
     [MENU_UI_OPTIONS] = vec2(0.0f, 0.6f),
 };
 
-static const char *texture_names[NUM_TEXTURES] = {
-    "textures/generic_girl.jpg", "textures/pong/field_background.jpg", "textures/girl_face.jpg",
-    "textures/girl_face_normal_map.jpg"
+static const StringArray texture_paths[NUM_TEXTURES] = {
+    {.paths = {"textures/generic_girl.jpg"}, .num_paths = 1},
+    {.paths = {"textures/pong/field_background.jpg"}, .num_paths = 1},
+    {.paths = {"textures/girl_face.jpg"}, .num_paths = 1},
+    {.paths = {"textures/girl_face_normal_map.jpg"}, .num_paths = 1},
+    {.paths = {"textures/generic_girl.jpg", "textures/girl_face.jpg"}, .num_paths = 2},
 };
 
 void init_buffers(State *state) {
@@ -52,7 +55,7 @@ void init_background_material(State *state) {
   init_program_spec(&state->ctx, state->ctx.render_pass, NULL, &pong_background_program_spec, &state->background_mat);
 
   VkDescriptorImageInfo image_info = {
-      .sampler = state->sampler,
+      .sampler = state->ctx.samplers[SAMPLER_LINEAR_CLAMP],
       .imageView = state->textures[TEXTURE_FIELD_BACKGROUND].image_view,
       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
   };
@@ -121,11 +124,11 @@ State setup_state(const char *title) {
       .menu_state = {.intro_active = true, .selected_option = MENU_UI_STORY},
   };
 
+  // Renderer
   VulkanContext *ctx = &state.ctx;
-  load_vulkan_textures(ctx, texture_names, NUM_TEXTURES, state.textures);
+  load_vulkan_textures(ctx, texture_paths, NUM_TEXTURES, state.textures);
   init_buffers(&state);
 
-  state.sampler = create_sampler(ctx->device);
   set_descriptor_set_layouts(&state.ctx, state.descriptor_set_layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
   init_inputs(&state.inputs);
 
@@ -135,13 +138,29 @@ State setup_state(const char *title) {
 
   init_background_material(&state);
   init_paddles_material(&state);
+
+  // UI material
   PipelineConfig ui_conf = vulkan_pipeline_config();
   ui_conf.depth_test = false;
   init_program_spec(ctx, ctx->render_pass, &ui_conf, &pong_main_menu_program_spec, &state.main_menu_mat);
   init_program_spec(ctx, ctx->render_pass, &ui_conf, &common_ui_quad_program_spec, &state.ui_mat);
 
-  state.ui_buffer = create_streaming_buffer(ctx, sizeof(state.ui_elements));
+  VkDescriptorImageInfo image_info = {
+      .sampler = state.ctx.samplers[SAMPLER_LINEAR_CLAMP],
+      .imageView = state.textures[TEXTURE_UI].image_view,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
 
+  DescriptorWrite writes[] = {
+      {
+          .set_id = LAYOUT_ID_UI,
+          .binding = BINDING_UI_TEX,
+          .image_info = image_info,
+      },
+  };
+  update_vulkan_material(&state.ctx, writes, ARRAY_SIZE(writes), &state.ui_mat);
+
+  state.ui_buffer = create_streaming_buffer(ctx, sizeof(state.ui_elements));
   // End renderer
 
   state.positions[ENTITY_LEFT_PADDLE] = left_paddle_pos0;
@@ -215,7 +234,6 @@ void destroy_state(State *state) {
   vkDeviceWaitIdle(ctx->device);
 
   // texture and sampler
-  vkDestroySampler(ctx->device, state->sampler, NULL);
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
     destroy_vulkan_texture(ctx->device, &state->textures[i]);
   }
@@ -241,6 +259,9 @@ void render(State *s) {
 
   switch (s->game_mode) {
   case GAMEMODE_PLAYING:
+    render_mesh(cmd, &s->mesh, &s->background_mat);
+    render_mesh_instanced(cmd, &s->mesh, &s->paddle_mat, InstanceDataUBO_model_array_size, NULL);
+    break;
   case GAMEMODE_PAUSED:
     render_mesh(cmd, &s->mesh, &s->background_mat);
     render_mesh_instanced(cmd, &s->mesh, &s->paddle_mat, InstanceDataUBO_model_array_size, NULL);
@@ -584,10 +605,16 @@ void update_game_state(State *st, const f32 dt) {
     Vec2 logo_size = vec2(1.0f, 0.3f);
     Vec2 option_size = vec2(MENU_UI_WIDTH, 0.2f);
     st->menu_state.selector_pos = vec2(-1.1 * MENU_UI_WIDTH, menu_ui_pos[st->menu_state.selected_option].y);
-    st->ui_elements[MENU_UI_LOGO] = {.center = vec2(0.0f, -0.5f), .rotation = 0.0f, .size = logo_size};
-    st->ui_elements[MENU_UI_STORY] = {.center = menu_ui_pos[MENU_UI_STORY], .rotation = 0.0f, .size = option_size};
-    st->ui_elements[MENU_UI_1V1] = {.center = menu_ui_pos[MENU_UI_1V1], .rotation = 0.0f, .size = option_size};
-    st->ui_elements[MENU_UI_OPTIONS] = {.center = menu_ui_pos[MENU_UI_OPTIONS], .rotation = 0.0f, .size = option_size};
+    st->ui_elements[MENU_UI_LOGO] = {.center = vec2(0.0f, -0.5f), .rotation = 0.0f, .size = logo_size, .tex_id = 0};
+    st->ui_elements[MENU_UI_STORY] = {
+        .center = menu_ui_pos[MENU_UI_STORY], .rotation = 0.0f, .size = option_size, .tex_id = 1
+    };
+    st->ui_elements[MENU_UI_1V1] = {
+        .center = menu_ui_pos[MENU_UI_1V1], .rotation = 0.0f, .size = option_size, .tex_id = 0
+    };
+    st->ui_elements[MENU_UI_OPTIONS] = {
+        .center = menu_ui_pos[MENU_UI_OPTIONS], .rotation = 0.0f, .size = option_size, .tex_id = 1
+    };
     return;
   }
 

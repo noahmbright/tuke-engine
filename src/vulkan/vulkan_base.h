@@ -269,6 +269,7 @@ typedef struct {
   u32 width;
   VkDeviceMemory device_memory;
   VkImageView image_view;
+  f32 original_aspect;
 } VulkanTexture;
 
 typedef struct {
@@ -508,8 +509,6 @@ create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *set_layouts,
 
 // Framebuffers
 // Generally need a better understanding of lifetime management/ownership for these
-VkFormat find_depth_format(VkPhysicalDevice physical_device);
-
 VkFramebuffer create_framebuffer(
     VkDevice device,
     VkRenderPass render_pass,
@@ -527,14 +526,15 @@ void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *col
 void transition_image_layout(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout, VkImageLayout new_layout);
 
 // Can make textures in a GPU native format KTX: https://developer.imaginationtech.com/solutions/pvrtextool/
-VulkanTexture create_vulkan_texture(
-    VulkanContext *ctx,
-    u32 width,
-    u32 height,
-    u32 n_channels,
+VulkanTexture create_vulkan_texture(VulkanContext *ctx, u32 width, u32 height, u32 layer_count);
+
+void copy_data_to_texture(
+    const VulkanContext *ctx,
+    const VulkanBuffer *staging_buffer,
+    u32 layer_idx,
     u8 *data,
-    VulkanBuffer staging_buffer,
-    void *ptr_to_mapped_memory
+    void *ptr_to_mapped_memory,
+    VulkanTexture *tex
 );
 
 void destroy_vulkan_texture(VkDevice device, VulkanTexture *vulkan_texture);
