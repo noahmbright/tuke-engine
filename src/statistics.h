@@ -70,10 +70,10 @@ static inline f32 random_f32_in_range_xoroshiro128_plus(RNG *rng, f32 min, f32 m
 static inline f32 quadratic_fade(f32 t) { return t * t * (3 - 2 * t); }
 
 // Alias method
-// https://en.wikipedia.org/wiki/Alias_method
-// Potentially requires freed after usage using destroy_alias_method
+// https://en.wikipedia.org/wiki/Alias_table
+// Potentially requires freed after usage using destroy_alias_table
 // TODO reconsider how to manage the allocation of static storage
-struct AliasMethod {
+struct AliasTable {
   RNG rng;
   u32 n;
 
@@ -85,7 +85,7 @@ struct AliasMethod {
   u8 *dynamic_buffer;
 };
 
-u32 draw_alias_method(AliasMethod *alias_method);
-void destroy_alias_method(AliasMethod *alias_method);
-void init_alias_method(AliasMethod *alias_method, u32 n, const f32 *weights, u64 seed);
-void log_alias_method(const AliasMethod *alias_method);
+u32 draw_alias_table(AliasTable *alias_table);
+void destroy_alias_table(AliasTable *alias_table);
+void init_alias_table(AliasTable *alias_table, u32 n, const f32 *weights, u64 seed);
+void log_alias_table(const AliasTable *alias_table);

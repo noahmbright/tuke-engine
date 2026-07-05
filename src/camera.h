@@ -88,11 +88,7 @@ inline CameraMatrices create_camera_matrices(const Camera *camera, f32 aspect) {
   assert(isfinite_v3(camera->direction));
   assert(len2_v3(camera->direction) > EPSILON);
 
-  Vec3 pos = {.x = camera->position.x, .y = camera->position.y, .z = camera->position.z};
-  Vec3 dir = {.x = camera->direction.x, .y = camera->direction.y, .z = camera->direction.z};
-  Vec3 up = {.x = camera->up.x, .y = camera->up.y, .z = camera->up.z};
-
-  camera_matrices.view = make_camera_from_world(pos, dir, up);
+  camera_matrices.view = make_camera_from_world(camera->position, camera->direction, camera->up);
   camera_matrices.projection = camera_perspective_projection(camera, aspect);
   return camera_matrices;
 }
@@ -101,26 +97,18 @@ inline Mat4 make_camera_vp(const Camera *camera, f32 aspect) {
   assert(isfinite_v3(camera->direction));
   assert(len2_v3(camera->direction) > EPSILON);
 
-  Vec3 pos = {.x = camera->position.x, .y = camera->position.y, .z = camera->position.z};
-  Vec3 dir = {.x = camera->direction.x, .y = camera->direction.y, .z = camera->direction.z};
-  Vec3 up = {.x = camera->up.x, .y = camera->up.y, .z = camera->up.z};
-
-  Mat4 view = make_camera_from_world(pos, dir, up);
+  Mat4 view = make_camera_from_world(camera->position, camera->direction, camera->up);
   Mat4 proj = camera_perspective_projection(camera, aspect);
   Mat4 out;
   mult_m4(&proj, &view, &out);
   return out;
 }
 
-inline CameraMatrices camera_matrices_with_offset(const Camera *camera, Vec3 offset, f32 aspect) {
+inline CameraMatrices camera_matrices_offset(const Camera *camera, Vec3 offset, f32 aspect) {
   CameraMatrices camera_matrices;
 
-  Vec3 pos = {
-      .x = camera->position.x + offset.x, .y = camera->position.y + offset.y, .z = camera->position.z + offset.z
-  };
-  Vec3 dir = {.x = camera->direction.x, .y = camera->direction.y, .z = camera->direction.z};
-  Vec3 up = {.x = camera->up.x, .y = camera->up.y, .z = camera->up.z};
-  camera_matrices.view = make_camera_from_world(pos, dir, up);
+  Vec3 pos = add_v3(camera->position, offset);
+  camera_matrices.view = make_camera_from_world(pos, camera->direction, camera->up);
   camera_matrices.projection = camera_perspective_projection(camera, aspect);
   return camera_matrices;
 }

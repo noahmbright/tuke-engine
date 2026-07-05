@@ -67,7 +67,6 @@ From GPT
 - [ ] Implement deferred rendering pipeline if forward rendering becomes limiting
 - [ ] Implement GPU-driven culling or compute-based rendering for large scenes
 - [ ] Design interactive worlds with instancing and texture rendering
-- [ ] Prototype gameplay mechanics leveraging existing rendering capabilities
 
 # Principle
 Build only what is required to unlock your immediate creative goals; refine abstractions and add infrastructure as project demands grow.

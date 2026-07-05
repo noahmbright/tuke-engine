@@ -357,6 +357,23 @@ Mat4 make_camera_from_world(Vec3 pos, Vec3 forward, Vec3 up) {
   return m;
 }
 
+Mat4 make_ts_mat(Vec3 translation, Vec3 scale) {
+  Mat4 m = mat4();
+  scale_m4(scale, &m);
+  translate_m4(translation, &m);
+  return m;
+}
+
+// TODO Rotations
+#if 0
+Mat4 make_trs_mat(Vec3 translation, Quaternion rotataion, Vec3 scale) {
+  Mat4 m = mat4();
+  scale_m4(scale, &m);
+  translate_m4(translation, &m);
+  return m;
+}
+#endif
+
 #if 0
 ////////////////////////////////////////////////////////////////
 // Quaternions

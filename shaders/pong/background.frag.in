@@ -1,5 +1,7 @@
 #version {{ VERSION }}
 
+{{ VERTEX_SHADER pong_pong }}
+
 {{ LOCATION 0 }} in vec2 uv;
 {{ LOCATION 0 }} out vec4 frag_color;
 

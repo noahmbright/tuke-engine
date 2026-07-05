@@ -60,10 +60,15 @@ load_vulkan_textures(VulkanContext *ctx, const StringArray *string_arrs, u32 num
     end_single_use_command_buffer(ctx, cmd);
 
     for (u32 j = 0; j < string_arrs[i].num_paths; j++) {
-      stbir_resize_uint8_srgb(
-          stbs[i][j].data, stbs[i][j].width, stbs[i][j].height, 0, resized, max_dim, max_dim, 0, STBIR_RGBA
-      );
-      copy_data_to_texture(ctx, &buffer, j, resized, texture_data, &textures[i]);
+      u32 w = stbs[i][j].width;
+      u32 h = stbs[i][j].height;
+      unsigned char *data = stbs[i][j].data;
+      bool needs_resized = (w != max_dim) || (h != max_dim);
+      if (needs_resized) {
+        stbir_resize_uint8_srgb(data, w, h, 0, resized, max_dim, max_dim, 0, STBIR_RGBA);
+        data = resized;
+      }
+      copy_data_to_texture(ctx, &buffer, j, data, texture_data, &textures[i]);
       free_stb_image(&stbs[i][j]);
     }
 

@@ -88,6 +88,7 @@ void mult_m4(const Mat4 *left, const Mat4 *right, Mat4 *out);
 Vec4 mvm4(const Mat4 *mat, Vec4 v);
 Mat4 make_camera_from_world(Vec3 pos, Vec3 forward, Vec3 up);
 Mat4 perspective_proj(f32 aspect, f32 hfov, f32 z_near, f32 z_far);
+Mat4 make_ts_mat(Vec3 translation, Vec3 scale);
 
 void log_v3(Vec3 v);
 void log_v4(Vec4 v);

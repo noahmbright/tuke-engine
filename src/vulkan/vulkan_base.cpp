@@ -327,12 +327,13 @@ pick_physical_device(VkInstance instance, VkSurfaceKHR surface, QueueFamilyIndic
   };
   vkGetPhysicalDeviceProperties2(res, &device_properties);
   VkPhysicalDeviceProperties *p = &device_properties.properties;
-  printf("%s(): Selected device:      %s\n", __func__, p->deviceName);
+  printf("%s(): Selected device: %s\n", __func__, p->deviceName);
   printf(
-      "%s(): Vulkan API version:   %u.%u.%u\n", __func__, VK_API_VERSION_MAJOR(p->apiVersion),
-      VK_API_VERSION_MINOR(p->apiVersion), VK_API_VERSION_PATCH(p->apiVersion)
+      "  Vulkan API version: %u.%u.%u\n", VK_API_VERSION_MAJOR(p->apiVersion), VK_API_VERSION_MINOR(p->apiVersion),
+      VK_API_VERSION_PATCH(p->apiVersion)
   );
-  printf("%s(): Driver:               %s (%s)\n", __func__, driver_props.driverName, driver_props.driverInfo);
+  printf("  Driver:          %s (%s)\n", driver_props.driverName, driver_props.driverInfo);
+  printf("  Max Push Constants size: %u)\n", p->limits.maxPushConstantsSize);
 
   return res;
 }
