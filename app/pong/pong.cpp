@@ -26,7 +26,12 @@ static const StringArray texture_paths[NUM_TEXTURES] = {
     TEX("textures/pong/field_background.jpg"),
     TEX("textures/girl_face.jpg"),
     TEX("textures/girl_face_normal_map.jpg"),
-    {.paths = {"textures/generic_girl.jpg", "textures/girl_face.jpg"}, .num_paths = 2},
+    TEX("textures/generic_girl.jpg", "textures/girl_face.jpg"),
+    TEX("textures/pong/paddle.png",
+        "textures/pong/baboon.png",
+        "textures/pong/gorilla.png",
+        "textures/pong/nobu.png",
+        "textures/pong/el_gaucho.png"),
 };
 
 void init_buffers(Renderer *r) {
@@ -36,25 +41,6 @@ void init_buffers(Renderer *r) {
       UPLOAD_ARRAYS(r->buffer_manager, paddle_vertices, unit_square_indices, ARRAY_SIZE(unit_square_indices));
   flush_buffers(ctx, &r->buffer_manager);
   r->mesh = *mesh;
-}
-
-void init_background_material(Renderer *r) {
-  init_program_spec(&r->ctx, r->ctx.render_pass, NULL, &pong_background_program_spec, &r->background_mat);
-
-  VkDescriptorImageInfo image_info = {
-      .sampler = r->ctx.samplers[SAMPLER_LINEAR_CLAMP],
-      .imageView = r->textures[TEXTURE_FIELD_BACKGROUND].image_view,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-  };
-
-  DescriptorWrite writes[] = {
-      {
-          .set_id = LAYOUT_ID_PLACEHOLDER,
-          .binding = BINDING_PLACEHOLDER_TEX,
-          .image_info = image_info,
-      },
-  };
-  update_vulkan_material(&r->ctx, writes, ARRAY_SIZE(writes), &r->background_mat);
 }
 
 State setup_state(const char *title) {
@@ -110,7 +96,7 @@ State setup_state(const char *title) {
 
       .lpaddle_speed = speed0,
       .rpaddle_speed = speed0,
-      .ball_speed = speed0,
+      .ball_speed = 1.25f * speed0,
 
       .time_since_last_powerup_draw = 0.0f,
 
@@ -123,6 +109,7 @@ State setup_state(const char *title) {
 
   init_alias_table(&state.playing_state.powerup_alias_table, NUM_POWERUP_TYPES, powerup_likelihoods, 0x69420);
   log_alias_table(&state.playing_state.powerup_alias_table);
+  init_inputs(&state.inputs);
 
   // Renderer
   state.renderer = {
@@ -134,33 +121,61 @@ State setup_state(const char *title) {
   load_vulkan_textures(ctx, texture_paths, NUM_TEXTURES, state.renderer.textures);
   init_buffers(&state.renderer);
   state.renderer.viewport_state = create_viewport_state_xy(ctx->swapchain_extent, 0, 0),
-
   set_descriptor_set_layouts(ctx, state.renderer.descriptor_set_layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
-  init_inputs(&state.inputs);
-  init_background_material(&state.renderer);
+  state.renderer.ui_buffer = create_streaming_buffer(ctx, sizeof(state.ui_elements));
+
+  // Paddle material
   init_program_spec(ctx, ctx->render_pass, NULL, &pong_paddle_program_spec, &state.renderer.paddle_mat);
+
+  VkDescriptorImageInfo image_info = {
+      .sampler = ctx->samplers[SAMPLER_LINEAR_CLAMP],
+      .imageView = 0,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  };
+
+  { // Background material
+    init_program_spec(ctx, ctx->render_pass, NULL, &pong_background_program_spec, &state.renderer.background_mat);
+    image_info.imageView = state.renderer.textures[TEXTURE_FIELD_BACKGROUND].image_view;
+    DescriptorWrite writes[] = {
+        {
+            .set_id = LAYOUT_ID_PLACEHOLDER,
+            .binding = BINDING_PLACEHOLDER_TEX,
+            .image_info = image_info,
+        },
+    };
+    update_vulkan_material(ctx, writes, ARRAY_SIZE(writes), &state.renderer.background_mat);
+  }
 
   // UI material
   PipelineConfig ui_conf = vulkan_pipeline_config();
   ui_conf.depth_test = false;
   init_program_spec(ctx, ctx->render_pass, &ui_conf, &pong_main_menu_program_spec, &state.renderer.main_menu_mat);
   init_program_spec(ctx, ctx->render_pass, &ui_conf, &common_ui_quad_program_spec, &state.renderer.ui_mat);
+  init_program_spec(ctx, ctx->render_pass, &ui_conf, &common_ui_quad_program_spec, &state.renderer.characters_mat);
 
-  VkDescriptorImageInfo image_info = {
-      .sampler = ctx->samplers[SAMPLER_LINEAR_CLAMP],
-      .imageView = state.renderer.textures[TEXTURE_UI].image_view,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-  };
+  {
+    image_info.imageView = state.renderer.textures[TEXTURE_MENU_UI].image_view;
+    DescriptorWrite writes[] = {
+        {
+            .set_id = LAYOUT_ID_UI,
+            .binding = BINDING_UI_TEX,
+            .image_info = image_info,
+        },
+    };
+    update_vulkan_material(ctx, writes, ARRAY_SIZE(writes), &state.renderer.ui_mat);
+  }
 
-  DescriptorWrite writes[] = {
-      {
-          .set_id = LAYOUT_ID_UI,
-          .binding = BINDING_UI_TEX,
-          .image_info = image_info,
-      },
-  };
-  update_vulkan_material(ctx, writes, ARRAY_SIZE(writes), &state.renderer.ui_mat);
-  state.renderer.ui_buffer = create_streaming_buffer(ctx, sizeof(state.ui_elements));
+  {
+    image_info.imageView = state.renderer.textures[TEXTURE_CHARACTERS].image_view;
+    DescriptorWrite writes[] = {
+        {
+            .set_id = LAYOUT_ID_UI,
+            .binding = BINDING_UI_TEX,
+            .image_info = image_info,
+        },
+    };
+    update_vulkan_material(ctx, writes, ARRAY_SIZE(writes), &state.renderer.characters_mat);
+  }
   // End renderer
 
   return state;
@@ -179,6 +194,7 @@ void destroy_state(State *state) {
   destroy_vulkan_material(ctx->device, &state->renderer.paddle_mat);
   destroy_vulkan_material(ctx->device, &state->renderer.main_menu_mat);
   destroy_vulkan_material(ctx->device, &state->renderer.ui_mat);
+  destroy_vulkan_material(ctx->device, &state->renderer.characters_mat);
 
   destroy_buffer_manager(&state->renderer.buffer_manager);
   destroy_uniform_buffer(ctx, &state->renderer.uniform_buffer);
@@ -212,7 +228,6 @@ void render_menu(State *s, VkCommandBuffer cmd) {
     while (portraits_processed < NUM_CHARACTERS) {
       u32 portraits_left = NUM_CHARACTERS - portraits_processed;
       u32 num_row_portraits = max_stride < portraits_left ? max_stride : portraits_left;
-      printf("left: %u, max %u, processing %u portraits\n", portraits_left, max_stride, num_row_portraits);
 
       f32 aspect = 1.0f;
       f32 height = PLAYER_PORTRAIT_WIDTH * aspect;
@@ -224,16 +239,15 @@ void render_menu(State *s, VkCommandBuffer cmd) {
         s->ui_elements[ui_idx] = {
             .center = vec2(x, y),
             .size = vec2(PLAYER_PORTRAIT_WIDTH, height),
-            .tex_id = ui_idx & 1,
+            .tex_id = ui_idx,
         };
-        printf("populated ui %u with center (%f, %f at row %u)\n", ui_idx, x, y, row_idx);
       }
       portraits_processed += num_row_portraits;
       row_idx++;
     }
     u32 instance_count = NUM_CHARACTERS;
     write_streaming_buffer(&r->ui_buffer, s->ui_elements, 0, sizeof(UiElement) * instance_count);
-    render_mesh_instanced(cmd, &mesh, &r->ui_mat, instance_count, &r->ui_buffer);
+    render_mesh_instanced(cmd, &mesh, &r->characters_mat, instance_count, &r->ui_buffer);
     break;
   }
   case MENU_TYPE_OPTIONS: {
@@ -311,20 +325,45 @@ void render(State *s) {
     u32 instance_count = 2;
     VulkanMesh mesh = {.vertex_count = 6};
 
+    // Lpaddle avatar
     s->ui_elements[0] = {
         .tex_id = 0,
         .center = vec2(-1.0 + portrait_w / 2.0, portrait_y),
         .size = vec2(portrait_w, portrait_h),
     };
 
+    // Rpaddle avatar
     s->ui_elements[1] = {
         .tex_id = 1,
         .center = vec2(1.0 - portrait_w / 2.0, portrait_y),
         .size = vec2(portrait_w, portrait_h),
+        .flags = 1,
     };
 
+    for (u32 i = 0; i < NUM_POWERUP_TYPES; i++) {
+      f32 y = -0.7f;
+      f32 size = 0.2f;
+      f32 x_offset = PLAYER_PORTRAIT_WIDTH + i * size * 1.1f;
+
+      if (ps->paddle_powerups[PADDLE_LEFT][i].time_left > 0.0f) {
+        s->ui_elements[instance_count++] = {
+            .size = vec2(size, size),
+            .center = vec2(x_offset, y),
+            .tex_id = i & 0b11,
+        };
+      }
+
+      if (ps->paddle_powerups[PADDLE_RIGHT][i].time_left > 0.0f) {
+        s->ui_elements[instance_count++] = {
+            .size = vec2(size, size),
+            .center = vec2(1.0f - x_offset, y),
+            .tex_id = i & 0b11,
+        };
+      }
+    }
+
     write_streaming_buffer(&r->ui_buffer, s->ui_elements, 0, sizeof(UiElement) * instance_count);
-    render_mesh_instanced(cmd, &mesh, &r->ui_mat, instance_count, &r->ui_buffer);
+    render_mesh_instanced(cmd, &mesh, &r->characters_mat, instance_count, &r->ui_buffer);
 
     break;
   }
@@ -378,12 +417,9 @@ void process_inputs_playing(State *st, f32 dt) {
     st->game_mode = GAMEMODE_PAUSED;
   }
 
-  bool horizontal_enabled = (ps->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED);
   Vec2 input_direction = inputs_to_direction(inputs);
-  input_direction.x *= horizontal_enabled;
-
   if (key_pressed(inputs, INPUT_KEY_SPACEBAR) && ps->pong_mode == PONG_MODE_BETWEEN_POINTS) {
-    // TODO engine: convert to a branchless scheme
+    // TODO convert to a branchless scheme
     f32 theta = 2 * PI * random_f32_xoroshiro128_plus(&ps->rngs.ball_direction);
     const f32 half_pi = PI / 2.0f;
     const f32 epsilon = PI / 16.0f;
@@ -402,12 +438,6 @@ void process_inputs_playing(State *st, f32 dt) {
     ps->ball_vel.y = ps->ball_speed * y;
 
     ps->pong_mode = PONG_MODE_LIVE_BALL;
-  }
-
-  // TODO replace with powerup
-  if (key_pressed(inputs, INPUT_KEY_H)) {
-    ps->movement_mode = (ps->movement_mode == MOVEMENT_MODE_HORIZONTAL_ENABLED) ? MOVEMENT_MODE_VERTICAL_ONLY
-                                                                                : MOVEMENT_MODE_HORIZONTAL_ENABLED;
   }
 
   // TODO make the paddle scale over the course of the game
@@ -523,7 +553,9 @@ void process_inputs(State *st, const f32 dt) {
   case GAMEMODE_MAIN_MENU: {
     process_inputs_main_menu(st);
     st->menu_state.anim_t += dt;
-    st->menu_state.intro_active = st->menu_state.anim_t < INTRO_DURATION;
+    if (st->menu_state.intro_active) { // Prevent from resetting the intro active
+      st->menu_state.intro_active = st->menu_state.anim_t < INTRO_DURATION;
+    }
     break;
   }
   }
@@ -629,8 +661,30 @@ void handle_collisions(PlayingState *ps, const f32 dt) {
   }
 }
 
-void update_game_state(State *s, const f32 dt) {
+void update_ai(PlayingState *ps) {
+  switch (ps->rcharacter) {
+  case CHARACTER_PADDLE: { // Stupid paddle
+    f32 tolerance = ps->rpaddle_size.y * 0.1;
+    if (ps->ball_pos.y > ps->rpaddle_pos.y + tolerance) {
+      ps->rpaddle_vel.y = cpu_speed0;
+    } else if (ps->ball_pos.y < ps->rpaddle_pos.y - tolerance) {
+      ps->rpaddle_vel.y = -cpu_speed0;
+    } else {
+      ps->rpaddle_vel.y = 0.0f;
+    }
+    return;
+  }
+  case CHARACTER_BABOON:
+  case CHARACTER_GORILLA:
+  case CHARACTER_NOBU:
+  case CHARACTER_EL_GAUCHO:
+  default:
+    printf("%s(): %u AI not implemented yet\n", __func__, ps->rcharacter);
+    return;
+  }
+}
 
+void update_game_state(State *s, const f32 dt) {
   switch (s->game_mode) {
   case GAMEMODE_PAUSED:
     return;
@@ -639,14 +693,10 @@ void update_game_state(State *s, const f32 dt) {
     Vec2 option_size = vec2(MENU_UI_WIDTH, 0.2f);
     s->menu_state.selector_pos = vec2(-1.1 * MENU_UI_WIDTH, menu_ui_pos[s->menu_state.selected_option].y);
     s->ui_elements[MAIN_MENU_UI_LOGO] = {.center = vec2(0.0f, -0.5f), .rotation = 0.0f, .size = logo_size, .tex_id = 0};
-    s->ui_elements[MAIN_MENU_UI_STORY] = {
-        .center = menu_ui_pos[MAIN_MENU_UI_STORY], .rotation = 0.0f, .size = option_size, .tex_id = 1
-    };
-    s->ui_elements[MAIN_MENU_UI_1V1] = {
-        .center = menu_ui_pos[MAIN_MENU_UI_1V1], .rotation = 0.0f, .size = option_size, .tex_id = 0
-    };
+    s->ui_elements[MAIN_MENU_UI_STORY] = {.center = menu_ui_pos[MAIN_MENU_UI_STORY], .size = option_size, .tex_id = 1};
+    s->ui_elements[MAIN_MENU_UI_1V1] = {.center = menu_ui_pos[MAIN_MENU_UI_1V1], .size = option_size, .tex_id = 0};
     s->ui_elements[MAIN_MENU_UI_OPTIONS] = {
-        .center = menu_ui_pos[MAIN_MENU_UI_OPTIONS], .rotation = 0.0f, .size = option_size, .tex_id = 1
+        .center = menu_ui_pos[MAIN_MENU_UI_OPTIONS], .size = option_size, .tex_id = 1
     };
     return;
   }
@@ -678,12 +728,7 @@ void update_game_state(State *s, const f32 dt) {
       }
     }
 
-    // AI
-    if (ps->ball_pos.y > ps->rpaddle_pos.y) {
-      ps->rpaddle_vel.y = cpu_speed0;
-    } else {
-      ps->rpaddle_vel.y = -cpu_speed0;
-    }
+    update_ai(ps);
 
     inc_v3(&ps->lpaddle_pos, scale_v3(ps->lpaddle_vel, dt));
     inc_v3(&ps->rpaddle_pos, scale_v3(ps->rpaddle_vel, dt));

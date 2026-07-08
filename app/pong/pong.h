@@ -28,7 +28,7 @@ const u16 unit_square_indices[] = {
 
 const f32 INTRO_DURATION = 2.0f;
 
-// using dimensions in meters
+// Using dimensions in meters
 // 30m is about 96ft, a basketball court
 const f32 aspect_ratio = 16.0f / 9.0f;
 const f32 arena_dimensions_x0 = 30.0f;
@@ -37,7 +37,12 @@ const f32 x_inset_from_wall0 = 0.05f * arena_dimensions_x0;
 const f32 x_offset0 = arena_dimensions_x0 / 2.0f - x_inset_from_wall0;
 const Vec3 arena_dimensions0{arena_dimensions_x0, arena_dimensions_y0, 1.0f};
 
-typedef enum { ENTITY_LEFT_PADDLE = 0, ENTITY_RIGHT_PADDLE, ENTITY_BALL, NUM_ENTITIES } EntityIndex;
+typedef enum {
+  ENTITY_LEFT_PADDLE = 0,
+  ENTITY_RIGHT_PADDLE,
+  ENTITY_BALL,
+  NUM_ENTITIES,
+} EntityIndex;
 
 typedef enum {
   PADDLE_NEITHER,
@@ -53,20 +58,17 @@ const f32 powerup_time0 = 5.0f;
 const f32 speed0 = 12.5f;
 const f32 cpu_speed0 = .8 * speed0;
 
-const Vec3 paddle_scale0{1.0f, 4.0f, 1.0f};
+const Vec3 paddle_scale0 = vec3(1.0f, 4.0f, 1.0f);
 const Vec3 ball_scale0 = vec3(0.5f, 0.5f, 0.5f);
-const Vec3 powerup_size{1.0f, 1.0f, 1.0f};
+const Vec3 powerup_size = vec3(1.0f, 1.0f, 1.0f);
 const f32 z0 = 0.25f;
 
-const Vec3 left_paddle_pos0{-x_offset0, 0.0f, z0};
-const Vec3 right_paddle_pos0{x_offset0, 0.0f, z0};
-const Vec3 ball_pos0{0.0f, 0.0f, z0};
-
-const u32 paddle_vertices_size = sizeof(paddle_vertices);
-const u32 indices_size = sizeof(unit_square_indices);
+const Vec3 left_paddle_pos0 = vec3(-x_offset0, 0.0f, z0);
+const Vec3 right_paddle_pos0 = vec3(x_offset0, 0.0f, z0);
+const Vec3 ball_pos0 = vec3(0.0f, 0.0f, z0);
 
 const u32 PLAYER_SELECT_ROWS = 2;
-const f32 PLAYER_PORTRAIT_WIDTH = 0.2f;
+const f32 PLAYER_PORTRAIT_WIDTH = 0.4f;
 const f32 PORTRAIT_Y_OFFSET = 0.2f;
 
 typedef enum {
@@ -74,7 +76,9 @@ typedef enum {
   TEXTURE_FIELD_BACKGROUND,
   TEXTURE_GIRL_FACE,
   TEXTURE_GIRL_FACE_NORMAL_MAP,
-  TEXTURE_UI,
+  TEXTURE_MENU_UI,
+  TEXTURE_CHARACTERS,
+
   NUM_TEXTURES
 } TextureID;
 
@@ -86,7 +90,6 @@ typedef enum {
 
 typedef enum {
   MOVEMENT_MODE_VERTICAL_ONLY,
-  MOVEMENT_MODE_HORIZONTAL_ENABLED,
 } MovementMode;
 
 typedef enum {
@@ -106,6 +109,7 @@ typedef struct {
 } RNGs;
 
 typedef enum {
+  POWERUP_SIGNATURE_MOVE,
   POWERUP_BIG_PADDLE,
   POWERUP_KILL_OPPONENT,
 
@@ -136,7 +140,8 @@ typedef enum {
 } MainMenuUI;
 
 typedef enum {
-  CHARACTER_BABY,
+  CHARACTER_PADDLE,
+  CHARACTER_BABOON,
   CHARACTER_GORILLA,
   CHARACTER_NOBU,
   CHARACTER_EL_GAUCHO, // https://en.wikipedia.org/wiki/Gaucho
@@ -157,6 +162,7 @@ typedef struct {
   Vec2 size;
   f32 rotation;
   u32 tex_id;
+  u32 flags;
   // Effects?
 } UiElement;
 
@@ -181,10 +187,12 @@ typedef struct {
   Vec3 lpaddle_pos;
   Vec3 lpaddle_vel;
   Vec3 lpaddle_size;
+  CharacterID lcharacter;
 
   Vec3 rpaddle_pos;
   Vec3 rpaddle_vel;
   Vec3 rpaddle_size;
+  CharacterID rcharacter;
 
   Vec3 ball_pos;
   Vec3 ball_vel;
@@ -232,6 +240,7 @@ typedef struct {
   VulkanMaterial paddle_mat;
   VulkanMaterial main_menu_mat;
   VulkanMaterial ui_mat;
+  VulkanMaterial characters_mat;
 } Renderer;
 
 typedef struct {

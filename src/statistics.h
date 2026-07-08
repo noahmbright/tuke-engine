@@ -4,6 +4,8 @@
 
 #define STATIC_ALIAS_THRESHOLD 32
 
+// TODO CRC
+
 // use SplitMix64 and xoroshiro128+, requiring up to 128 bits
 struct RNG {
   u64 state;
