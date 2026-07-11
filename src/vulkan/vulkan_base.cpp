@@ -14,25 +14,28 @@ void update_frame_index(VulkanContext *ctx) {
 void destroy_swapchain(VulkanContext *ctx) {
   SwapchainStorage *storage = &ctx->swapchain_storage;
 
-  // framebuffers
+  // Framebuffers
   for (u32 i = 0; i < storage->image_count; ++i) {
     vkDestroyFramebuffer(ctx->device, ctx->framebuffers[i], NULL);
     ctx->framebuffers[i] = VK_NULL_HANDLE;
   }
 
-  // swapchain image views
+  // Swapchain image views
   for (u32 i = 0; i < storage->image_count; i++) {
     vkDestroyImageView(ctx->device, storage->image_views[i], NULL);
+    storage->image_views[i] = VK_NULL_HANDLE;
   }
 
-  for (u32 i = 0; i < NUM_SWAPCHAIN_IMAGES; i++) {
+  // Depth buffers
+  for (u32 i = 0; i < storage->image_count; i++) {
     DepthBuffer *depth_buffer = &storage->depth_buffers[i];
     vkDestroyImage(ctx->device, depth_buffer->image, NULL);
     vkDestroyImageView(ctx->device, depth_buffer->image_view, NULL);
     vkFreeMemory(ctx->device, depth_buffer->device_memory, NULL);
   }
 
-  if (ctx->swapchain) {
+  // THE swapchain
+  if (ctx->swapchain != VK_NULL_HANDLE) {
     vkDestroySwapchainKHR(ctx->device, ctx->swapchain, NULL);
   } else {
     printf("%s(): Tried to destroy null swapchain\n", __func__);
@@ -504,6 +507,7 @@ VkSurfaceCapabilitiesKHR get_surface_capabilities(VkPhysicalDevice physical_devi
   return surface_capabilities;
 }
 
+// https://github.com/KhronosGroup/Vulkan-Samples/tree/main/samples/api/swapchain_recreation
 VkSwapchainKHR create_swapchain(
     VkDevice device,
     VkPhysicalDevice physical_device,
@@ -1017,13 +1021,22 @@ void init_framebuffers(VulkanContext *ctx) {
   }
 }
 
+// https://vulkan-tutorial.com/Drawing_a_triangle/Swap_chain_recreation#page_Handling-resizes-explicitly
 void recreate_swapchain(VulkanContext *ctx) {
+  VkSurfaceCapabilitiesKHR surface_capabilities = get_surface_capabilities(ctx->physical_device, ctx->surface);
+  VkExtent2D extent = get_swapchain_extent(0, 0, surface_capabilities);
+  if (extent.height == 0 || extent.width == 0) {
+    return;
+  }
+
   vkDeviceWaitIdle(ctx->device);
   destroy_swapchain(ctx);
+  ctx->swapchain_extent = extent;
 
-  VkSurfaceCapabilitiesKHR surface_capabilities = get_surface_capabilities(ctx->physical_device, ctx->surface);
-  ctx->swapchain_extent = get_swapchain_extent(0, 0, surface_capabilities);
-
+  printf(
+      "%s(): Recreating swapchain with width: %u, height: %u\n", __func__, ctx->swapchain_extent.width,
+      ctx->swapchain_extent.height
+  );
   ctx->swapchain = create_swapchain(
       ctx->device, ctx->physical_device, ctx->surface, ctx->queue_family_indices, ctx->surface_format,
       surface_capabilities, ctx->swapchain_extent
@@ -1212,6 +1225,7 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
   init_framebuffers(&ctx);
 
   // Regular command buffers need to be created after the swapchain, which depends on the transient command buffers.
+  // TODO Do I need to sync command buffer allocation with swapchain recreation too?
   u32 image_count = ctx.swapchain_storage.image_count;
   allocate_command_buffers(ctx.device, ctx.graphics_cmd_pool, image_count, ctx.graphics_cmd_buffers);
   allocate_command_buffers(ctx.device, ctx.compute_cmd_pool, image_count, ctx.compute_cmd_buffers);
@@ -1663,10 +1677,8 @@ void begin_frame(VulkanContext *ctx) {
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
     // TODO do I need to redo this until recreation succeeds?
     recreate_swapchain(ctx);
-  }
-
-  if (result == VK_ERROR_DEVICE_LOST) {
-    fprintf(stderr, "%s(): result = VK_ERROR_DEVICE_LOST", __func__);
+  } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+    fprintf(stderr, "%s(): Failed to get next swapchain image\n", __func__);
     exit(1);
   }
 }
@@ -1719,7 +1731,7 @@ void end_frame(VulkanContext *ctx, VkCommandBuffer cmd) {
   update_frame_index(ctx);
 }
 
-void submit_and_present(const VulkanContext *ctx, VkCommandBuffer cmd) {
+void submit_and_present(VulkanContext *ctx, VkCommandBuffer cmd) {
   const FrameSyncObjects *fso = &ctx->frame_sync_objects[ctx->current_frame_index];
 
   VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -1749,9 +1761,12 @@ void submit_and_present(const VulkanContext *ctx, VkCommandBuffer cmd) {
       .pResults = NULL,
   };
 
-  // TODO handle swapchain recreation here if need be
   result = vkQueuePresentKHR(ctx->graphics_queue, &present_info);
-  VK_CHECK(result, "Failed to present queue");
+  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    recreate_swapchain(ctx);
+  } else {
+    VK_CHECK(result, "Possible swapchain recreation bug");
+  }
 }
 
 VkPipelineLayout create_pipeline_layout(

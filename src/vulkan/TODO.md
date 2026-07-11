@@ -44,12 +44,6 @@ Deferred pending render pass / dynamic rendering redesign. Issues to revisit:
 
 ## Missing Features
 
-**Texture arrays (`sampler2DArray`). [HIGH PRIORITY]**
-Needed for UI (logo, buttons, icons). One `VkImage` with `arrayLayers=N`, view type
-`VK_IMAGE_VIEW_TYPE_2D_ARRAY`, per-layer upload via `baseArrayLayer` in `VkBufferImageCopy`.
-Reflector needs a `sampler2DArray` token that emits the same `VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER`
-as `sampler2D`. Asset system needs to store aspect ratio per layer at load time.
-
 **Hot reloading. [HIGH PRIORITY]**
 Two phases:
 1. Game library: compile game logic as `.dylib`, main loop calls through function pointer table,
@@ -57,16 +51,6 @@ Two phases:
    and passed in each frame — library is stateless functions only.
 2. Shader hot reload: poll `stat()` on shader source files, recompile on change,
    `vkDeviceWaitIdle`, swap `VkPipeline` in `VulkanMaterial`, destroy old pipeline.
-
-**Fullscreen and window resize. [HIGH PRIORITY]**
-Fullscreen: `glfwSetWindowMonitor`. Resize requires catching `VK_ERROR_OUT_OF_DATE_KHR` from
-`vkAcquireNextImageKHR` / `vkQueuePresentKHR` and rebuilding the swapchain, framebuffers, and
-any size-dependent images (offscreen buffers, depth).
-
-**Swapchain recreation on window resize.**
-Current code crashes or produces validation errors if the window is resized. Requires catching
-`VK_ERROR_OUT_OF_DATE_KHR` from `vkAcquireNextImageKHR` / `vkQueuePresentKHR` and rebuilding
-the swapchain, framebuffers, and any size-dependent images (offscreen buffers, depth).
 
 **Pipeline variants.**
 One pipeline per program spec works now, but transparent objects need depth write off and
@@ -122,3 +106,4 @@ Deferred until a Renderer type is introduced. Issues to revisit:
 - VulkanWindowInfo intermediate should be hidden from test code
 - Window type should wrap the native handle and own the get_vulkan_info function pointer
 - create_window(true /* is_vulkan */) bool should go away
+- Render graph: https://www.youtube.com/watch?v=1Sb3s7Xie4M, https://www.gdcvault.com/play/1024612/FrameGraph-Extensible-Rendering-Architecture-in

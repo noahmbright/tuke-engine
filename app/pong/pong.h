@@ -230,7 +230,6 @@ typedef struct {
   VulkanTexture textures[NUM_TEXTURES];
   VkDescriptorSetLayout descriptor_set_layouts[NUM_DESCRIPTOR_SET_LAYOUTS]; // Storage
   VkClearValue clear_values[NUM_ATTACHMENTS];
-  ViewportState viewport_state;
   UniformBuffer uniform_buffer;
   BufferManager buffer_manager;
   StreamingBuffer ui_buffer;

@@ -11,6 +11,7 @@
 #include "tuke_engine.h"
 #include "vulkan_base.h"
 #include "window.h"
+#include <vulkan/vulkan_core.h>
 
 static const f32 MENU_UI_WIDTH = 0.7f;
 
@@ -120,7 +121,6 @@ State setup_state(const char *title) {
   VulkanContext *ctx = &state.renderer.ctx;
   load_vulkan_textures(ctx, texture_paths, NUM_TEXTURES, state.renderer.textures);
   init_buffers(&state.renderer);
-  state.renderer.viewport_state = create_viewport_state_xy(ctx->swapchain_extent, 0, 0),
   set_descriptor_set_layouts(ctx, state.renderer.descriptor_set_layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
   state.renderer.ui_buffer = create_streaming_buffer(ctx, sizeof(state.ui_elements));
 
@@ -264,9 +264,13 @@ void render(State *s) {
   VulkanContext *ctx = &r->ctx;
   begin_frame(ctx);
   VkCommandBuffer cmd = begin_command_buffer(ctx);
-  begin_render_pass(
-      ctx, cmd, ctx->render_pass, ctx->framebuffers[ctx->image_index], r->clear_values, 2, r->viewport_state
-  );
+
+  VkExtent2D extent = ctx->swapchain_extent;
+  VkViewport vp = {.width = (f32)extent.width, .height = (f32)extent.height, .minDepth = 0.0f, .maxDepth = 1.0f};
+  VkRect2D scissor = {.extent = extent, .offset = {.x = 0, .y = 0}};
+  ViewportState vp_state = {.viewport = vp, .scissor = scissor};
+
+  begin_render_pass(ctx, cmd, ctx->render_pass, ctx->framebuffers[ctx->image_index], r->clear_values, 2, vp_state);
 
   switch (s->game_mode) {
   case GAMEMODE_PLAYING:

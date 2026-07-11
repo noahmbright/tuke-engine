@@ -62,48 +62,63 @@ typedef int32_t i32;
 #define MAX_UNIFORMS_PER_BUFFER (256)
 
 inline const char *vk_result_string(VkResult result) {
+#define ERR(e)                                                                                                         \
+  case e:                                                                                                              \
+    return #e
   switch (result) {
-  case VK_SUCCESS:
-    return "VK_SUCCESS";
-  case VK_NOT_READY:
-    return "VK_NOT_READY";
-  case VK_TIMEOUT:
-    return "VK_TIMEOUT";
-  case VK_EVENT_SET:
-    return "VK_EVENT_SET";
-  case VK_EVENT_RESET:
-    return "VK_EVENT_RESET";
-  case VK_INCOMPLETE:
-    return "VK_INCOMPLETE";
-  case VK_ERROR_OUT_OF_HOST_MEMORY:
-    return "VK_ERROR_OUT_OF_HOST_MEMORY";
-  case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-    return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
-  case VK_ERROR_INITIALIZATION_FAILED:
-    return "VK_ERROR_INITIALIZATION_FAILED";
-  case VK_ERROR_DEVICE_LOST:
-    return "VK_ERROR_DEVICE_LOST";
-  case VK_ERROR_MEMORY_MAP_FAILED:
-    return "VK_ERROR_MEMORY_MAP_FAILED";
-  case VK_ERROR_LAYER_NOT_PRESENT:
-    return "VK_ERROR_LAYER_NOT_PRESENT";
-  case VK_ERROR_EXTENSION_NOT_PRESENT:
-    return "VK_ERROR_EXTENSION_NOT_PRESENT";
-  case VK_ERROR_FEATURE_NOT_PRESENT:
-    return "VK_ERROR_FEATURE_NOT_PRESENT";
-  case VK_ERROR_INCOMPATIBLE_DRIVER:
-    return "VK_ERROR_INCOMPATIBLE_DRIVER";
-  case VK_ERROR_TOO_MANY_OBJECTS:
-    return "VK_ERROR_TOO_MANY_OBJECTS";
-  case VK_ERROR_FORMAT_NOT_SUPPORTED:
-    return "VK_ERROR_FORMAT_NOT_SUPPORTED";
-  case VK_ERROR_FRAGMENTED_POOL:
-    return "VK_ERROR_FRAGMENTED_POOL";
-  case VK_ERROR_UNKNOWN:
-    return "VK_ERROR_UNKNOWN";
+    ERR(VK_SUCCESS);
+    ERR(VK_NOT_READY);
+    ERR(VK_TIMEOUT);
+    ERR(VK_EVENT_SET);
+    ERR(VK_EVENT_RESET);
+    ERR(VK_INCOMPLETE);
+    ERR(VK_ERROR_OUT_OF_HOST_MEMORY);
+    ERR(VK_ERROR_OUT_OF_DEVICE_MEMORY);
+    ERR(VK_ERROR_INITIALIZATION_FAILED);
+    ERR(VK_ERROR_DEVICE_LOST);
+    ERR(VK_ERROR_MEMORY_MAP_FAILED);
+    ERR(VK_ERROR_LAYER_NOT_PRESENT);
+    ERR(VK_ERROR_EXTENSION_NOT_PRESENT);
+    ERR(VK_ERROR_FEATURE_NOT_PRESENT);
+    ERR(VK_ERROR_INCOMPATIBLE_DRIVER);
+    ERR(VK_ERROR_TOO_MANY_OBJECTS);
+    ERR(VK_ERROR_FORMAT_NOT_SUPPORTED);
+    ERR(VK_ERROR_FRAGMENTED_POOL);
+    ERR(VK_ERROR_UNKNOWN);
+    ERR(VK_ERROR_OUT_OF_POOL_MEMORY);
+    ERR(VK_ERROR_INVALID_EXTERNAL_HANDLE);
+    ERR(VK_ERROR_FRAGMENTATION);
+    ERR(VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS);
+    ERR(VK_PIPELINE_COMPILE_REQUIRED);
+    ERR(VK_ERROR_SURFACE_LOST_KHR);
+    ERR(VK_ERROR_NATIVE_WINDOW_IN_USE_KHR);
+    ERR(VK_SUBOPTIMAL_KHR);
+    ERR(VK_ERROR_OUT_OF_DATE_KHR);
+    ERR(VK_ERROR_INCOMPATIBLE_DISPLAY_KHR);
+    ERR(VK_ERROR_VALIDATION_FAILED_EXT);
+    ERR(VK_ERROR_INVALID_SHADER_NV);
+    ERR(VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR);
+    ERR(VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR);
+    ERR(VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR);
+    ERR(VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR);
+    ERR(VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR);
+    ERR(VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR);
+    ERR(VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
+    ERR(VK_ERROR_NOT_PERMITTED_KHR);
+    ERR(VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT);
+    ERR(VK_THREAD_IDLE_KHR);
+    ERR(VK_THREAD_DONE_KHR);
+    ERR(VK_OPERATION_DEFERRED_KHR);
+    ERR(VK_OPERATION_NOT_DEFERRED_KHR);
+    ERR(VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR);
+    ERR(VK_ERROR_COMPRESSION_EXHAUSTED_EXT);
+    ERR(VK_INCOMPATIBLE_SHADER_BINARY_EXT);
+    ERR(VK_PIPELINE_BINARY_MISSING_KHR);
+    ERR(VK_ERROR_NOT_ENOUGH_SPACE_KHR);
   default:
     return "UNKNOWN_VK_RESULT";
   }
+#undef ERR
 }
 
 typedef struct {
@@ -470,7 +485,7 @@ void begin_frame(VulkanContext *ctx);
 VkCommandBuffer begin_command_buffer(const VulkanContext *ctx);
 void update_frame_index(VulkanContext *ctx);
 void end_frame(VulkanContext *ctx, VkCommandBuffer cmd);
-void submit_and_present(const VulkanContext *ctx, VkCommandBuffer command_buffer);
+void submit_and_present(VulkanContext *ctx, VkCommandBuffer command_buffer);
 
 ViewportState create_viewport_state_offset(VkExtent2D swapchain_extent, VkOffset2D offset);
 ViewportState create_viewport_state_xy(VkExtent2D swapchain_extent, u32 x, u32 y);
