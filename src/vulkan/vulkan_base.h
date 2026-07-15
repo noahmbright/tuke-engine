@@ -50,6 +50,7 @@ typedef int32_t i32;
 #define MAX_VERTEX_BINDINGS (4)
 #define MAX_VERTEX_ATTRIBUTES (4)
 #define MAX_DESCRIPTOR_SETS (4)
+#define NUM_BINDLESS_SETS (32)
 
 #define MAX_LAYOUT_BINDINGS (4)
 #define MAX_DESCRIPTOR_WRITES (4)
@@ -214,6 +215,12 @@ typedef struct {
   VkDescriptorSetLayout *descriptor_set_layouts;
   u32 num_descriptor_set_layouts;
 
+  struct {
+    VkDescriptorSet set;
+    u32 layout_id;
+  } bindless_descriptor_sets[NUM_BINDLESS_SETS];
+  u32 num_bindless_descriptor_sets;
+
   VkSampler samplers[NUM_SAMPLERS];
 } VulkanContext;
 
@@ -364,6 +371,7 @@ typedef struct {
 typedef struct {
   u32 set_id; // When enum, used for indirection lookup. Could also be used raw.
   u32 binding;
+  u32 dst_array_element;
   union {
     VkDescriptorBufferInfo buffer_info;
     VkDescriptorImageInfo image_info;
@@ -514,13 +522,16 @@ VkRenderPass create_render_pass(
 VkRenderPass create_color_depth_render_pass(VkDevice device, VkFormat color_format, VkFormat depth_format);
 VkRenderPass create_color_render_pass(VkDevice device, VkFormat format);
 
-// Descriptor Sets
+//////////////////////////// Descriptors, Descriptor Sets //////////////////////////////
 void set_descriptor_set_layouts(VulkanContext *ctx, VkDescriptorSetLayout *layouts, u32 num_layouts);
 void reset_descriptor_set_layouts(VulkanContext *ctx);
-VkDescriptorSetLayout
-create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count);
+VkDescriptorSetLayout create_descriptor_set_layout(
+    VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count, bool bindless
+);
 VkDescriptorSet
-create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *set_layouts, VkDescriptorPool descriptor_pool);
+create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *layouts, VkDescriptorPool pool, bool bindless);
+VkDescriptorSet get_bindless_descriptor_set(const VulkanContext *ctx, u32 layout_id);
+void push_bindless_descriptor_set(VulkanContext *ctx, VkDescriptorSet set, u32 layout_id);
 
 // Framebuffers
 // Generally need a better understanding of lifetime management/ownership for these

@@ -308,4 +308,6 @@ typedef struct {
 
   DescriptorBinding bindings[MAX_NUM_DESCRIPTOR_BINDINGS];
   u32 num_bindings;
+
+  bool is_bindless;
 } DescriptorSetLayout;

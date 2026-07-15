@@ -77,7 +77,6 @@ typedef enum {
   TEXTURE_GIRL_FACE,
   TEXTURE_GIRL_FACE_NORMAL_MAP,
   TEXTURE_MENU_UI,
-  TEXTURE_CHARACTERS,
 
   NUM_TEXTURES
 } TextureID;
@@ -117,8 +116,9 @@ typedef enum {
 } PowerUpType;
 
 const f32 powerup_likelihoods[NUM_POWERUP_TYPES] = {
+    [POWERUP_SIGNATURE_MOVE] = .25f,
     [POWERUP_BIG_PADDLE] = 1.0f,
-    [POWERUP_KILL_OPPONENT] = 0.5f,
+    [POWERUP_KILL_OPPONENT] = 0.1f,
 };
 
 typedef struct {
@@ -228,8 +228,10 @@ typedef struct {
 typedef struct {
   VulkanContext ctx;
   VulkanTexture textures[NUM_TEXTURES];
+  VulkanTexture ui_textures[NUM_CHARACTERS];
   VkDescriptorSetLayout descriptor_set_layouts[NUM_DESCRIPTOR_SET_LAYOUTS]; // Storage
   VkClearValue clear_values[NUM_ATTACHMENTS];
+
   UniformBuffer uniform_buffer;
   BufferManager buffer_manager;
   StreamingBuffer ui_buffer;

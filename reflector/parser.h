@@ -13,6 +13,7 @@
 #define MAX_NUM_DESCRIPTOR_SET_LISTS 32
 #define MAX_NUM_GLSL_STRUCTS 64
 #define MAX_NUM_BINDING_SLOTS 128
+#define BINDLESS_DESCRIPTOR_COUNT 1024
 
 static const char *RED = "\033[31m";
 static const char *RESET = "\033[0m";
@@ -66,6 +67,7 @@ typedef enum {
   TOKEN_TYPE_DIRECTIVE_PUSH_CONSTANT,
   TOKEN_TYPE_DIRECTIVE_VERTEX_SHADER,
 
+  TOKEN_TYPE_BINDLESS,
   TOKEN_TYPE_RATE_VERTEX,
   TOKEN_TYPE_RATE_INSTANCE,
   TOKEN_TYPE_BINDING,
@@ -148,6 +150,14 @@ typedef enum {
   DIRECTIVE_TYPE_GLSL_SOURCE // not really a directive, but the stuff that comes between the directives
 } DirectiveType;
 
+#define RESERVED_SETS                                                                                                  \
+  X(RESERVED_SET_BINDLESS_TEXTURES)                                                                                    \
+  X(NUM_RESERVED_SETS)
+
+#define X(name) name,
+typedef enum { RESERVED_SETS } ReservedSet;
+#undef X
+
 // Template string slices start on the first { of {{,
 // and end on the first char of the next token
 // OR they start on the first token after the {{
@@ -188,6 +198,7 @@ typedef struct {
   u32 descriptor_count;
   ShaderStage stage;
   DescriptorType descriptor_type;
+  bool bindless;
 
   const char *set_name;
   u32 set_name_len;
@@ -305,6 +316,7 @@ typedef struct {
   u32 binding;
   DescriptorType descriptor_type;
   u32 descriptor_count;
+  bool bindless;
 
   const GLSLStruct *glsl_struct;
   ShaderStage stage;

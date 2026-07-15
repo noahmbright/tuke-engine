@@ -1,11 +1,12 @@
 #version {{ VERSION }}
 
-{{ SET_BINDING 0 SET_LABEL UI }} uniform sampler2DArray tex;
+#extension GL_EXT_nonuniform_qualifier : require
+{{ SET_BINDING BINDLESS 0 SET_LABEL TEXTURES }} uniform sampler2D tex[];
 
 {{ LOCATION 0 }} in vec2 uv;
 {{ LOCATION 1 }} in float tex_id;
 {{ LOCATION 0 }} out vec4 frag_color;
 
 void main() {
-    frag_color = texture(tex, vec3(uv, tex_id));
+    frag_color = texture(tex[uint(tex_id)], uv);
 }

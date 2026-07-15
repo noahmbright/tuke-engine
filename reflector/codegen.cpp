@@ -464,6 +464,12 @@ static void codegen_compiled_shader_header(FILE *dst) {
   fprintf(dst, "#define MAX_NUM_VERTEX_BINDINGS %u\n", MAX_NUM_VERTEX_BINDINGS);
   fprintf(dst, "#define MAX_NUM_VERTEX_ATTRIBUTES %u\n", MAX_NUM_VERTEX_ATTRIBUTES);
   fprintf(dst, "#define MAX_NUM_DESCRIPTOR_SET_LAYOUTS %u\n", MAX_NUM_DESCRIPTOR_SET_LAYOUTS);
+  fprintf(dst, "#define BINDLESS_DESCRIPTOR_COUNT %u\n", BINDLESS_DESCRIPTOR_COUNT);
+  fprintf(dst, "\n");
+
+#define X(name) fprintf(dst, "#define %s %u\n", #name, name);
+  RESERVED_SETS
+#undef X
   fprintf(dst, "\n");
 }
 
@@ -493,6 +499,7 @@ static void codegen_program_spec_struct_definition(FILE *dst) {
   fprintf(dst, "  const VkWriteDescriptorSet *write_templates[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
   fprintf(dst, "  uint32_t binding_list_lens[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
   fprintf(dst, "  DescriptorSetLayoutID binding_list_ids[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
+  fprintf(dst, "  bool bindless_markings[MAX_NUM_DESCRIPTOR_SET_LAYOUTS];\n");
   fprintf(dst, "  uint32_t num_descriptor_set_layouts;\n");
 
   fprintf(dst, "  VkShaderStageFlags push_constant_stage_flags;\n");
@@ -802,11 +809,13 @@ static void generate_vulkan_descriptor_set_binding_lists(FILE *dst, const Parsed
                                                                         : "VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER";
       const char *flags_string = get_stage_flags_string(binding.stage_flags);
 
+      u32 descriptor_count = layout->is_bindless ? BINDLESS_DESCRIPTOR_COUNT : binding.descriptor_count;
+
       // clang-format off
       fprintf(dst, "  {\n");
       fprintf(dst, "    .binding = %u,\n",              j);
       fprintf(dst, "    .descriptorType = %s,\n",       type_string);
-      fprintf(dst, "    .descriptorCount = %u,\n",      binding.descriptor_count);
+      fprintf(dst, "    .descriptorCount = %u,\n",      descriptor_count);
       fprintf(dst, "    .stageFlags = %s,\n",           flags_string);
       fprintf(dst, "    .pImmutableSamplers = NULL,\n");
       fprintf(dst, "  },\n");
@@ -834,6 +843,7 @@ static void generate_vulkan_descriptor_write_templates(FILE *dst, const ParsedSh
         continue;
       }
 
+      u32 descriptor_count = layout->is_bindless ? 0 : binding->descriptor_count;
       const char *type_string = binding->type == DESCRIPTOR_TYPE_UNIFORM ? "VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER"
                                                                          : "VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER";
       fprintf(dst, "  {\n");
@@ -842,7 +852,7 @@ static void generate_vulkan_descriptor_write_templates(FILE *dst, const ParsedSh
       fprintf(dst, "    .dstSet = VK_NULL_HANDLE,\n");
       fprintf(dst, "    .dstBinding = %u,\n", j);
       fprintf(dst, "    .dstArrayElement = 0,\n");
-      fprintf(dst, "    .descriptorCount = %u,\n", binding->descriptor_count);
+      fprintf(dst, "    .descriptorCount = %u,\n", descriptor_count);
       fprintf(dst, "    .descriptorType = %s,\n", type_string);
       fprintf(dst, "    .pImageInfo = NULL,\n");
       fprintf(dst, "    .pBufferInfo = NULL,\n");
@@ -1037,6 +1047,13 @@ inline void codegen_program_spec(FILE *dst, const ShaderProgram *program) {
     fprintf(dst, "    LAYOUT_ID_%s,\n", program->descriptor_set_layouts[i]->name);
   }
   fprintf(dst, "  },\n");
+
+  // Bindless Markings
+  fprintf(dst, "  .bindless_markings = {");
+  for(u32 i = 0; i < program->num_descriptor_set_layouts; i++) {
+    fprintf( dst, "%s, ", program->descriptor_set_layouts[i]->is_bindless ? "true" : "false");
+  }
+  fprintf(dst, "},\n");
 
   fprintf(dst, "  .num_descriptor_set_layouts = %u,\n", program->num_descriptor_set_layouts);
 

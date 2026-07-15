@@ -14,9 +14,79 @@ typedef struct {
   u32 num_paths;
 } StringArray;
 
+typedef struct {
+  u32 base;
+  u32 count;
+} TextureRange;
+
 #define _NARGS(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
 #define NARGS(...) _NARGS(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1)
 #define TEX(...) {.paths = {__VA_ARGS__}, .num_paths = NARGS(__VA_ARGS__)}
+
+static inline void load_vulkan_texture_array(
+    VulkanContext *ctx, VkDescriptorSet set, u32 binding, const char **paths, u32 num_paths, VulkanTexture *textures
+) {
+  if (paths == NULL || ctx == NULL) {
+    return;
+  }
+  STBImage stbs[MAX_NUM_TEXTURES];
+
+  u32 max_size = 0;
+  for (u32 i = 0; i < num_paths; i++) {
+    stbs[i] = load_texture(paths[i], false /*flip_vertically*/);
+    u32 size = stbs[i].width * stbs[i].height * stbs[i].n_channels;
+    max_size = size > max_size ? size : max_size;
+  }
+
+  VulkanBuffer buffer = create_buffer(ctx, BUFFER_TYPE_STAGING, max_size);
+  void *texture_data;
+  VkResult result = vkMapMemory(ctx->device, buffer.memory, 0, buffer.memory_requirements.size, 0, &texture_data);
+  VK_CHECK(result, "Failed to map staging buffer memory");
+
+  for (u32 i = 0; i < num_paths; i++) {
+    textures[i] = create_vulkan_texture(ctx, stbs[i].width, stbs[i].height, /*layer_count=*/1);
+
+    // First transition
+    VkCommandBuffer cmd = begin_single_use_command_buffer(ctx);
+    VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkImageLayout new_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    transition_image_layout(cmd, textures[i].image, old_layout, new_layout);
+    end_single_use_command_buffer(ctx, cmd);
+
+    copy_data_to_texture(ctx, &buffer, /*layer_idx=*/0, stbs[i].data, texture_data, &textures[i]);
+    free_stb_image(&stbs[i]);
+
+    // Second transition
+    cmd = begin_single_use_command_buffer(ctx);
+    old_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    new_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    transition_image_layout(cmd, textures[i].image, old_layout, new_layout);
+    end_single_use_command_buffer(ctx, cmd);
+  }
+
+  vkUnmapMemory(ctx->device, buffer.memory);
+  destroy_vulkan_buffer(ctx, buffer);
+
+  VkWriteDescriptorSet writes[MAX_NUM_TEXTURES] = {};
+  VkDescriptorImageInfo image_infos[MAX_NUM_TEXTURES] = {};
+
+  for (u32 i = 0; i < num_paths; i++) {
+    image_infos[i] = {
+        .sampler = ctx->samplers[SAMPLER_LINEAR_CLAMP], // TODO not modular
+        .imageView = textures[i].image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[i].dstArrayElement = i;
+    writes[i].pImageInfo = &image_infos[i];
+    writes[i].dstBinding = binding;
+    writes[i].dstSet = set;
+    writes[i].descriptorCount = 1;
+    writes[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  }
+
+  vkUpdateDescriptorSets(ctx->device, num_paths, writes, 0, NULL);
+}
 
 static inline void
 load_vulkan_textures(VulkanContext *ctx, const StringArray *string_arrs, u32 num_textures, VulkanTexture *textures) {
@@ -34,6 +104,7 @@ load_vulkan_textures(VulkanContext *ctx, const StringArray *string_arrs, u32 num
       assert(string_arrs[i].num_paths < MAX_LAYERS);
       const char *path = string_arrs[i].paths[j];
       stbs[i][j] = load_texture(path, false /*flip_vertically*/);
+
       u32 dim = (stbs[i][j].width > stbs[i][j].height) ? stbs[i][j].width : stbs[i][j].height;
       u32 aligned_dim = next_pow2(dim);
       max_sizes[i] = (aligned_dim > max_sizes[i]) ? aligned_dim : max_sizes[i];

@@ -41,37 +41,38 @@ static bool is_nondigit(char c) {
 static TokenType string_slice_to_keyword_or_identifier(const char *string, u32 length) {
   // clang-format off
 #define KW(kw, token) if (length == (sizeof(kw) - 1) && (strncmp(string, kw, length) == 0)) { return token; }
-  KW("in",              TOKEN_TYPE_IN)
-  KW("out",             TOKEN_TYPE_OUT)
-  KW("version",         TOKEN_TYPE_VERSION)
-  KW("void",            TOKEN_TYPE_VOID)
-  KW("uniform",         TOKEN_TYPE_UNIFORM)
-  KW("sampler",         TOKEN_TYPE_SAMPLER)
-  KW("sampler2D",       TOKEN_TYPE_SAMPLER2D)
-  KW("sampler2DArray",  TOKEN_TYPE_SAMPLER2D_ARRAY)
-  KW("texture2D",       TOKEN_TYPE_TEXTURE2D)
-  KW("image2D",         TOKEN_TYPE_IMAGE2D)
-  KW("uint",            TOKEN_TYPE_UINT)
-  KW("float",           TOKEN_TYPE_FLOAT)
-  KW("vec2",            TOKEN_TYPE_VEC2)
-  KW("vec3",            TOKEN_TYPE_VEC3)
-  KW("vec4",            TOKEN_TYPE_VEC4)
-  KW("mat2",            TOKEN_TYPE_MAT2)
-  KW("mat3",            TOKEN_TYPE_MAT3)
-  KW("mat4",            TOKEN_TYPE_MAT4)
-  KW("VERSION",         TOKEN_TYPE_DIRECTIVE_VERSION)
-  KW("LOCATION",        TOKEN_TYPE_DIRECTIVE_LOCATION)
-  KW("SET_BINDING",     TOKEN_TYPE_DIRECTIVE_SET_BINDING)
-  KW("PUSH_CONSTANT",   TOKEN_TYPE_DIRECTIVE_PUSH_CONSTANT)
-  KW("VERTEX_SHADER",   TOKEN_TYPE_DIRECTIVE_VERTEX_SHADER)
-  KW("RATE_VERTEX",     TOKEN_TYPE_RATE_VERTEX)
-  KW("RATE_INSTANCE",   TOKEN_TYPE_RATE_INSTANCE)
-  KW("BINDING",         TOKEN_TYPE_BINDING)
-  KW("OFFSET",          TOKEN_TYPE_OFFSET)
-  KW("TIGHTLY_PACKED",  TOKEN_TYPE_TIGHTLY_PACKED)
-  KW("SET_LABEL",       TOKEN_TYPE_SET_LABEL)
-  KW("VERTEX_INDEX",    TOKEN_TYPE_DIRECTIVE_VERTEX_INDEX)
-  KW("INSTANCE_INDEX",  TOKEN_TYPE_DIRECTIVE_INSTANCE_INDEX)
+  KW("in",                  TOKEN_TYPE_IN)
+  KW("out",                 TOKEN_TYPE_OUT)
+  KW("version",             TOKEN_TYPE_VERSION)
+  KW("void",                TOKEN_TYPE_VOID)
+  KW("uniform",             TOKEN_TYPE_UNIFORM)
+  KW("sampler",             TOKEN_TYPE_SAMPLER)
+  KW("sampler2D",           TOKEN_TYPE_SAMPLER2D)
+  KW("sampler2DArray",      TOKEN_TYPE_SAMPLER2D_ARRAY)
+  KW("texture2D",           TOKEN_TYPE_TEXTURE2D)
+  KW("image2D",             TOKEN_TYPE_IMAGE2D)
+  KW("uint",                TOKEN_TYPE_UINT)
+  KW("float",               TOKEN_TYPE_FLOAT)
+  KW("vec2",                TOKEN_TYPE_VEC2)
+  KW("vec3",                TOKEN_TYPE_VEC3)
+  KW("vec4",                TOKEN_TYPE_VEC4)
+  KW("mat2",                TOKEN_TYPE_MAT2)
+  KW("mat3",                TOKEN_TYPE_MAT3)
+  KW("mat4",                TOKEN_TYPE_MAT4)
+  KW("VERSION",             TOKEN_TYPE_DIRECTIVE_VERSION)
+  KW("LOCATION",            TOKEN_TYPE_DIRECTIVE_LOCATION)
+  KW("SET_BINDING",         TOKEN_TYPE_DIRECTIVE_SET_BINDING)
+  KW("PUSH_CONSTANT",       TOKEN_TYPE_DIRECTIVE_PUSH_CONSTANT)
+  KW("VERTEX_SHADER",       TOKEN_TYPE_DIRECTIVE_VERTEX_SHADER)
+  KW("BINDLESS",            TOKEN_TYPE_BINDLESS)
+  KW("RATE_VERTEX",         TOKEN_TYPE_RATE_VERTEX)
+  KW("RATE_INSTANCE",       TOKEN_TYPE_RATE_INSTANCE)
+  KW("BINDING",             TOKEN_TYPE_BINDING)
+  KW("OFFSET",              TOKEN_TYPE_OFFSET)
+  KW("TIGHTLY_PACKED",      TOKEN_TYPE_TIGHTLY_PACKED)
+  KW("SET_LABEL",           TOKEN_TYPE_SET_LABEL)
+  KW("VERTEX_INDEX",        TOKEN_TYPE_DIRECTIVE_VERTEX_INDEX)
+  KW("INSTANCE_INDEX",      TOKEN_TYPE_DIRECTIVE_INSTANCE_INDEX)
   // clang-format on
 #undef KW
   return TOKEN_TYPE_TEXT;
@@ -692,6 +693,7 @@ bool token_type_is_glsl_type(TokenType type) {
          type == TOKEN_TYPE_VEC4 || type == TOKEN_TYPE_MAT2 || type == TOKEN_TYPE_MAT3 || type == TOKEN_TYPE_MAT4;
 }
 
+// Called when current token is left bracket
 static bool parse_array_size(Parser *parser, u32 *out_size) {
   Token cur_tok = get_next_token(parser);
   *out_size = 0; // you can't have arrays of size 0!
@@ -839,8 +841,8 @@ static bool parse_struct(Parser *parser, GLSLStruct *glsl_struct, const char **n
   return true;
 }
 
-//{{ SET_BINDING set binding SET_LABEL label}} uniform (sampler2D|sampler2DArray) identifier;
-//{{ SET_BINDING set binding SET_LABEL label}} uniform struct_declaration;
+//{{ SET_BINDING (BINDLESS)set binding SET_LABEL label}} uniform (sampler2D|sampler2DArray) identifier;
+//{{ SET_BINDING (BINDLESS) set binding SET_LABEL label}} uniform struct_declaration;
 //  first identifier is a typename, the second is the instance identifier
 static SetBindingDirectiveParse
 parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string_slice) {
@@ -855,8 +857,14 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
   Token cur_tok = get_current_token(parser);
   assert(cur_tok.type == TOKEN_TYPE_DIRECTIVE_SET_BINDING);
 
-  // numeric binding
+  // Check BINDLESS, then check numeric binding
   cur_tok = get_next_token(parser);
+  if (cur_tok.type == TOKEN_TYPE_BINDLESS) {
+    directive_parse.bindless = true;
+    cur_tok = get_next_token(parser);
+  }
+
+  // numeric binding TODO remove bc unused
   if (cur_tok.type != TOKEN_TYPE_NUMBER) {
     report_parser_error(
         parser, cur_tok.start, TOKEN_TYPE_DOUBLE_R_BRACE,
@@ -959,11 +967,21 @@ parse_set_binding_directive(Parser *parser, TemplateStringSlice *template_string
     cur_tok = get_next_token(parser);
     u32 descriptor_count = 0;
     if (cur_tok.type == TOKEN_TYPE_L_BRACKET) {
-      bool parsed_array_size = parse_array_size(parser, &descriptor_count);
-      if (!parsed_array_size) {
-        report_parser_error(
-            parser, cur_tok.start, TOKEN_TYPE_R_BRACE, "Failed to parse descriptor count in sampler2D."
-        );
+      if (directive_parse.bindless) {
+        cur_tok = get_next_token(parser);
+        if (cur_tok.type != TOKEN_TYPE_R_BRACKET) { // TODO Can I support sampler2DArrays?
+          report_parser_error(
+              parser, cur_tok.start, TOKEN_TYPE_R_BRACE, "Expected empty array size in BINDLESS Sampler"
+          );
+        }
+        cur_tok = get_next_token(parser);
+      } else {
+        bool parsed_array_size = parse_array_size(parser, &descriptor_count);
+        if (!parsed_array_size) {
+          report_parser_error(
+              parser, cur_tok.start, TOKEN_TYPE_R_BRACE, "Failed to parse descriptor count in sampler2D."
+          );
+        }
       }
     } else {
       descriptor_count = 1;
@@ -1479,6 +1497,14 @@ push_and_validate_descriptor(DescriptorSetLayout *layout, const SetBindingRecord
   };
 
   layout->num_bindings++;
+  if (record->bindless) {
+    if (layout->num_bindings > 1) {
+      fprintf(stderr, "Bindless binding is not the unique binding in a set. Not supported.\n");
+      return false;
+    }
+    layout->is_bindless = true;
+  }
+
   return true;
 }
 
@@ -1759,6 +1785,7 @@ static bool parse_shader(const ShaderToCompile *input, ParsedShadersIR *ir) {
           .descriptor_count = sb_parse.descriptor_count,
           .stage = sb_parse.stage,
           .slice_idx = slice_idx,
+          .bindless = sb_parse.bindless,
       };
 
       break;

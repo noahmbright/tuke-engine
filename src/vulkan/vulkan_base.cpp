@@ -194,6 +194,11 @@ VkInstance create_instance(const char *name, VulkanWindowInfo window_info) {
       .ppEnabledExtensionNames = enabled_extensions,
   };
 
+#ifdef __APPLE__
+  setenv("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "1", 1);
+  printf("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS=%s\n", getenv("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS"));
+#endif
+
   VkInstance instance;
   VkResult result = vkCreateInstance(&instance_create_info, NULL, &instance);
   VK_CHECK(result, "Failed to create instance");
@@ -412,6 +417,7 @@ VkDevice create_device(QueueFamilyIndices queue_family_indices, VkPhysicalDevice
     device_extensions[device_extension_count++] = VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
   }
 
+  // https://howtovulkan.com/#device-setup
   // Versioned features — only chain 1.3 struct if the device actually supports 1.3.
   // Chaining a versioned features struct for a version the device doesn't support is a validation error.
   VkPhysicalDeviceProperties device_props;
@@ -419,6 +425,9 @@ VkDevice create_device(QueueFamilyIndices queue_family_indices, VkPhysicalDevice
 
   VkPhysicalDeviceVulkan12Features vk_1_2_features{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+      .runtimeDescriptorArray = true,
+      .descriptorBindingPartiallyBound = true,
+      .descriptorBindingVariableDescriptorCount = true,
   };
   VkPhysicalDeviceVulkan13Features vk_1_3_features{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -1131,8 +1140,6 @@ VkPipelineCache create_pipeline_cache(VkDevice device) {
 
 // https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#vkCreateDescriptorPool
 static VkDescriptorPool create_descriptor_pool(VkDevice device) {
-  // https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VkDescriptorPoolCreateFlagBits
-  VkDescriptorPoolCreateFlags flags = 0;
 
   VkDescriptorPoolSize pool_sizes[] = {
       {
@@ -1144,6 +1151,9 @@ static VkDescriptorPool create_descriptor_pool(VkDevice device) {
           .descriptorCount = POOL_SIZE_DESCRIPTOR_COUNT,
       },
   };
+
+  // https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VkDescriptorPoolCreateFlagBits
+  VkDescriptorPoolCreateFlags flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
 
   VkDescriptorPoolCreateInfo descriptor_pool_ci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -1990,12 +2000,27 @@ void set_descriptor_set_layouts(VulkanContext *ctx, VkDescriptorSetLayout *layou
   memset(ctx->descriptor_set_layouts, 0, num_layouts * sizeof(VkDescriptorSetLayout));
 }
 
-VkDescriptorSetLayout
-create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count) {
+VkDescriptorSetLayout create_descriptor_set_layout(
+    VkDevice device, const VkDescriptorSetLayoutBinding *bindings, u32 binding_count, bool bindless
+) {
+
+  static const VkDescriptorBindingFlags desc_var_flag =
+      VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+
+  static const VkDescriptorSetLayoutBindingFlagsCreateInfo desc_binding_flags{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+      .bindingCount = 1,
+      .pBindingFlags = &desc_var_flag,
+  };
+
+  const void *next = bindless ? &desc_binding_flags : NULL;
+
+  VkDescriptorSetLayoutCreateFlags flags = bindless ? VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT : 0;
+
   VkDescriptorSetLayoutCreateInfo descriptor_set_layout_ci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
+      .pNext = next,
+      .flags = flags,
       .bindingCount = binding_count,
       .pBindings = bindings,
   };
@@ -2007,13 +2032,22 @@ create_descriptor_set_layout(VkDevice device, const VkDescriptorSetLayoutBinding
 }
 
 VkDescriptorSet
-create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *set_layouts, VkDescriptorPool pool) {
+create_descriptor_set(VkDevice device, const VkDescriptorSetLayout *layouts, VkDescriptorPool pool, bool bindless) {
+
+  static u32 max_descriptor_count = POOL_SIZE_DESCRIPTOR_COUNT;
+  static const VkDescriptorSetVariableDescriptorCountAllocateInfo variable_desc_count_ai{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT,
+      .descriptorSetCount = 1,
+      .pDescriptorCounts = &max_descriptor_count,
+  };
+  const void *next = bindless ? &variable_desc_count_ai : NULL;
+
   VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .pNext = NULL,
+      .pNext = next,
       .descriptorPool = pool,
       .descriptorSetCount = 1,
-      .pSetLayouts = set_layouts,
+      .pSetLayouts = layouts,
   };
 
   VkDescriptorSet descriptor_set;
@@ -2257,4 +2291,25 @@ void destroy_color_depth_framebuffer(VkDevice device, ColorDepthFramebuffer *fb)
 
 void push_constants_material(VkCommandBuffer cmd, const VulkanMaterial *mat, const void *data) {
   vkCmdPushConstants(cmd, mat->pipeline_layout, mat->push_constant_stage_flags, 0, mat->push_constant_size, data);
+}
+
+VkDescriptorSet get_bindless_descriptor_set(const VulkanContext *ctx, u32 layout_id) {
+  for (u32 i = 0; i < ctx->num_bindless_descriptor_sets; i++) {
+    if (ctx->bindless_descriptor_sets[i].layout_id == layout_id) {
+      return ctx->bindless_descriptor_sets[i].set;
+    }
+  }
+  return VK_NULL_HANDLE;
+}
+
+void push_bindless_descriptor_set(VulkanContext *ctx, VkDescriptorSet set, u32 layout_id) {
+  assert(ctx->num_bindless_descriptor_sets < NUM_BINDLESS_SETS);
+
+  for (u32 i = 0; i < ctx->num_bindless_descriptor_sets; i++) {
+    if (ctx->bindless_descriptor_sets[i].layout_id == layout_id) {
+      fprintf(stderr, "%s(): Pushing Duplicate Layout ID\n", __func__);
+      return;
+    }
+  }
+  ctx->bindless_descriptor_sets[ctx->num_bindless_descriptor_sets++] = {.set = set, .layout_id = layout_id};
 }

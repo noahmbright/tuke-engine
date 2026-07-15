@@ -22,17 +22,17 @@ static const Vec2 menu_ui_pos[NUM_MENU_UIS] = {
     [MAIN_MENU_UI_OPTIONS] = vec2(0.0f, 0.6f),
 };
 
+static const char *ui_paths[] = {
+    "textures/pong/paddle.png", "textures/pong/baboon.png",    "textures/pong/gorilla.png",
+    "textures/pong/nobu.png",   "textures/pong/el_gaucho.png",
+};
+
 static const StringArray texture_paths[NUM_TEXTURES] = {
     TEX("textures/generic_girl.jpg"),
     TEX("textures/pong/field_background.jpg"),
     TEX("textures/girl_face.jpg"),
     TEX("textures/girl_face_normal_map.jpg"),
     TEX("textures/generic_girl.jpg", "textures/girl_face.jpg"),
-    TEX("textures/pong/paddle.png",
-        "textures/pong/baboon.png",
-        "textures/pong/gorilla.png",
-        "textures/pong/nobu.png",
-        "textures/pong/el_gaucho.png"),
 };
 
 void init_buffers(Renderer *r) {
@@ -118,14 +118,15 @@ State setup_state(const char *title) {
       .clear_values[0].color = {{0.0, 1.0, 0.0, 1.0}},
       .clear_values[1].depthStencil = {.depth = 1.0f, .stencil = 0},
   };
-  VulkanContext *ctx = &state.renderer.ctx;
-  load_vulkan_textures(ctx, texture_paths, NUM_TEXTURES, state.renderer.textures);
+  Renderer *r = &state.renderer;
+  VulkanContext *ctx = &r->ctx;
+  load_vulkan_textures(ctx, texture_paths, NUM_TEXTURES, r->textures);
   init_buffers(&state.renderer);
-  set_descriptor_set_layouts(ctx, state.renderer.descriptor_set_layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
-  state.renderer.ui_buffer = create_streaming_buffer(ctx, sizeof(state.ui_elements));
+  set_descriptor_set_layouts(ctx, r->descriptor_set_layouts, NUM_DESCRIPTOR_SET_LAYOUTS);
+  r->ui_buffer = create_streaming_buffer(ctx, sizeof(state.ui_elements));
 
   // Paddle material
-  init_program_spec(ctx, ctx->render_pass, NULL, &pong_paddle_program_spec, &state.renderer.paddle_mat);
+  init_program_spec(ctx, ctx->render_pass, NULL, &pong_paddle_program_spec, &r->paddle_mat);
 
   VkDescriptorImageInfo image_info = {
       .sampler = ctx->samplers[SAMPLER_LINEAR_CLAMP],
@@ -134,8 +135,8 @@ State setup_state(const char *title) {
   };
 
   { // Background material
-    init_program_spec(ctx, ctx->render_pass, NULL, &pong_background_program_spec, &state.renderer.background_mat);
-    image_info.imageView = state.renderer.textures[TEXTURE_FIELD_BACKGROUND].image_view;
+    init_program_spec(ctx, ctx->render_pass, NULL, &pong_background_program_spec, &r->background_mat);
+    image_info.imageView = r->textures[TEXTURE_FIELD_BACKGROUND].image_view;
     DescriptorWrite writes[] = {
         {
             .set_id = LAYOUT_ID_PLACEHOLDER,
@@ -143,40 +144,19 @@ State setup_state(const char *title) {
             .image_info = image_info,
         },
     };
-    update_vulkan_material(ctx, writes, ARRAY_SIZE(writes), &state.renderer.background_mat);
+    update_vulkan_material(ctx, writes, ARRAY_SIZE(writes), &r->background_mat);
   }
 
   // UI material
   PipelineConfig ui_conf = vulkan_pipeline_config();
   ui_conf.depth_test = false;
-  init_program_spec(ctx, ctx->render_pass, &ui_conf, &pong_main_menu_program_spec, &state.renderer.main_menu_mat);
-  init_program_spec(ctx, ctx->render_pass, &ui_conf, &common_ui_quad_program_spec, &state.renderer.ui_mat);
-  init_program_spec(ctx, ctx->render_pass, &ui_conf, &common_ui_quad_program_spec, &state.renderer.characters_mat);
+  init_program_spec(ctx, ctx->render_pass, &ui_conf, &pong_main_menu_program_spec, &r->main_menu_mat);
+  init_program_spec(ctx, ctx->render_pass, &ui_conf, &common_ui_quad_program_spec, &r->ui_mat);
+  init_program_spec(ctx, ctx->render_pass, &ui_conf, &common_ui_quad_program_spec, &r->characters_mat);
 
-  {
-    image_info.imageView = state.renderer.textures[TEXTURE_MENU_UI].image_view;
-    DescriptorWrite writes[] = {
-        {
-            .set_id = LAYOUT_ID_UI,
-            .binding = BINDING_UI_TEX,
-            .image_info = image_info,
-        },
-    };
-    update_vulkan_material(ctx, writes, ARRAY_SIZE(writes), &state.renderer.ui_mat);
-  }
-
-  {
-    image_info.imageView = state.renderer.textures[TEXTURE_CHARACTERS].image_view;
-    DescriptorWrite writes[] = {
-        {
-            .set_id = LAYOUT_ID_UI,
-            .binding = BINDING_UI_TEX,
-            .image_info = image_info,
-        },
-    };
-    update_vulkan_material(ctx, writes, ARRAY_SIZE(writes), &state.renderer.characters_mat);
-  }
-  // End renderer
+  VkDescriptorSet layout_id_set = get_bindless_descriptor_set(ctx, LAYOUT_ID_TEXTURES);
+  load_vulkan_texture_array(ctx, layout_id_set, BINDING_TEXTURES_TEX, ui_paths, ARRAY_SIZE(ui_paths), r->ui_textures);
+  //  End renderer
 
   return state;
 }
@@ -188,6 +168,9 @@ void destroy_state(State *state) {
   // texture and sampler
   for (u32 i = 0; i < NUM_TEXTURES; i++) {
     destroy_vulkan_texture(ctx->device, &state->renderer.textures[i]);
+  }
+  for (u32 i = 0; i < NUM_CHARACTERS; i++) {
+    destroy_vulkan_texture(ctx->device, &state->renderer.ui_textures[i]);
   }
 
   destroy_vulkan_material(ctx->device, &state->renderer.background_mat);
@@ -353,7 +336,7 @@ void render(State *s) {
         s->ui_elements[instance_count++] = {
             .size = vec2(size, size),
             .center = vec2(x_offset, y),
-            .tex_id = i & 0b11,
+            .tex_id = i % NUM_POWERUP_TYPES,
         };
       }
 
@@ -361,7 +344,7 @@ void render(State *s) {
         s->ui_elements[instance_count++] = {
             .size = vec2(size, size),
             .center = vec2(1.0f - x_offset, y),
-            .tex_id = i & 0b11,
+            .tex_id = i % NUM_POWERUP_TYPES,
         };
       }
     }

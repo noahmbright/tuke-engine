@@ -16,10 +16,6 @@
 
 ## Uniform Buffer Management
 
-**No alignment in UniformBufferManager.**
-push_uniform advances current_offset by raw size only. Offsets passed to vkUpdateDescriptorSets
-must be multiples of minUniformBufferOffsetAlignment. Add alignment field, round up after each push.
-
 **Replace push/handle/write pattern with typed struct.**
 The ergonomic alternative: define a struct for the uniform layout, use offsetof for descriptor
 bindings, write directly through the mapped pointer. No handles, no memcpy ceremony, alignment
