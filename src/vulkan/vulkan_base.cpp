@@ -1,5 +1,6 @@
 #include "vulkan_base.h"
 
+#include <execinfo.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,9 +65,11 @@ void destroy_vulkan_context(VulkanContext *ctx) {
 
   // sync primitives
   for (i32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    vkDestroySemaphore(ctx->device, ctx->frame_sync_objects[i].image_available_semaphore, NULL);
-    vkDestroySemaphore(ctx->device, ctx->frame_sync_objects[i].render_finished_semaphore, NULL);
-    vkDestroyFence(ctx->device, ctx->frame_sync_objects[i].in_flight_fence, NULL);
+    vkDestroySemaphore(ctx->device, ctx->image_available_semaphores[i], NULL);
+    vkDestroyFence(ctx->device, ctx->in_flight_fences[i], NULL);
+  }
+  for (i32 i = 0; i < NUM_SWAPCHAIN_IMAGES; i++) {
+    vkDestroySemaphore(ctx->device, ctx->swapchain_semaphores[i], NULL);
   }
 
   destroy_swapchain(ctx);
@@ -102,16 +105,32 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
   (void)user_data;
 
   const char *severity = "UNKNOWN";
-  if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
+  if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
     severity = "VERBOSE";
-  else if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+  } else if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
     severity = "INFO";
-  else if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+  } else if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
     severity = "WARNING";
-  else if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+  } else if (sev & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
     severity = "ERROR";
+  }
 
+  fprintf(stderr, "-------- VALIDATION LAYER ERROR --------\n");
   fprintf(stderr, "[%s] %s\n", severity, callback_data->pMessage);
+  fprintf(stderr, "\n");
+
+  fprintf(stderr, "    -------- STACK TRACE --------\n");
+  if (sev >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+    void *frames[64];
+    int count = backtrace(frames, 64);
+    char **symbols = backtrace_symbols(frames, count);
+    for (int i = 0; i < count; i++)
+      fprintf(stderr, "    %s\n", symbols[i]);
+    free(symbols);
+  }
+  fprintf(stderr, "--------------------------------\n");
+  fprintf(stderr, "\n");
+
   return VK_FALSE;
 }
 
@@ -1055,34 +1074,6 @@ void recreate_swapchain(VulkanContext *ctx) {
   init_framebuffers(ctx);
 }
 
-void create_frame_sync_objects(VkDevice device, FrameSyncObjects *frame_sync_objects) {
-  // https://registry.khronos.org/vulkan/specs/latest/man/html/VkSemaphoreCreateInfo.html
-  VkSemaphoreCreateInfo semaphore_create_info = {
-      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = 0,
-  };
-
-  VkFenceCreateInfo fence_create_info = {
-      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-      .pNext = NULL,
-      .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-  };
-
-  VkResult result;
-  for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-    result = vkCreateSemaphore(device, &semaphore_create_info, NULL, &frame_sync_objects[i].image_available_semaphore);
-    VK_CHECK_VARIADIC(result, "Failed to create image_available_semaphore %d", i);
-
-    // TODO should these be per frame in flight or per swapchain image?
-    result = vkCreateSemaphore(device, &semaphore_create_info, NULL, &frame_sync_objects[i].render_finished_semaphore);
-    VK_CHECK_VARIADIC(result, "Failed to create render_finished_semaphore %d", i);
-
-    result = vkCreateFence(device, &fence_create_info, NULL, &frame_sync_objects[i].in_flight_fence);
-    VK_CHECK_VARIADIC(result, "Failed to create in_flight_fence %d", i);
-  }
-}
-
 // Command pool creation is cheap, and recording commands from multiple threads requires a pool per thread.
 VkCommandPool create_command_pool(VkDevice device, u32 queue_family_index, bool transient) {
   // Command buffers allocated from pools with reset_flag may be reset using vkResetCommandBuffer -
@@ -1196,7 +1187,33 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
   ctx.surface_format = get_surface_format(ctx.physical_device, ctx.surface);
   ctx.descriptor_pool = create_descriptor_pool(ctx.device);
 
-  create_frame_sync_objects(ctx.device, ctx.frame_sync_objects);
+  // https://registry.khronos.org/vulkan/specs/latest/man/html/VkSemaphoreCreateInfo.html
+  VkSemaphoreCreateInfo semaphore_create_info = {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = 0,
+  };
+
+  VkFenceCreateInfo fence_create_info = {
+      .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+      .pNext = NULL,
+      .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+  };
+
+  VkResult result;
+  for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    result = vkCreateSemaphore(ctx.device, &semaphore_create_info, NULL, &ctx.image_available_semaphores[i]);
+    VK_CHECK_VARIADIC(result, "Failed to create image_available_semaphore %d", i);
+
+    result = vkCreateFence(ctx.device, &fence_create_info, NULL, &ctx.in_flight_fences[i]);
+    VK_CHECK_VARIADIC(result, "Failed to create in_flight_fence %d", i);
+  }
+
+  for (u32 i = 0; i < NUM_SWAPCHAIN_IMAGES; i++) {
+    result = vkCreateSemaphore(ctx.device, &semaphore_create_info, NULL, &ctx.swapchain_semaphores[i]);
+    VK_CHECK_VARIADIC(result, "Failed to create swapchain_semaphore %d", i);
+  }
+
   ctx.current_frame_index = 0;
 
   // boolean argument is is_transient command pool
@@ -1244,9 +1261,7 @@ VulkanContext create_vulkan_context(const char *title, VulkanWindowInfo window_i
 
   ctx.samplers[SAMPLER_LINEAR_CLAMP] = create_sampler(ctx.device);
 
-  VkResult result = vkWaitForFences(
-      ctx.device, 1, &ctx.frame_sync_objects[ctx.current_frame_index].in_flight_fence, VK_TRUE, UINT64_MAX
-  );
+  result = vkWaitForFences(ctx.device, 1, &ctx.in_flight_fences[ctx.current_frame_index], VK_TRUE, UINT64_MAX);
   VK_CHECK(result, "Failed to wait for fences");
 
   return ctx;
@@ -1667,12 +1682,11 @@ PipelineConfig vulkan_pipeline_config() {
 
 void begin_frame(VulkanContext *ctx) {
   u32 fence_count = 1;
-
-  // Wait for fence. CPU waits for GPU to signal, indicating work is done.
   u64 timeout = UINT64_MAX;    // nanoseconds
   VkBool32 wait_all = VK_TRUE; // When true, we wait for ALL fenceCount fences to signal. False, just one.
-  const VkFence *fence = &ctx->frame_sync_objects[ctx->current_frame_index].in_flight_fence;
+  const VkFence *fence = &ctx->in_flight_fences[ctx->current_frame_index];
 
+  // Wait for fence. CPU waits for GPU to signal, indicating work is done.
   // https://docs.vulkan.org/refpages/latest/refpages/source/vkWaitForFences.html
   VkResult result = vkWaitForFences(ctx->device, fence_count, fence, wait_all, timeout);
   VK_CHECK(result, "Failed to wait for fence");
@@ -1681,11 +1695,9 @@ void begin_frame(VulkanContext *ctx) {
   vkResetFences(ctx->device, fence_count, fence);
 
   // https://docs.vulkan.org/refpages/latest/refpages/source/vkAcquireNextImageKHR.html
-  // TODO Why do I need a semaphore here? What is a semaphore?
-  VkSemaphore semaphore = ctx->frame_sync_objects[ctx->current_frame_index].image_available_semaphore;
+  VkSemaphore semaphore = ctx->image_available_semaphores[ctx->current_frame_index];
   result = vkAcquireNextImageKHR(ctx->device, ctx->swapchain, timeout, semaphore, VK_NULL_HANDLE, &ctx->image_index);
   if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-    // TODO do I need to redo this until recreation succeeds?
     recreate_swapchain(ctx);
   } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
     fprintf(stderr, "%s(): Failed to get next swapchain image\n", __func__);
@@ -1694,7 +1706,7 @@ void begin_frame(VulkanContext *ctx) {
 }
 
 VkCommandBuffer begin_command_buffer(const VulkanContext *ctx) {
-  VkCommandBuffer cmd = ctx->graphics_cmd_buffers[ctx->image_index];
+  VkCommandBuffer cmd = ctx->graphics_cmd_buffers[ctx->current_frame_index];
   assert(cmd != VK_NULL_HANDLE);
 
   VkCommandBufferBeginInfo command_buffer_begin_info = {
@@ -1742,29 +1754,28 @@ void end_frame(VulkanContext *ctx, VkCommandBuffer cmd) {
 }
 
 void submit_and_present(VulkanContext *ctx, VkCommandBuffer cmd) {
-  const FrameSyncObjects *fso = &ctx->frame_sync_objects[ctx->current_frame_index];
-
   VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
   VkSubmitInfo submit_info = {
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .pNext = NULL,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &fso->image_available_semaphore,
+      .pWaitSemaphores = &ctx->image_available_semaphores[ctx->current_frame_index],
       .pWaitDstStageMask = &wait_stage,
       .commandBufferCount = 1,
       .pCommandBuffers = &cmd,
       .signalSemaphoreCount = 1,
-      .pSignalSemaphores = &fso->render_finished_semaphore,
+      .pSignalSemaphores = &ctx->swapchain_semaphores[ctx->image_index],
   };
 
-  VkResult result = vkQueueSubmit(ctx->graphics_queue, 1, &submit_info, fso->in_flight_fence);
+  VkResult result =
+      vkQueueSubmit(ctx->graphics_queue, 1, &submit_info, ctx->in_flight_fences[ctx->current_frame_index]);
   VK_CHECK(result, "Failed to submit queue");
 
   VkPresentInfoKHR present_info = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
       .pNext = NULL,
       .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &fso->render_finished_semaphore,
+      .pWaitSemaphores = &ctx->swapchain_semaphores[ctx->image_index],
       .swapchainCount = 1,
       .pSwapchains = &ctx->swapchain,
       .pImageIndices = &ctx->image_index,

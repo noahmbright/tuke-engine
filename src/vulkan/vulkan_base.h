@@ -1,5 +1,7 @@
 #pragma once
 
+// https://howtovulkan.com/
+
 #include "vulkan/vulkan_core.h"
 #include <assert.h>
 #include <stdbool.h>
@@ -123,12 +125,6 @@ inline const char *vk_result_string(VkResult result) {
 }
 
 typedef struct {
-  VkSemaphore image_available_semaphore;
-  VkSemaphore render_finished_semaphore;
-  VkFence in_flight_fence;
-} FrameSyncObjects;
-
-typedef struct {
   int graphics_family;
   int present_family;
   int compute_family;
@@ -153,7 +149,6 @@ typedef struct {
   u32 image_count;
   VkImage images[NUM_SWAPCHAIN_IMAGES];
   VkImageView image_views[NUM_SWAPCHAIN_IMAGES];
-
   DepthBuffer depth_buffers[NUM_SWAPCHAIN_IMAGES];
 } SwapchainStorage;
 
@@ -169,13 +164,15 @@ typedef struct {
   VkQueue compute_queue;
 
   // Populated by vkAcquireNextImageKHR so we can get the right framebuffer images.
-  // TODO might want to get this out and pass around instead of caching.
-  u32 image_index;
+  // https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html
+  u32 image_index; // Might want to get this out and pass around instead of caching.
 
   VkSwapchainKHR swapchain;
   VkSurfaceFormatKHR surface_format;
   VkExtent2D swapchain_extent;
   SwapchainStorage swapchain_storage;
+  VkSemaphore swapchain_semaphores[NUM_SWAPCHAIN_IMAGES];
+
   i32 window_framebuffer_width;
   i32 window_framebuffer_height;
 
@@ -183,7 +180,9 @@ typedef struct {
   VkRenderPass render_pass;
   VkFramebuffer framebuffers[NUM_SWAPCHAIN_IMAGES];
 
-  FrameSyncObjects frame_sync_objects[MAX_FRAMES_IN_FLIGHT];
+  // Frame sync objects
+  VkSemaphore image_available_semaphores[MAX_FRAMES_IN_FLIGHT];
+  VkFence in_flight_fences[MAX_FRAMES_IN_FLIGHT];
   u8 current_frame_index;
 
   // TODO should these be per swapchain image or per frame in flight?
